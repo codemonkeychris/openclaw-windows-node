@@ -160,36 +160,7 @@ public class SystemCapability : NodeCapabilityBase
         return null;
     }
     
-    /// <summary>
-    /// Formats argv into a command string, quoting args that contain spaces, quotes,
-    /// or shell metacharacters. Matches the gateway's formatExecCommand behavior.
-    /// </summary>
-    private static string FormatExecCommand(string[] argv)
-    {
-        return string.Join(" ", argv.Select(arg =>
-        {
-            if (arg.Length == 0) return "\"\"";
-            // Check for any characters that need quoting (whitespace, quotes, metacharacters)
-            bool needsQuoting = false;
-            foreach (var c in arg)
-            {
-                switch (c)
-                {
-                    case ' ': case '\t': case '"': case '\'':
-                    case '&': case '|': case ';': case '<': case '>':
-                    case '(': case ')': case '^': case '%': case '!':
-                    case '$': case '`': case '*': case '?': case '[':
-                    case ']': case '{': case '}': case '~': case '\n':
-                    case '\r':
-                        needsQuoting = true;
-                        break;
-                }
-                if (needsQuoting) break;
-            }
-            if (!needsQuoting) return arg;
-            return "\"" + arg.Replace("\"", "\\\"") + "\"";
-        }));
-    }
+    private static string FormatExecCommand(string[] argv) => ShellQuoting.FormatExecCommand(argv);
     
     /// <summary>
     /// Pre-flight for system.run: echoes back the execution plan without running anything.

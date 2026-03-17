@@ -171,7 +171,7 @@ public class LocalCommandRunner : ICommandRunner
         
         if (request.Args is { Length: > 0 })
         {
-            command = command + " " + string.Join(" ", request.Args.Select(a => QuoteArgIfNeeded(a, isCmd)));
+            command = command + " " + string.Join(" ", request.Args.Select(a => ShellQuoting.QuoteForShell(a, isCmd)));
         }
         
         return shell switch
@@ -180,54 +180,6 @@ public class LocalCommandRunner : ICommandRunner
             "pwsh" => ("pwsh.exe", $"-NoProfile -NonInteractive -Command {command}"),
             _ => ("powershell.exe", $"-NoProfile -NonInteractive -Command {command}")
         };
-    }
-    
-    /// <summary>
-    /// Wraps an argument to prevent shell splitting and metacharacter interpretation.
-    /// Uses shell-appropriate quoting: double quotes for cmd.exe, single quotes for
-    /// PowerShell. PowerShell requires single quotes because double quotes in
-    /// ProcessStartInfo.Arguments are stripped by the Windows CRT argv parser
-    /// before PowerShell receives the -Command string.
-    /// </summary>
-    private static string QuoteArgIfNeeded(string arg, bool isCmd)
-    {
-        if (string.IsNullOrEmpty(arg))
-            return isCmd ? "\"\""  : "''";
-        
-        // Quote when the arg contains whitespace, quotes, or any shell metacharacters
-        // that could cause splitting or unintended interpretation.
-        if (!NeedsQuoting(arg))
-            return arg;
-        
-        if (isCmd)
-        {
-            // cmd.exe: wrap in double quotes, escape inner double quotes by doubling
-            return "\"" + arg.Replace("\"", "\"\"") + "\"";
-        }
-        else
-        {
-            // PowerShell -Command: wrap in single quotes, escape inner single quotes
-            // by doubling them (PowerShell's single-quote escape convention)
-            return "'" + arg.Replace("'", "''") + "'";
-        }
-    }
-    
-    private static bool NeedsQuoting(string arg)
-    {
-        foreach (var c in arg)
-        {
-            switch (c)
-            {
-                case ' ': case '\t': case '"': case '\'':
-                case '&': case '|': case ';': case '<': case '>':
-                case '(': case ')': case '^': case '%': case '!':
-                case '$': case '`': case '*': case '?': case '[':
-                case ']': case '{': case '}': case '~': case '\n':
-                case '\r':
-                    return true;
-            }
-        }
-        return false;
     }
     
     private void KillProcess(Process process)

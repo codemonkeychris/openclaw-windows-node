@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace OpenClaw.Shared;
@@ -24,6 +26,14 @@ public class WindowsNodeClient : WebSocketClientBase
     private string? _pendingNonce;  // Store nonce from challenge for signing
     private bool _isPendingApproval;  // True when connected but awaiting pairing approval
     
+    // Cached serialization/validation — reused on every message instead of allocating per-call
+    private static readonly JsonSerializerOptions s_ignoreNullOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+    private static readonly JsonSerializerOptions s_indentedOptions = new() { WriteIndented = true };
+    private static readonly Regex s_commandValidator = new(@"^[a-zA-Z0-9._-]+$", RegexOptions.Compiled);
+
     // Events
     public event EventHandler<NodeInvokeRequest>? InvokeReceived;
     public event EventHandler<PairingStatusEventArgs>? PairingStatusChanged;
@@ -217,7 +227,7 @@ public class WindowsNodeClient : WebSocketClientBase
         
         // Validate command format
         if (string.IsNullOrEmpty(command) || command.Length > 100 || 
-            !System.Text.RegularExpressions.Regex.IsMatch(command, @"^[a-zA-Z0-9._-]+$"))
+            !s_commandValidator.IsMatch(command))
         {
             _logger.Warn($"[NODE] Invalid command format: {command}");
             await SendNodeInvokeResultAsync(requestId, false, null, "Invalid command format");
@@ -304,10 +314,7 @@ public class WindowsNodeClient : WebSocketClientBase
             }
         };
         
-        var json = JsonSerializer.Serialize(response, new JsonSerializerOptions 
-        { 
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull 
-        });
+        var json = JsonSerializer.Serialize(response, s_ignoreNullOptions);
         _logger.Info($"[NODE] Sending invoke result for {requestId}: ok={success}");
         await SendRawAsync(json);
     }
@@ -413,7 +420,7 @@ public class WindowsNodeClient : WebSocketClientBase
             }
         };
         
-        var json = JsonSerializer.Serialize(msg, new JsonSerializerOptions { WriteIndented = true });
+        var json = JsonSerializer.Serialize(msg, s_indentedOptions);
         _logger.Debug($"[NODE TX FULL JSON]:\n{json}");
         await SendRawAsync(JsonSerializer.Serialize(msg));  // Send compact version
         _logger.Info($"Sent node registration with device ID: {_deviceIdentity.DeviceId.Substring(0, 16)}..., paired: {isPaired}");
@@ -567,7 +574,7 @@ public class WindowsNodeClient : WebSocketClientBase
         
         // Validate command format - only allow alphanumeric, dots, underscores, hyphens
         if (string.IsNullOrEmpty(command) || command.Length > 100 || 
-            !System.Text.RegularExpressions.Regex.IsMatch(command, @"^[a-zA-Z0-9._-]+$"))
+            !s_commandValidator.IsMatch(command))
         {
             _logger.Warn($"Invalid command format: {(command.Length > 50 ? command.Substring(0, 50) + "..." : command)}");
             await SendErrorResponseAsync(requestId, "Invalid command format");
@@ -626,10 +633,7 @@ public class WindowsNodeClient : WebSocketClientBase
             error = response.Ok ? null : new { message = response.Error }
         };
         
-        await SendRawAsync(JsonSerializer.Serialize(msg, new JsonSerializerOptions 
-        { 
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull 
-        }));
+        await SendRawAsync(JsonSerializer.Serialize(msg, s_ignoreNullOptions));
         
         _logger.Info($"Sent invoke response: ok={response.Ok}");
     }

@@ -86,9 +86,6 @@ public partial class App : Application
 
     public App()
     {
-        // Force Chinese locale for testing — remove before release
-        LocalizationHelper.SetLanguageOverride("zh-CN");
-
         InitializeComponent();
         
         CheckPreviousRun();

@@ -70,9 +70,11 @@ To test a specific locale without changing your Windows language:
 1. Open `src/OpenClaw.Tray.WinUI/App.xaml.cs`
 2. Add this line at the top of the `App()` constructor, **before** `InitializeComponent()`:
    ```csharp
-   global::Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride = "zh-CN";
+   LocalizationHelper.SetLanguageOverride("zh-CN");
    ```
-3. Build and run. Remove the line when done testing.
+3. Build and run (`dotnet build src/OpenClaw.Tray.WinUI -r win-x64`). Remove the line when done testing.
+
+> **Note:** This overrides `LocalizationHelper.GetString()` calls (menus, toasts, dialogs, window titles). XAML `x:Uid` bindings follow the OS display language. For full XAML localization testing, change your Windows display language in Settings → Time & Language.
 
 ## Resource Key Naming Conventions
 

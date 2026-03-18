@@ -158,6 +158,11 @@ public class OpenClawGatewayClientTests
             return (parsed ?? Array.Empty<ChannelHealth>(), parsed != null);
         }
 
+        public void ParseSessionsPayload(string payloadJson)
+        {
+            InvokePrivatePayloadParser("ParseSessions", payloadJson);
+        }
+
         private void InvokePrivatePayloadParser(string methodName, string payloadJson)
         {
             using var doc = JsonDocument.Parse(payloadJson);
@@ -440,10 +445,24 @@ public class OpenClawGatewayClientTests
     public void GetSessionList_SortsMainSessionFirst()
     {
         var helper = new GatewayClientTestHelper();
+
+        // Populate with a mix of sub-sessions and one main session.
+        // The main session is listed last in the JSON to prove sorting moves it first.
+        helper.ParseSessionsPayload("""
+        {
+            "agent:sub:older": { "status": "idle", "model": "gpt-4" },
+            "agent:sub:newer": { "status": "active", "model": "gpt-4" },
+            "agent:main:main": { "status": "active", "model": "gpt-4" }
+        }
+        """);
+
         var sessions = helper.GetSessionList();
-        
-        // Empty initially
-        Assert.Empty(sessions);
+
+        Assert.Equal(3, sessions.Length);
+        Assert.True(sessions[0].IsMain, "Main session should be sorted first");
+        Assert.Contains("main", sessions[0].Key);
+        Assert.False(sessions[1].IsMain);
+        Assert.False(sessions[2].IsMain);
     }
 
     [Fact]

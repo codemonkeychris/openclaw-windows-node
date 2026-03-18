@@ -78,8 +78,8 @@ public class MenuPositionerTests
 
         // Menu should be fully within work area
         Assert.True(y >= 0);
-        Assert.True(y + MenuHeight <= 1040 || y >= 0,
-            "Menu should attempt to fit in work area");
+        Assert.True(y + MenuHeight <= 1040,
+            $"Menu bottom edge {y + MenuHeight} should not exceed work area bottom 1040");
     }
 
     [Fact]

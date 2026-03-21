@@ -21,6 +21,7 @@ public class NodeService : IDisposable
     private CanvasWindow? _canvasWindow;
     private ScreenCaptureService? _screenCaptureService;
     private CameraCaptureService? _cameraCaptureService;
+    private VoiceService? _voiceService;
     private DateTime _lastScreenCaptureNotification = DateTime.MinValue;
     private string? _a2uiHostUrl;
     
@@ -29,6 +30,7 @@ public class NodeService : IDisposable
     private CanvasCapability? _canvasCapability;
     private ScreenCapability? _screenCapability;
     private CameraCapability? _cameraCapability;
+    private VoiceCapability? _voiceCapability;
     private readonly string _dataPath;
     
     // Events
@@ -44,13 +46,14 @@ public class NodeService : IDisposable
     public string? FullDeviceId => _nodeClient?.FullDeviceId;
     public string? GatewayUrl => _nodeClient?.GatewayUrl;
     
-    public NodeService(IOpenClawLogger logger, DispatcherQueue dispatcherQueue, string dataPath)
+    public NodeService(IOpenClawLogger logger, DispatcherQueue dispatcherQueue, VoiceService voiceService, string dataPath)
     {
         _logger = logger;
         _dispatcherQueue = dispatcherQueue;
         _dataPath = dataPath;
         _screenCaptureService = new ScreenCaptureService(logger);
         _cameraCaptureService = new CameraCaptureService(logger);
+        _voiceService = voiceService;
     }
     
     /// <summary>
@@ -79,6 +82,15 @@ public class NodeService : IDisposable
         await _nodeClient.ConnectAsync();
         
         _a2uiHostUrl = BuildA2UIHostUrl(_nodeClient.GatewayUrl);
+
+        if (_voiceService != null)
+        {
+            var settings = await _voiceService.GetSettingsAsync();
+            if (settings.Enabled && settings.Mode != VoiceActivationMode.Off)
+            {
+                await _voiceService.StartAsync(new VoiceStartArgs { Mode = settings.Mode });
+            }
+        }
     }
     
     /// <summary>
@@ -91,6 +103,11 @@ public class NodeService : IDisposable
             await _nodeClient.DisconnectAsync();
             _nodeClient.Dispose();
             _nodeClient = null;
+        }
+
+        if (_voiceService != null)
+        {
+            await _voiceService.StopAsync(new VoiceStopArgs { Reason = "Node disconnected" });
         }
         
         // Close canvas window
@@ -134,6 +151,16 @@ public class NodeService : IDisposable
         _cameraCapability.ListRequested += OnCameraList;
         _cameraCapability.SnapRequested += OnCameraSnap;
         _nodeClient.RegisterCapability(_cameraCapability);
+
+        // Voice capability
+        _voiceCapability = new VoiceCapability(_logger);
+        _voiceCapability.ListDevicesRequested += OnVoiceListDevices;
+        _voiceCapability.SettingsRequested += OnVoiceGetSettings;
+        _voiceCapability.SettingsUpdateRequested += OnVoiceSetSettings;
+        _voiceCapability.StatusRequested += OnVoiceGetStatus;
+        _voiceCapability.StartRequested += OnVoiceStart;
+        _voiceCapability.StopRequested += OnVoiceStop;
+        _nodeClient.RegisterCapability(_voiceCapability);
         
         _logger.Info("All capabilities registered");
     }
@@ -475,6 +502,58 @@ public class NodeService : IDisposable
     }
     
     #endregion
+
+    #region Voice Capability Handlers
+
+    private Task<VoiceAudioDeviceInfo[]> OnVoiceListDevices()
+    {
+        if (_voiceService == null)
+            throw new InvalidOperationException("Voice service not available");
+
+        return _voiceService.ListDevicesAsync();
+    }
+
+    private Task<VoiceSettings> OnVoiceGetSettings()
+    {
+        if (_voiceService == null)
+            throw new InvalidOperationException("Voice service not available");
+
+        return _voiceService.GetSettingsAsync();
+    }
+
+    private Task<VoiceSettings> OnVoiceSetSettings(VoiceSettingsUpdateArgs args)
+    {
+        if (_voiceService == null)
+            throw new InvalidOperationException("Voice service not available");
+
+        return _voiceService.UpdateSettingsAsync(args);
+    }
+
+    private Task<VoiceStatusInfo> OnVoiceGetStatus()
+    {
+        if (_voiceService == null)
+            throw new InvalidOperationException("Voice service not available");
+
+        return _voiceService.GetStatusAsync();
+    }
+
+    private Task<VoiceStatusInfo> OnVoiceStart(VoiceStartArgs args)
+    {
+        if (_voiceService == null)
+            throw new InvalidOperationException("Voice service not available");
+
+        return _voiceService.StartAsync(args);
+    }
+
+    private Task<VoiceStatusInfo> OnVoiceStop(VoiceStopArgs args)
+    {
+        if (_voiceService == null)
+            throw new InvalidOperationException("Voice service not available");
+
+        return _voiceService.StopAsync(args);
+    }
+
+    #endregion
     
     public void Dispose()
     {
@@ -483,7 +562,6 @@ public class NodeService : IDisposable
         try { client?.Dispose(); } catch { /* ignore */ }
         
         try { _cameraCaptureService?.Dispose(); } catch { /* ignore */ }
-        
         if (_canvasWindow != null && !_canvasWindow.IsClosed)
         {
             var window = _canvasWindow;

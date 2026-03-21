@@ -63,6 +63,7 @@ public partial class App : Application
 
     // Windows (created on demand)
     private SettingsWindow? _settingsWindow;
+    private VoiceModeWindow? _voiceModeWindow;
     private WebChatWindow? _webChatWindow;
     private StatusDetailWindow? _statusDetailWindow;
     private NotificationHistoryWindow? _notificationHistoryWindow;
@@ -72,6 +73,7 @@ public partial class App : Application
     
     // Node service (optional, enabled in settings)
     private NodeService? _nodeService;
+    private VoiceService? _voiceService;
     
     // Keep-alive window to anchor WinUI runtime (prevents GC/threading issues)
     private Window? _keepAliveWindow;
@@ -250,6 +252,7 @@ public partial class App : Application
 
         // Initialize settings
         _settings = new SettingsManager();
+        _voiceService = new VoiceService(new AppLogger(), _settings);
 
         // First-run check
         if (string.IsNullOrWhiteSpace(_settings.Token))
@@ -514,6 +517,7 @@ public partial class App : Application
         switch (action)
         {
             case "status": ShowStatusDetail(); break;
+            case "voice-settings": ShowVoiceModeSettings(); break;
             case "dashboard": OpenDashboard(); break;
             case "webchat": ShowWebChat(); break;
             case "quicksend": ShowQuickSend(); break;
@@ -725,6 +729,33 @@ public partial class App : Application
             .ToList();
     }
 
+    private string GetRunningVoiceModeLabel()
+    {
+        var status = _voiceService?.CurrentStatus;
+        if (status?.Running == true)
+        {
+            return status.Mode switch
+            {
+                VoiceActivationMode.WakeWord => "WakeWord",
+                VoiceActivationMode.AlwaysOn => "AlwaysOn",
+                _ => "Off"
+            };
+        }
+
+        return "Off";
+    }
+
+    private string GetVoiceDeviceSummary()
+    {
+        var voice = _settings?.Voice;
+        if (voice == null)
+            return "Talk: system default · Listen: system default";
+
+        var talk = string.IsNullOrWhiteSpace(voice.OutputDeviceId) ? "system default" : "selected speaker";
+        var listen = string.IsNullOrWhiteSpace(voice.InputDeviceId) ? "system default" : "selected microphone";
+        return $"Talk: {talk} · Listen: {listen}";
+    }
+
     private void BuildTrayMenuPopup(TrayMenuWindow menu)
     {
         // Brand header
@@ -739,6 +770,13 @@ public partial class App : Application
         if (_currentActivity != null && _currentActivity.Kind != OpenClaw.Shared.ActivityKind.Idle)
         {
             menu.AddMenuItem(_currentActivity.DisplayText, _currentActivity.Glyph, "", isEnabled: false);
+        }
+
+        menu.AddMenuItem($"Voice Mode: {GetRunningVoiceModeLabel()}", "🎙️", "voice-settings");
+        menu.AddMenuItem($"↳ {GetVoiceDeviceSummary()}", "", "", isEnabled: false, indent: true);
+        if (_settings?.EnableNodeMode != true)
+        {
+            menu.AddMenuItem("↳ Enable Node Mode to activate voice runtime", "", "", isEnabled: false, indent: true);
         }
 
         // Usage
@@ -1126,7 +1164,7 @@ public partial class App : Application
         {
             Logger.Info("Initializing Windows Node service...");
             
-            _nodeService = new NodeService(new AppLogger(), _dispatcherQueue, DataPath);
+            _nodeService = new NodeService(new AppLogger(), _dispatcherQueue, _voiceService!, DataPath);
             _nodeService.StatusChanged += OnNodeStatusChanged;
             _nodeService.NotificationRequested += OnNodeNotificationRequested;
             _nodeService.PairingStatusChanged += OnPairingStatusChanged;
@@ -1601,6 +1639,20 @@ public partial class App : Application
         _settingsWindow.Activate();
     }
 
+    private void ShowVoiceModeSettings()
+    {
+        if (_settings == null || _voiceService == null)
+            return;
+
+        if (_voiceModeWindow == null || _voiceModeWindow.IsClosed)
+        {
+            _voiceModeWindow = new VoiceModeWindow(_settings, _voiceService);
+            _voiceModeWindow.Closed += (s, e) => _voiceModeWindow = null;
+        }
+
+        _voiceModeWindow.Activate();
+    }
+
     private void OnSettingsSaved(object? sender, EventArgs e)
     {
         // Reconnect with new settings — mirror the startup if/else pattern
@@ -1617,6 +1669,7 @@ public partial class App : Application
         else
         {
             InitializeGatewayClient();
+            _ = _voiceService?.StopAsync(new VoiceStopArgs { Reason = "Node mode disabled" });
         }
 
         // Update global hotkey
@@ -2070,6 +2123,7 @@ public partial class App : Application
         
         // Dispose cancellation token source
         _deepLinkCts?.Dispose();
+        _voiceService?.Dispose();
         
         Exit();
     }

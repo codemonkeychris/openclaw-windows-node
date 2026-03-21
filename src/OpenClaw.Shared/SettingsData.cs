@@ -26,6 +26,7 @@ public class SettingsData
     public bool NotifyChatResponses { get; set; } = true;
     public bool PreferStructuredCategories { get; set; } = true;
     public List<UserNotificationRule>? UserRules { get; set; }
+    public VoiceSettings Voice { get; set; } = new();
 
     private static readonly JsonSerializerOptions s_options = new() { WriteIndented = true };
 

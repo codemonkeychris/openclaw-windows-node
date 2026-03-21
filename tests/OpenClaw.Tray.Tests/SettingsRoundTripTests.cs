@@ -28,6 +28,34 @@ public class SettingsRoundTripTests
             HasSeenActivityStreamTip = true,
             NotifyChatResponses = false,
             PreferStructuredCategories = true,
+            Voice = new VoiceSettings
+            {
+                Enabled = true,
+                Mode = VoiceActivationMode.WakeWord,
+                SpeechToTextProviderId = "windows",
+                TextToSpeechProviderId = "elevenlabs",
+                InputDeviceId = "mic-1",
+                OutputDeviceId = "spk-2",
+                SampleRateHz = 16000,
+                CaptureChunkMs = 80,
+                BargeInEnabled = false,
+                WakeWord = new VoiceWakeWordSettings
+                {
+                    Engine = "NanoWakeWord",
+                    ModelId = "hey_openclaw",
+                    TriggerThreshold = 0.72f,
+                    TriggerCooldownMs = 2500,
+                    PreRollMs = 1400,
+                    EndSilenceMs = 1000
+                },
+                AlwaysOn = new VoiceAlwaysOnSettings
+                {
+                    MinSpeechMs = 300,
+                    EndSilenceMs = 1100,
+                    MaxUtteranceMs = 18000,
+                    AutoSubmit = false
+                }
+            },
             UserRules = new List<UserNotificationRule>
             {
                 new() { Pattern = "build.*fail", IsRegex = true, Category = "urgent", Enabled = true }
@@ -56,6 +84,18 @@ public class SettingsRoundTripTests
         Assert.Equal(original.HasSeenActivityStreamTip, restored.HasSeenActivityStreamTip);
         Assert.Equal(original.NotifyChatResponses, restored.NotifyChatResponses);
         Assert.Equal(original.PreferStructuredCategories, restored.PreferStructuredCategories);
+        Assert.NotNull(restored.Voice);
+        Assert.True(restored.Voice.Enabled);
+        Assert.Equal(VoiceActivationMode.WakeWord, restored.Voice.Mode);
+        Assert.Equal("windows", restored.Voice.SpeechToTextProviderId);
+        Assert.Equal("elevenlabs", restored.Voice.TextToSpeechProviderId);
+        Assert.Equal("mic-1", restored.Voice.InputDeviceId);
+        Assert.Equal("spk-2", restored.Voice.OutputDeviceId);
+        Assert.Equal("NanoWakeWord", restored.Voice.WakeWord.Engine);
+        Assert.Equal("hey_openclaw", restored.Voice.WakeWord.ModelId);
+        Assert.Equal(0.72f, restored.Voice.WakeWord.TriggerThreshold);
+        Assert.Equal(300, restored.Voice.AlwaysOn.MinSpeechMs);
+        Assert.False(restored.Voice.AlwaysOn.AutoSubmit);
         Assert.NotNull(restored.UserRules);
         Assert.Single(restored.UserRules);
         Assert.Equal("build.*fail", restored.UserRules[0].Pattern);
@@ -101,6 +141,13 @@ public class SettingsRoundTripTests
         Assert.False(settings.HasSeenActivityStreamTip);
         Assert.True(settings.NotifyChatResponses);
         Assert.True(settings.PreferStructuredCategories);
+        Assert.NotNull(settings.Voice);
+        Assert.False(settings.Voice.Enabled);
+        Assert.Equal(VoiceActivationMode.Off, settings.Voice.Mode);
+        Assert.Equal(VoiceProviderIds.Windows, settings.Voice.SpeechToTextProviderId);
+        Assert.Equal(VoiceProviderIds.Windows, settings.Voice.TextToSpeechProviderId);
+        Assert.Equal(16000, settings.Voice.SampleRateHz);
+        Assert.Equal("NanoWakeWord", settings.Voice.WakeWord.Engine);
         Assert.Null(settings.UserRules);
     }
 
@@ -137,6 +184,11 @@ public class SettingsRoundTripTests
         Assert.False(settings.EnableNodeMode);
         Assert.False(settings.HasSeenActivityStreamTip);
         Assert.True(settings.GlobalHotkeyEnabled);
+        Assert.NotNull(settings.Voice);
+        Assert.False(settings.Voice.Enabled);
+        Assert.Equal(VoiceActivationMode.Off, settings.Voice.Mode);
+        Assert.Equal(VoiceProviderIds.Windows, settings.Voice.SpeechToTextProviderId);
+        Assert.Equal(VoiceProviderIds.Windows, settings.Voice.TextToSpeechProviderId);
         Assert.Null(settings.UserRules);
     }
 

@@ -17,6 +17,9 @@ public sealed partial class VoiceModeWindow : WindowEx
 {
     private readonly SettingsManager _settings;
     private readonly VoiceService _voiceService;
+    private VoiceProviderCredentials _providerCredentialsDraft = new();
+    private string _activeTtsProviderId = VoiceProviderIds.Windows;
+    private bool _updatingProviderFields;
     private List<ProviderOption> _speechToTextOptions = new();
     private List<ProviderOption> _textToSpeechOptions = new();
     private List<DeviceOption> _inputOptions = new();
@@ -44,11 +47,13 @@ public sealed partial class VoiceModeWindow : WindowEx
 
     private void LoadSettings()
     {
+        _providerCredentialsDraft = Clone(_settings.VoiceProviderCredentials);
         LoadProviders();
         SelectMode(_settings.Voice.Mode);
         SelectChatWindowSubmitMode(_settings.Voice.AlwaysOn.ChatWindowSubmitMode);
         VoiceConversationToastsCheckBox.IsChecked = _settings.Voice.ShowConversationToasts;
         UpdateModeInfo();
+        UpdateProviderSettingsEditor();
         UpdateProviderInfo();
         StatusTextBlock.Text = BuildStatusText();
     }
@@ -227,12 +232,160 @@ public sealed partial class VoiceModeWindow : WindowEx
             ? " Unsupported provider selections fall back to Windows until their runtime adapters are added."
             : string.Empty;
         var credentialNotice = tts != null &&
-                               string.Equals(tts.Id, VoiceProviderIds.MiniMax, StringComparison.OrdinalIgnoreCase)
-            ? " Configure VoiceProviderCredentials.MiniMaxApiKey in %APPDATA%\\OpenClawTray\\settings.json."
+                               !string.Equals(tts.Id, VoiceProviderIds.Windows, StringComparison.OrdinalIgnoreCase)
+            ? " Configure the selected provider below; values are stored in your local tray settings."
             : string.Empty;
 
         ProviderInfoTextBlock.Text =
             $"{string.Join(" · ", details)}. Configure extra providers in {VoiceProviderCatalogService.CatalogFilePath}.{credentialNotice}{fallbackNotice}";
+    }
+
+    private void UpdateProviderSettingsEditor()
+    {
+        var providerId = GetSelectedTextToSpeechProviderId();
+        var showProviderSettings = !string.Equals(providerId, VoiceProviderIds.Windows, StringComparison.OrdinalIgnoreCase);
+
+        TtsProviderSettingsPanel.Visibility = showProviderSettings ? Visibility.Visible : Visibility.Collapsed;
+        if (!showProviderSettings)
+        {
+            _activeTtsProviderId = VoiceProviderIds.Windows;
+            return;
+        }
+
+        _updatingProviderFields = true;
+        try
+        {
+            TtsProviderSettingsTitleTextBlock.Text = $"{GetSelectedTextToSpeechProviderName().ToUpperInvariant()} SETTINGS";
+            TtsApiKeyPasswordBox.Password = GetProviderApiKey(providerId) ?? string.Empty;
+            TtsModelTextBox.Text = GetProviderModel(providerId);
+            TtsVoiceIdTextBox.Text = GetProviderVoiceId(providerId);
+            _activeTtsProviderId = providerId;
+        }
+        finally
+        {
+            _updatingProviderFields = false;
+        }
+    }
+
+    private string GetSelectedTextToSpeechProviderId()
+    {
+        return (TextToSpeechProviderComboBox.SelectedItem as ProviderOption)?.Id ?? VoiceProviderIds.Windows;
+    }
+
+    private string GetSelectedTextToSpeechProviderName()
+    {
+        return (TextToSpeechProviderComboBox.SelectedItem as ProviderOption)?.Name ?? "Provider";
+    }
+
+    private void CaptureSelectedProviderSettings()
+    {
+        if (_updatingProviderFields)
+        {
+            return;
+        }
+
+        var providerId = _activeTtsProviderId;
+        if (string.Equals(providerId, VoiceProviderIds.Windows, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        SetProviderApiKey(providerId, TtsApiKeyPasswordBox.Password);
+        SetProviderModel(providerId, TtsModelTextBox.Text);
+        SetProviderVoiceId(providerId, TtsVoiceIdTextBox.Text);
+    }
+
+    private string? GetProviderApiKey(string providerId)
+    {
+        return providerId switch
+        {
+            VoiceProviderIds.MiniMax => _providerCredentialsDraft.MiniMaxApiKey,
+            VoiceProviderIds.ElevenLabs => _providerCredentialsDraft.ElevenLabsApiKey,
+            _ => null
+        };
+    }
+
+    private string GetProviderModel(string providerId)
+    {
+        return providerId switch
+        {
+            VoiceProviderIds.MiniMax => _providerCredentialsDraft.MiniMaxModel,
+            VoiceProviderIds.ElevenLabs => _providerCredentialsDraft.ElevenLabsModel ?? string.Empty,
+            _ => string.Empty
+        };
+    }
+
+    private string GetProviderVoiceId(string providerId)
+    {
+        return providerId switch
+        {
+            VoiceProviderIds.MiniMax => _providerCredentialsDraft.MiniMaxVoiceId,
+            VoiceProviderIds.ElevenLabs => _providerCredentialsDraft.ElevenLabsVoiceId ?? string.Empty,
+            _ => string.Empty
+        };
+    }
+
+    private void SetProviderApiKey(string providerId, string? value)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+        switch (providerId)
+        {
+            case VoiceProviderIds.MiniMax:
+                _providerCredentialsDraft.MiniMaxApiKey = normalized;
+                break;
+            case VoiceProviderIds.ElevenLabs:
+                _providerCredentialsDraft.ElevenLabsApiKey = normalized;
+                break;
+        }
+    }
+
+    private void SetProviderModel(string providerId, string? value)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value) ? GetDefaultModel(providerId) : value.Trim();
+
+        switch (providerId)
+        {
+            case VoiceProviderIds.MiniMax:
+                _providerCredentialsDraft.MiniMaxModel = normalized;
+                break;
+            case VoiceProviderIds.ElevenLabs:
+                _providerCredentialsDraft.ElevenLabsModel = normalized;
+                break;
+        }
+    }
+
+    private void SetProviderVoiceId(string providerId, string? value)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value) ? GetDefaultVoiceId(providerId) : value.Trim();
+
+        switch (providerId)
+        {
+            case VoiceProviderIds.MiniMax:
+                _providerCredentialsDraft.MiniMaxVoiceId = normalized;
+                break;
+            case VoiceProviderIds.ElevenLabs:
+                _providerCredentialsDraft.ElevenLabsVoiceId = normalized;
+                break;
+        }
+    }
+
+    private static string GetDefaultModel(string providerId)
+    {
+        return providerId switch
+        {
+            VoiceProviderIds.MiniMax => "speech-2.8-turbo",
+            _ => string.Empty
+        };
+    }
+
+    private static string GetDefaultVoiceId(string providerId)
+    {
+        return providerId switch
+        {
+            VoiceProviderIds.MiniMax => "English_MatureBoss",
+            _ => string.Empty
+        };
     }
 
     private void UpdateTroubleshooting(string? error)
@@ -278,8 +431,15 @@ public sealed partial class VoiceModeWindow : WindowEx
 
     private void OnProviderChanged(object sender, SelectionChangedEventArgs e)
     {
+        CaptureSelectedProviderSettings();
+        UpdateProviderSettingsEditor();
         UpdateProviderInfo();
         StatusTextBlock.Text = BuildStatusText();
+    }
+
+    private void OnProviderSettingsChanged(object sender, RoutedEventArgs e)
+    {
+        CaptureSelectedProviderSettings();
     }
 
     private void OnOpenSpeechSettings(object sender, RoutedEventArgs e)
@@ -294,6 +454,8 @@ public sealed partial class VoiceModeWindow : WindowEx
 
     private async void OnSave(object sender, RoutedEventArgs e)
     {
+        CaptureSelectedProviderSettings();
+
         var updated = new VoiceSettings
         {
             Mode = GetSelectedMode(),
@@ -326,6 +488,7 @@ public sealed partial class VoiceModeWindow : WindowEx
 
         try
         {
+            _settings.VoiceProviderCredentials = Clone(_providerCredentialsDraft);
             await _voiceService.UpdateSettingsAsync(new VoiceSettingsUpdateArgs
             {
                 Settings = updated,
@@ -366,6 +529,19 @@ public sealed partial class VoiceModeWindow : WindowEx
         catch
         {
         }
+    }
+
+    private static VoiceProviderCredentials Clone(VoiceProviderCredentials source)
+    {
+        return new VoiceProviderCredentials
+        {
+            MiniMaxApiKey = source.MiniMaxApiKey,
+            MiniMaxModel = source.MiniMaxModel,
+            MiniMaxVoiceId = source.MiniMaxVoiceId,
+            ElevenLabsApiKey = source.ElevenLabsApiKey,
+            ElevenLabsModel = source.ElevenLabsModel,
+            ElevenLabsVoiceId = source.ElevenLabsVoiceId
+        };
     }
 
     private sealed record DeviceOption(string? DeviceId, string Name);

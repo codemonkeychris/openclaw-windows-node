@@ -143,7 +143,11 @@ public static class VoiceProviderIds
 public sealed class VoiceProviderCredentials
 {
     public string? MiniMaxApiKey { get; set; }
+    public string MiniMaxModel { get; set; } = "speech-2.8-turbo";
+    public string MiniMaxVoiceId { get; set; } = "English_MatureBoss";
     public string? ElevenLabsApiKey { get; set; }
+    public string? ElevenLabsModel { get; set; }
+    public string? ElevenLabsVoiceId { get; set; }
 }
 
 public sealed class VoiceProviderOption

@@ -90,6 +90,10 @@ public class VoiceSchemaDefaultsTests
         var credentials = new VoiceProviderCredentials();
 
         Assert.Null(credentials.MiniMaxApiKey);
+        Assert.Equal("speech-2.8-turbo", credentials.MiniMaxModel);
+        Assert.Equal("English_MatureBoss", credentials.MiniMaxVoiceId);
         Assert.Null(credentials.ElevenLabsApiKey);
+        Assert.Null(credentials.ElevenLabsModel);
+        Assert.Null(credentials.ElevenLabsVoiceId);
     }
 }

@@ -60,7 +60,11 @@ public class SettingsRoundTripTests
             VoiceProviderCredentials = new VoiceProviderCredentials
             {
                 MiniMaxApiKey = "minimax-key",
-                ElevenLabsApiKey = "eleven-key"
+                MiniMaxModel = "speech-2.8-turbo",
+                MiniMaxVoiceId = "English_MatureBoss",
+                ElevenLabsApiKey = "eleven-key",
+                ElevenLabsModel = "eleven-v3",
+                ElevenLabsVoiceId = "voice-42"
             },
             UserRules = new List<UserNotificationRule>
             {
@@ -105,7 +109,11 @@ public class SettingsRoundTripTests
         Assert.Equal(VoiceChatWindowSubmitMode.WaitForUser, restored.Voice.AlwaysOn.ChatWindowSubmitMode);
         Assert.NotNull(restored.VoiceProviderCredentials);
         Assert.Equal("minimax-key", restored.VoiceProviderCredentials.MiniMaxApiKey);
+        Assert.Equal("speech-2.8-turbo", restored.VoiceProviderCredentials.MiniMaxModel);
+        Assert.Equal("English_MatureBoss", restored.VoiceProviderCredentials.MiniMaxVoiceId);
         Assert.Equal("eleven-key", restored.VoiceProviderCredentials.ElevenLabsApiKey);
+        Assert.Equal("eleven-v3", restored.VoiceProviderCredentials.ElevenLabsModel);
+        Assert.Equal("voice-42", restored.VoiceProviderCredentials.ElevenLabsVoiceId);
         Assert.NotNull(restored.UserRules);
         Assert.Single(restored.UserRules);
         Assert.Equal("build.*fail", restored.UserRules[0].Pattern);
@@ -159,7 +167,11 @@ public class SettingsRoundTripTests
         Assert.Equal(VoiceProviderIds.Windows, settings.Voice.TextToSpeechProviderId);
         Assert.NotNull(settings.VoiceProviderCredentials);
         Assert.Null(settings.VoiceProviderCredentials.MiniMaxApiKey);
+        Assert.Equal("speech-2.8-turbo", settings.VoiceProviderCredentials.MiniMaxModel);
+        Assert.Equal("English_MatureBoss", settings.VoiceProviderCredentials.MiniMaxVoiceId);
         Assert.Null(settings.VoiceProviderCredentials.ElevenLabsApiKey);
+        Assert.Null(settings.VoiceProviderCredentials.ElevenLabsModel);
+        Assert.Null(settings.VoiceProviderCredentials.ElevenLabsVoiceId);
         Assert.Equal(16000, settings.Voice.SampleRateHz);
         Assert.Equal("NanoWakeWord", settings.Voice.WakeWord.Engine);
         Assert.Null(settings.UserRules);

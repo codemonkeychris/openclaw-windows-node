@@ -1053,7 +1053,14 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
             return;
         }
 
-        var payload = BuildMiniMaxRequestPayload(text);
+        var model = string.IsNullOrWhiteSpace(credentials.MiniMaxModel)
+            ? MiniMaxTtsModel
+            : credentials.MiniMaxModel.Trim();
+        var voiceId = string.IsNullOrWhiteSpace(credentials.MiniMaxVoiceId)
+            ? MiniMaxTtsVoiceId
+            : credentials.MiniMaxVoiceId.Trim();
+
+        var payload = BuildMiniMaxRequestPayload(text, model, voiceId);
         using var request = new HttpRequestMessage(HttpMethod.Post, MiniMaxTtsEndpoint)
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json")
@@ -1453,7 +1460,11 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
         return new VoiceProviderCredentials
         {
             MiniMaxApiKey = source.MiniMaxApiKey,
-            ElevenLabsApiKey = source.ElevenLabsApiKey
+            MiniMaxModel = source.MiniMaxModel,
+            MiniMaxVoiceId = source.MiniMaxVoiceId,
+            ElevenLabsApiKey = source.ElevenLabsApiKey,
+            ElevenLabsModel = source.ElevenLabsModel,
+            ElevenLabsVoiceId = source.ElevenLabsVoiceId
         };
     }
 
@@ -1484,18 +1495,18 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
         };
     }
 
-    private static string BuildMiniMaxRequestPayload(string text)
+    private static string BuildMiniMaxRequestPayload(string text, string model, string voiceId)
     {
         var payload = new
         {
-            model = MiniMaxTtsModel,
+            model,
             text,
             stream = false,
             language_boost = "English",
             output_format = "hex",
             voice_setting = new
             {
-                voice_id = MiniMaxTtsVoiceId,
+                voice_id = voiceId,
                 speed = 1,
                 vol = 1,
                 pitch = 0

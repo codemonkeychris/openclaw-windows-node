@@ -199,7 +199,17 @@ This is an intentional short-term design choice so the Windows tray app can use 
 Current credential fields:
 
 - `VoiceProviderCredentials.MiniMaxApiKey`
+- `VoiceProviderCredentials.MiniMaxModel`
+- `VoiceProviderCredentials.MiniMaxVoiceId`
 - `VoiceProviderCredentials.ElevenLabsApiKey`
+- `VoiceProviderCredentials.ElevenLabsModel`
+- `VoiceProviderCredentials.ElevenLabsVoiceId`
+
+When the selected TTS provider in the Voice Mode window is not `windows`, the tray app shows provider-specific fields in the configuration form so the user can enter or edit:
+
+- API key
+- model
+- voice id
 
 For `WakeWord`, trigger words are gateway-owned global state. The Windows node should eventually consume the same shared trigger list and keep only a local enabled/disabled toggle plus device/runtime settings.
 
@@ -267,7 +277,11 @@ Provider credentials are persisted as `SettingsData.VoiceProviderCredentials` in
   },
   "VoiceProviderCredentials": {
     "MiniMaxApiKey": "<local secret>",
-    "ElevenLabsApiKey": null
+    "MiniMaxModel": "speech-2.8-turbo",
+    "MiniMaxVoiceId": "English_MatureBoss",
+    "ElevenLabsApiKey": null,
+    "ElevenLabsModel": null,
+    "ElevenLabsVoiceId": null
   }
 }
 ```
@@ -311,7 +325,11 @@ Provider credentials are persisted as `SettingsData.VoiceProviderCredentials` in
 | `Voice.AlwaysOn.MaxUtteranceMs` | int | `15000` | always-on | Hard cap on utterance length before forced submission/finalization |
 | `Voice.AlwaysOn.ChatWindowSubmitMode` | enum | `AutoSend` | always-on | When the tray chat window is open, either auto-send the finalized utterance or leave it in the compose box for manual send |
 | `VoiceProviderCredentials.MiniMaxApiKey` | string? | `null` | minimax tts | API key used for MiniMax cloud TTS requests |
+| `VoiceProviderCredentials.MiniMaxModel` | string | `speech-2.8-turbo` | minimax tts | MiniMax TTS model identifier editable in the Voice Mode form |
+| `VoiceProviderCredentials.MiniMaxVoiceId` | string | `English_MatureBoss` | minimax tts | MiniMax TTS voice id editable in the Voice Mode form |
 | `VoiceProviderCredentials.ElevenLabsApiKey` | string? | `null` | elevenlabs tts | Reserved for the required ElevenLabs TTS implementation |
+| `VoiceProviderCredentials.ElevenLabsModel` | string? | `null` | elevenlabs tts | Reserved for future ElevenLabs model selection in the Voice Mode form |
+| `VoiceProviderCredentials.ElevenLabsVoiceId` | string? | `null` | elevenlabs tts | Reserved for future ElevenLabs voice selection in the Voice Mode form |
 
 At runtime today, those device ids are persisted and surfaced in the UI, but the v1 `AlwaysOn` path still uses the Windows system speech stack defaults for capture and playback.
 

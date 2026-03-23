@@ -41,6 +41,25 @@
                     <TextBlock Text="PROVIDERS" Style="{StaticResource CaptionTextBlockStyle}" Foreground="#E74C3C" FontWeight="Bold"/>
                     <ComboBox x:Name="SpeechToTextProviderComboBox" Header="Speech to text provider" DisplayMemberPath="Name" SelectionChanged="OnProviderChanged"/>
                     <ComboBox x:Name="TextToSpeechProviderComboBox" Header="Text to speech provider" DisplayMemberPath="Name" SelectionChanged="OnProviderChanged"/>
+                    <StackPanel x:Name="TtsProviderSettingsPanel" Spacing="8" Visibility="Collapsed">
+                        <TextBlock x:Name="TtsProviderSettingsTitleTextBlock"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="#E74C3C"
+                                   FontWeight="Bold"/>
+                        <PasswordBox x:Name="TtsApiKeyPasswordBox"
+                                     Header="API key"
+                                     PasswordChanged="OnProviderSettingsChanged"/>
+                        <TextBox x:Name="TtsModelTextBox"
+                                 Header="Model"
+                                 TextChanged="OnProviderSettingsChanged"/>
+                        <TextBox x:Name="TtsVoiceIdTextBox"
+                                 Header="Voice ID"
+                                 TextChanged="OnProviderSettingsChanged"/>
+                        <TextBlock Text="These values are stored in your local tray settings file and are not read from the provider catalog."
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
                     <TextBlock x:Name="ProviderInfoTextBlock"
                                Style="{StaticResource CaptionTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"

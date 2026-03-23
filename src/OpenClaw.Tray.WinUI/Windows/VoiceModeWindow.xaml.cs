@@ -218,13 +218,21 @@ public sealed partial class VoiceModeWindow : WindowEx
             details.Add($"TTS: {tts.Name}");
         }
 
-        var fallbackNotice = (stt != null && !string.Equals(stt.Id, VoiceProviderIds.Windows, StringComparison.OrdinalIgnoreCase)) ||
-                             (tts != null && !string.Equals(tts.Id, VoiceProviderIds.Windows, StringComparison.OrdinalIgnoreCase))
-            ? " Selected non-Windows providers are saved now but will fall back to Windows until their runtime adapters are added."
+        var sttFallback = stt != null &&
+                          !VoiceProviderCatalogService.SupportsWindowsRuntime(stt.Id);
+        var ttsFallback = tts != null &&
+                          !VoiceProviderCatalogService.SupportsTextToSpeechRuntime(tts.Id);
+
+        var fallbackNotice = sttFallback || ttsFallback
+            ? " Unsupported provider selections fall back to Windows until their runtime adapters are added."
+            : string.Empty;
+        var credentialNotice = tts != null &&
+                               string.Equals(tts.Id, VoiceProviderIds.MiniMax, StringComparison.OrdinalIgnoreCase)
+            ? " Configure VoiceProviderCredentials.MiniMaxApiKey in %APPDATA%\\OpenClawTray\\settings.json."
             : string.Empty;
 
         ProviderInfoTextBlock.Text =
-            $"{string.Join(" · ", details)}. Configure extra providers in {VoiceProviderCatalogService.CatalogFilePath}.{fallbackNotice}";
+            $"{string.Join(" · ", details)}. Configure extra providers in {VoiceProviderCatalogService.CatalogFilePath}.{credentialNotice}{fallbackNotice}";
     }
 
     private void UpdateTroubleshooting(string? error)

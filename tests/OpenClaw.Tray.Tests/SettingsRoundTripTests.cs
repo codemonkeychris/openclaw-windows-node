@@ -57,6 +57,11 @@ public class SettingsRoundTripTests
                     ChatWindowSubmitMode = VoiceChatWindowSubmitMode.WaitForUser
                 }
             },
+            VoiceProviderCredentials = new VoiceProviderCredentials
+            {
+                MiniMaxApiKey = "minimax-key",
+                ElevenLabsApiKey = "eleven-key"
+            },
             UserRules = new List<UserNotificationRule>
             {
                 new() { Pattern = "build.*fail", IsRegex = true, Category = "urgent", Enabled = true }
@@ -98,6 +103,9 @@ public class SettingsRoundTripTests
         Assert.Equal(0.72f, restored.Voice.WakeWord.TriggerThreshold);
         Assert.Equal(300, restored.Voice.AlwaysOn.MinSpeechMs);
         Assert.Equal(VoiceChatWindowSubmitMode.WaitForUser, restored.Voice.AlwaysOn.ChatWindowSubmitMode);
+        Assert.NotNull(restored.VoiceProviderCredentials);
+        Assert.Equal("minimax-key", restored.VoiceProviderCredentials.MiniMaxApiKey);
+        Assert.Equal("eleven-key", restored.VoiceProviderCredentials.ElevenLabsApiKey);
         Assert.NotNull(restored.UserRules);
         Assert.Single(restored.UserRules);
         Assert.Equal("build.*fail", restored.UserRules[0].Pattern);
@@ -149,6 +157,9 @@ public class SettingsRoundTripTests
         Assert.False(settings.Voice.ShowConversationToasts);
         Assert.Equal(VoiceProviderIds.Windows, settings.Voice.SpeechToTextProviderId);
         Assert.Equal(VoiceProviderIds.Windows, settings.Voice.TextToSpeechProviderId);
+        Assert.NotNull(settings.VoiceProviderCredentials);
+        Assert.Null(settings.VoiceProviderCredentials.MiniMaxApiKey);
+        Assert.Null(settings.VoiceProviderCredentials.ElevenLabsApiKey);
         Assert.Equal(16000, settings.Voice.SampleRateHz);
         Assert.Equal("NanoWakeWord", settings.Voice.WakeWord.Engine);
         Assert.Null(settings.UserRules);

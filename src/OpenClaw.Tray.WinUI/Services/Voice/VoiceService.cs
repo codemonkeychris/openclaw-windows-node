@@ -1,6 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Runtime.InteropServices.WindowsRuntime;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,16 +19,21 @@ using Windows.Media.Devices;
 using Windows.Media.Playback;
 using Windows.Media.SpeechRecognition;
 using Windows.Media.SpeechSynthesis;
+using Windows.Storage.Streams;
 
 namespace OpenClawTray.Services.Voice;
 
 public sealed class VoiceService : IVoiceRuntime, IDisposable
 {
     private const string DefaultSessionKey = "main";
+    private const string MiniMaxTtsEndpoint = "https://api.minimax.io/v1/t2a_v2";
+    private const string MiniMaxTtsModel = "speech-2.8-turbo";
+    private const string MiniMaxTtsVoiceId = "English_MatureBoss";
     private const int HResultSpeechPrivacyDeclined = unchecked((int)0x80045509);
     private static readonly TimeSpan TransportConnectTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan DuplicateTranscriptWindow = TimeSpan.FromSeconds(2);
+    private static readonly HttpClient s_httpClient = CreateHttpClient();
 
     private readonly IOpenClawLogger _logger;
     private readonly SettingsManager _settings;
@@ -959,21 +969,49 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
 
     private async Task SpeakTextAsync(string text)
     {
+        VoiceSettings settings;
+        VoiceProviderCredentials credentials;
         SpeechSynthesizer? synthesizer;
         MediaPlayer? player;
 
         lock (_gate)
         {
+            settings = Clone(_settings.Voice);
+            credentials = Clone(_settings.VoiceProviderCredentials);
             synthesizer = _speechSynthesizer;
             player = _mediaPlayer;
         }
 
-        if (synthesizer == null || player == null)
+        if (player == null)
+        {
+            throw new InvalidOperationException("Speech playback is not ready.");
+        }
+
+        var provider = VoiceProviderCatalogService.ResolveTextToSpeechProvider(
+            settings.TextToSpeechProviderId,
+            _logger);
+
+        if (VoiceProviderCatalogService.SupportsMiniMaxTextToSpeech(provider.Id))
+        {
+            await SpeakWithMiniMaxAsync(text, credentials, player);
+            return;
+        }
+
+        if (synthesizer == null)
         {
             throw new InvalidOperationException("Speech playback is not ready.");
         }
 
         using var stream = await synthesizer.SynthesizeTextToStreamAsync(text);
+        await PlayStreamAsync(player, stream, stream.ContentType);
+    }
+
+    private static async Task PlayStreamAsync(
+        MediaPlayer player,
+        IRandomAccessStream stream,
+        string contentType)
+    {
+        stream.Seek(0);
         var playbackEnded = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         TypedEventHandler<MediaPlayer, object>? endedHandler = null;
@@ -987,7 +1025,7 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
 
         try
         {
-            player.Source = MediaSource.CreateFromStream(stream, stream.ContentType);
+            player.Source = MediaSource.CreateFromStream(stream, contentType);
             player.Play();
             await playbackEnded.Task;
         }
@@ -997,6 +1035,67 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
             player.MediaFailed -= failedHandler;
             player.Source = null;
         }
+    }
+
+    private async Task SpeakWithMiniMaxAsync(
+        string text,
+        VoiceProviderCredentials credentials,
+        MediaPlayer player)
+    {
+        if (string.IsNullOrWhiteSpace(credentials.MiniMaxApiKey))
+        {
+            throw new InvalidOperationException(
+                "MiniMax API key is not configured. Add VoiceProviderCredentials.MiniMaxApiKey to %APPDATA%\\OpenClawTray\\settings.json.");
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        var payload = BuildMiniMaxRequestPayload(text);
+        using var request = new HttpRequestMessage(HttpMethod.Post, MiniMaxTtsEndpoint)
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", credentials.MiniMaxApiKey);
+
+        using var response = await s_httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+        var responseText = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"MiniMax TTS request failed: {(int)response.StatusCode} {response.ReasonPhrase}");
+        }
+
+        using var document = JsonDocument.Parse(responseText);
+        var statusCode = document.RootElement
+            .GetProperty("base_resp")
+            .GetProperty("status_code")
+            .GetInt32();
+        if (statusCode != 0)
+        {
+            var statusMessage = document.RootElement
+                .GetProperty("base_resp")
+                .GetProperty("status_msg")
+                .GetString() ?? "unknown error";
+            throw new InvalidOperationException($"MiniMax TTS returned an error: {statusMessage}");
+        }
+
+        var audioHex = document.RootElement
+            .GetProperty("data")
+            .GetProperty("audio")
+            .GetString();
+        if (string.IsNullOrWhiteSpace(audioHex))
+        {
+            throw new InvalidOperationException("MiniMax TTS response did not contain audio data.");
+        }
+
+        var audioBytes = DecodeHex(audioHex);
+        using var stream = new InMemoryRandomAccessStream();
+        await stream.WriteAsync(audioBytes.AsBuffer());
+        await stream.FlushAsync();
+        await PlayStreamAsync(player, stream, "audio/mpeg");
     }
 
     private async void OnSpeechRecognitionCompleted(
@@ -1349,6 +1448,15 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
         };
     }
 
+    private static VoiceProviderCredentials Clone(VoiceProviderCredentials source)
+    {
+        return new VoiceProviderCredentials
+        {
+            MiniMaxApiKey = source.MiniMaxApiKey,
+            ElevenLabsApiKey = source.ElevenLabsApiKey
+        };
+    }
+
     private static string? BuildProviderFallbackMessage(
         VoiceProviderOption speechToTextProvider,
         VoiceProviderOption textToSpeechProvider)
@@ -1360,12 +1468,60 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
             fallbacks.Add($"STT '{speechToTextProvider.Name}' is not implemented yet; using Windows Speech Recognition.");
         }
 
-        if (!VoiceProviderCatalogService.SupportsWindowsRuntime(textToSpeechProvider.Id))
+        if (!VoiceProviderCatalogService.SupportsTextToSpeechRuntime(textToSpeechProvider.Id))
         {
             fallbacks.Add($"TTS '{textToSpeechProvider.Name}' is not implemented yet; using Windows Speech Synthesis.");
         }
 
         return fallbacks.Count == 0 ? null : string.Join(" ", fallbacks);
+    }
+
+    private static HttpClient CreateHttpClient()
+    {
+        return new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(30)
+        };
+    }
+
+    private static string BuildMiniMaxRequestPayload(string text)
+    {
+        var payload = new
+        {
+            model = MiniMaxTtsModel,
+            text,
+            stream = false,
+            language_boost = "English",
+            output_format = "hex",
+            voice_setting = new
+            {
+                voice_id = MiniMaxTtsVoiceId,
+                speed = 1,
+                vol = 1,
+                pitch = 0
+            },
+            audio_setting = new
+            {
+                sample_rate = 32000,
+                bitrate = 128000,
+                format = "mp3",
+                channel = 1
+            }
+        };
+
+        return JsonSerializer.Serialize(payload);
+    }
+
+    private static byte[] DecodeHex(string hex)
+    {
+        try
+        {
+            return Convert.FromHexString(hex);
+        }
+        catch (FormatException ex)
+        {
+            throw new InvalidOperationException("MiniMax TTS returned invalid audio data.", ex);
+        }
     }
 
     private static string GetUserFacingErrorMessage(Exception ex)

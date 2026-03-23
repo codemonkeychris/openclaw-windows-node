@@ -81,6 +81,16 @@ public static class VoiceProviderCatalogService
         return string.Equals(providerId, VoiceProviderIds.Windows, StringComparison.OrdinalIgnoreCase);
     }
 
+    public static bool SupportsMiniMaxTextToSpeech(string? providerId)
+    {
+        return string.Equals(providerId, VoiceProviderIds.MiniMax, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool SupportsTextToSpeechRuntime(string? providerId)
+    {
+        return SupportsWindowsRuntime(providerId) || SupportsMiniMaxTextToSpeech(providerId);
+    }
+
     private static VoiceProviderCatalog CreateBuiltInCatalog()
     {
         return new VoiceProviderCatalog
@@ -103,6 +113,20 @@ public static class VoiceProviderCatalogService
                     Name = "Windows Speech Synthesis",
                     Runtime = "windows",
                     Description = "Built-in Windows text-to-speech playback."
+                },
+                new VoiceProviderOption
+                {
+                    Id = VoiceProviderIds.MiniMax,
+                    Name = "MiniMax Speech 2.8 Turbo",
+                    Runtime = "cloud",
+                    Description = "Cloud TTS using speech-2.8-turbo with English_MatureBoss."
+                },
+                new VoiceProviderOption
+                {
+                    Id = VoiceProviderIds.ElevenLabs,
+                    Name = "ElevenLabs",
+                    Runtime = "cloud",
+                    Description = "Cloud TTS provider planned for the next phase."
                 }
             ]
         };

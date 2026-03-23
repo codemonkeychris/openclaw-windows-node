@@ -75,4 +75,21 @@ public class VoiceSchemaDefaultsTests
         Assert.Empty(catalog.SpeechToTextProviders);
         Assert.Empty(catalog.TextToSpeechProviders);
     }
+
+    [Fact]
+    public void VoiceProviderIds_ExposeRequiredBuiltInProviders()
+    {
+        Assert.Equal("windows", VoiceProviderIds.Windows);
+        Assert.Equal("minimax", VoiceProviderIds.MiniMax);
+        Assert.Equal("elevenlabs", VoiceProviderIds.ElevenLabs);
+    }
+
+    [Fact]
+    public void VoiceProviderCredentials_Defaults_ToEmptySecrets()
+    {
+        var credentials = new VoiceProviderCredentials();
+
+        Assert.Null(credentials.MiniMaxApiKey);
+        Assert.Null(credentials.ElevenLabsApiKey);
+    }
 }

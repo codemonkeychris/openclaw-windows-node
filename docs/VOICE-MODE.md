@@ -10,13 +10,13 @@ This document defines the voice subsystem for the Windows node only. It introduc
   - `WakeWord` maps to Voice Wake
   - `AlwaysOn` maps to Talk Mode
 - Keep STT/TTS provider selection configurable, with Windows implementations as the default built-ins
-- Implement `MiniMax` STT and `ElevenLabs` TTS as required non-Windows providers after the Windows baseline
+- Implement `MiniMax` TTS and `ElevenLabs` TTS as required non-Windows providers after the Windows baseline
 - Reuse the existing node capability pattern instead of introducing a parallel control path
 
 ## Non-Goals
 
 - True full-duplex or chunk-streaming audio transport between node and gateway
-- Arbitrary provider proliferation before the required `MiniMax` / `ElevenLabs` support is in place
+- Arbitrary provider proliferation before the required `MiniMax` / `ElevenLabs` TTS support is in place
 - Changes to unrelated project documentation
 
 ## Design Position
@@ -133,7 +133,8 @@ The built-in default for both is `windows`.
 Runtime behavior in the current phase:
 
 - `windows` is implemented for both STT and TTS
-- `minimax` and `elevenlabs` are required next-phase providers, not optional future nice-to-haves
+- `minimax` TTS is implemented with `speech-2.8-turbo` and `English_MatureBoss`
+- `elevenlabs` TTS remains required next-phase work, not an optional future nice-to-have
 - non-Windows providers can be selected and persisted now
 - unsupported providers fall back to Windows at runtime with a status warning
 
@@ -155,13 +156,6 @@ Example:
       "enabled": true,
       "description": "Built-in Windows dictation and speech recognition."
     },
-    {
-      "id": "minimax",
-      "name": "MiniMax Speech To Text",
-      "runtime": "gateway",
-      "enabled": true,
-      "description": "Required next-phase provider."
-    }
   ],
   "textToSpeechProviders": [
     {
@@ -170,6 +164,13 @@ Example:
       "runtime": "windows",
       "enabled": true,
       "description": "Built-in Windows text-to-speech playback."
+    },
+    {
+      "id": "minimax",
+      "name": "MiniMax Speech 2.8 Turbo",
+      "runtime": "cloud",
+      "enabled": true,
+      "description": "speech-2.8-turbo using English_MatureBoss."
     },
     {
       "id": "elevenlabs",
@@ -184,18 +185,21 @@ Example:
 
 This file only defines selectable providers. It does not carry API keys.
 
-### OpenClaw Configuration and Credentials
-
-For now, `MiniMax` and `ElevenLabs` credentials will be stored in the main OpenClaw configuration, not in the Windows tray settings or the local provider catalog file.
+### Local Credentials
 
 That means the current design is:
 
 - local tray settings choose the preferred STT/TTS provider ids
-- provider API keys are read from the main OpenClaw configuration
+- provider API keys are stored in `%APPDATA%\\OpenClawTray\\settings.json` under `VoiceProviderCredentials`
 - OpenClaw remains the conversation endpoint for `chat.send`
 - the local provider catalog remains metadata-only and must not contain secrets
 
-This is an intentional short-term design choice so the next implementation step can add `MiniMax` support without inventing a second credential store in Windows. It can be revisited later if provider ownership is split differently.
+This is an intentional short-term design choice so the Windows tray app can use cloud TTS providers without inventing a second catalog file for secrets. It can be revisited later if provider ownership is split differently.
+
+Current credential fields:
+
+- `VoiceProviderCredentials.MiniMaxApiKey`
+- `VoiceProviderCredentials.ElevenLabsApiKey`
 
 For `WakeWord`, trigger words are gateway-owned global state. The Windows node should eventually consume the same shared trigger list and keep only a local enabled/disabled toggle plus device/runtime settings.
 
@@ -230,6 +234,7 @@ These contracts are defined in [VoiceModeSchema.cs](../src/OpenClaw.Shared/Voice
 ## Settings Schema
 
 Voice settings are persisted as `SettingsData.Voice` in [SettingsData.cs](../src/OpenClaw.Shared/SettingsData.cs).
+Provider credentials are persisted as `SettingsData.VoiceProviderCredentials` in the same local settings file.
 
 ### Effective Schema
 
@@ -259,6 +264,10 @@ Voice settings are persisted as `SettingsData.Voice` in [SettingsData.cs](../src
       "MaxUtteranceMs": 15000,
       "ChatWindowSubmitMode": "AutoSend"
     }
+  },
+  "VoiceProviderCredentials": {
+    "MiniMaxApiKey": "<local secret>",
+    "ElevenLabsApiKey": null
   }
 }
 ```
@@ -301,6 +310,8 @@ Voice settings are persisted as `SettingsData.Voice` in [SettingsData.cs](../src
 | `Voice.AlwaysOn.EndSilenceMs` | int | `900` | always-on | Silence timeout used to finalize an utterance |
 | `Voice.AlwaysOn.MaxUtteranceMs` | int | `15000` | always-on | Hard cap on utterance length before forced submission/finalization |
 | `Voice.AlwaysOn.ChatWindowSubmitMode` | enum | `AutoSend` | always-on | When the tray chat window is open, either auto-send the finalized utterance or leave it in the compose box for manual send |
+| `VoiceProviderCredentials.MiniMaxApiKey` | string? | `null` | minimax tts | API key used for MiniMax cloud TTS requests |
+| `VoiceProviderCredentials.ElevenLabsApiKey` | string? | `null` | elevenlabs tts | Reserved for the required ElevenLabs TTS implementation |
 
 At runtime today, those device ids are persisted and surfaced in the UI, but the v1 `AlwaysOn` path still uses the Windows system speech stack defaults for capture and playback.
 
@@ -426,12 +437,18 @@ sequenceDiagram
 - `VoiceCoordinator` in `OpenClaw.Tray.WinUI.Services`
 - `AudioPlaybackService` in `OpenClaw.Tray.WinUI.Services`
 
-## Why Provider Support Is Abstracted
+## Provider Direction
 
-Minimax and ElevenLabs are valid future targets, but binding provider choice into the Windows node now would introduce:
+Provider support is now part of the Windows voice subsystem roadmap, not a hypothetical extension:
 
-- duplicated provider integration work already handled by OpenClaw
-- local credential management on Windows
-- tighter coupling between node runtime and vendor APIs
+- `MiniMax` TTS is implemented first in the tray app
+- `ElevenLabs` TTS remains required follow-up work
+- Windows STT remains the active speech-recognition baseline until a non-Windows STT provider is deliberately added
 
-For the first implementation, the Windows node should manage local audio behavior, local speech recognition, and local playback while reusing existing OpenClaw message flows for conversation. If provider routing becomes a real requirement later, it can be added back without changing the core activation-mode model.
+The Windows node still keeps provider choice bounded:
+
+- local tray settings choose the provider ids
+- local tray settings store the provider secrets for now
+- OpenClaw still owns the conversation/session flow
+
+This keeps the provider surface narrow while still meeting the required MiniMax/ElevenLabs support direction.

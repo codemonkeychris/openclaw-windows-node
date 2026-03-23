@@ -136,6 +136,14 @@ public sealed class VoiceSettingsUpdateArgs
 public static class VoiceProviderIds
 {
     public const string Windows = "windows";
+    public const string MiniMax = "minimax";
+    public const string ElevenLabs = "elevenlabs";
+}
+
+public sealed class VoiceProviderCredentials
+{
+    public string? MiniMaxApiKey { get; set; }
+    public string? ElevenLabsApiKey { get; set; }
 }
 
 public sealed class VoiceProviderOption

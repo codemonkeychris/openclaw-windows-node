@@ -40,7 +40,6 @@ public class VoiceSchemaDefaultsTests
         Assert.Equal("hey_openclaw", settings.WakeWord.ModelId);
         Assert.Equal(0.65f, settings.WakeWord.TriggerThreshold);
         Assert.Equal(250, settings.AlwaysOn.MinSpeechMs);
-        Assert.True(settings.AlwaysOn.AutoSubmit);
         Assert.Equal(VoiceChatWindowSubmitMode.AutoSend, settings.AlwaysOn.ChatWindowSubmitMode);
     }
 

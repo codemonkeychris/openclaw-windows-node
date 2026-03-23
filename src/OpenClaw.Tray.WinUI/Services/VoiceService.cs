@@ -1264,7 +1264,6 @@ public sealed class VoiceService : IDisposable
                 MinSpeechMs = source.AlwaysOn.MinSpeechMs,
                 EndSilenceMs = source.AlwaysOn.EndSilenceMs,
                 MaxUtteranceMs = source.AlwaysOn.MaxUtteranceMs,
-                AutoSubmit = source.AlwaysOn.AutoSubmit,
                 ChatWindowSubmitMode = source.AlwaysOn.ChatWindowSubmitMode
             }
         };

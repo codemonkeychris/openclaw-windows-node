@@ -311,7 +311,6 @@ public sealed partial class VoiceModeWindow : WindowEx
                 MinSpeechMs = _settings.Voice.AlwaysOn.MinSpeechMs,
                 EndSilenceMs = _settings.Voice.AlwaysOn.EndSilenceMs,
                 MaxUtteranceMs = _settings.Voice.AlwaysOn.MaxUtteranceMs,
-                AutoSubmit = _settings.Voice.AlwaysOn.AutoSubmit,
                 ChatWindowSubmitMode = GetSelectedChatWindowSubmitMode()
             }
         };

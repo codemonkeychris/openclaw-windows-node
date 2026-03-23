@@ -88,7 +88,6 @@ public sealed class VoiceAlwaysOnSettings
     public int MinSpeechMs { get; set; } = 250;
     public int EndSilenceMs { get; set; } = 900;
     public int MaxUtteranceMs { get; set; } = 15000;
-    public bool AutoSubmit { get; set; } = true;
     public VoiceChatWindowSubmitMode ChatWindowSubmitMode { get; set; } = VoiceChatWindowSubmitMode.AutoSend;
 }
 

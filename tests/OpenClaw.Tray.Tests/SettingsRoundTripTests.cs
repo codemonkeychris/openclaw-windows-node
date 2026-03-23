@@ -54,7 +54,6 @@ public class SettingsRoundTripTests
                     MinSpeechMs = 300,
                     EndSilenceMs = 1100,
                     MaxUtteranceMs = 18000,
-                    AutoSubmit = false,
                     ChatWindowSubmitMode = VoiceChatWindowSubmitMode.WaitForUser
                 }
             },
@@ -98,7 +97,6 @@ public class SettingsRoundTripTests
         Assert.Equal("hey_openclaw", restored.Voice.WakeWord.ModelId);
         Assert.Equal(0.72f, restored.Voice.WakeWord.TriggerThreshold);
         Assert.Equal(300, restored.Voice.AlwaysOn.MinSpeechMs);
-        Assert.False(restored.Voice.AlwaysOn.AutoSubmit);
         Assert.Equal(VoiceChatWindowSubmitMode.WaitForUser, restored.Voice.AlwaysOn.ChatWindowSubmitMode);
         Assert.NotNull(restored.UserRules);
         Assert.Single(restored.UserRules);

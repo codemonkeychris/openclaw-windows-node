@@ -253,7 +253,6 @@ Voice settings are persisted as `SettingsData.Voice` in [SettingsData.cs](C:/dev
       "MinSpeechMs": 250,
       "EndSilenceMs": 900,
       "MaxUtteranceMs": 15000,
-      "AutoSubmit": true,
       "ChatWindowSubmitMode": "AutoSend"
     }
   }
@@ -297,7 +296,6 @@ Voice settings are persisted as `SettingsData.Voice` in [SettingsData.cs](C:/dev
 | `Voice.AlwaysOn.MinSpeechMs` | int | `250` | always-on | Minimum detected speech duration before an utterance is treated as real input |
 | `Voice.AlwaysOn.EndSilenceMs` | int | `900` | always-on | Silence timeout used to finalize an utterance |
 | `Voice.AlwaysOn.MaxUtteranceMs` | int | `15000` | always-on | Hard cap on utterance length before forced submission/finalization |
-| `Voice.AlwaysOn.AutoSubmit` | bool | `true` | always-on | If `true`, completed utterances are submitted immediately without extra confirmation |
 | `Voice.AlwaysOn.ChatWindowSubmitMode` | enum | `AutoSend` | always-on | When the tray chat window is open, either auto-send the finalized utterance or leave it in the compose box for manual send |
 
 At runtime today, those device ids are persisted and surfaced in the UI, but the v1 `AlwaysOn` path still uses the Windows system speech stack defaults for capture and playback.

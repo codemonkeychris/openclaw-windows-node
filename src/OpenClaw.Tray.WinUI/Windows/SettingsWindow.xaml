@@ -85,8 +85,6 @@
                 <Button x:Name="TestNotificationButton" x:Uid="SettingsTestNotificationButton" Content="Send Test Notification" 
                         Click="OnTestNotification"/>
 
-                <controls:VoiceSettingsPanel x:Name="VoiceSettingsPanel"/>
-                
                 <!-- Advanced Section -->
                 <StackPanel Spacing="8">
                     <TextBlock x:Uid="SettingsAdvancedHeader" Text="ADVANCED (EXPERIMENTAL)" Style="{StaticResource CaptionTextBlockStyle}"
@@ -98,6 +96,8 @@
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                TextWrapping="Wrap"
                                Margin="0,-4,0,0"/>
+
+                    <controls:VoiceSettingsPanel x:Name="VoiceSettingsPanel"/>
                 </StackPanel>
                 
             </StackPanel>

@@ -140,6 +140,20 @@ public static class VoiceProviderIds
     public const string ElevenLabs = "elevenlabs";
 }
 
+public static class VoiceProviderSettingKeys
+{
+    public const string ApiKey = "apiKey";
+    public const string Model = "model";
+    public const string VoiceId = "voiceId";
+}
+
+public static class VoiceTextToSpeechResponseModes
+{
+    public const string Binary = "binary";
+    public const string HexJsonString = "hexJsonString";
+    public const string Base64JsonString = "base64JsonString";
+}
+
 public sealed class VoiceProviderCredentials
 {
     public string? MiniMaxApiKey { get; set; }
@@ -150,6 +164,44 @@ public sealed class VoiceProviderCredentials
     public string? ElevenLabsVoiceId { get; set; }
 }
 
+public sealed class VoiceProviderConfigurationStore
+{
+    public List<VoiceProviderConfiguration> Providers { get; set; } = [];
+}
+
+public sealed class VoiceProviderConfiguration
+{
+    public string ProviderId { get; set; } = "";
+    public Dictionary<string, string> Values { get; set; } = [];
+}
+
+public sealed class VoiceProviderSettingDefinition
+{
+    public string Key { get; set; } = "";
+    public string Label { get; set; } = "";
+    public bool Secret { get; set; }
+    public string? DefaultValue { get; set; }
+    public string? Placeholder { get; set; }
+    public string? Description { get; set; }
+}
+
+public sealed class VoiceTextToSpeechHttpContract
+{
+    public string EndpointTemplate { get; set; } = "";
+    public string HttpMethod { get; set; } = "POST";
+    public string AuthenticationHeaderName { get; set; } = "Authorization";
+    public string? AuthenticationScheme { get; set; } = "Bearer";
+    public string ApiKeySettingKey { get; set; } = VoiceProviderSettingKeys.ApiKey;
+    public string RequestContentType { get; set; } = "application/json";
+    public string RequestBodyTemplate { get; set; } = "";
+    public string ResponseAudioMode { get; set; } = VoiceTextToSpeechResponseModes.Binary;
+    public string? ResponseAudioJsonPath { get; set; }
+    public string? ResponseStatusCodeJsonPath { get; set; }
+    public string? ResponseStatusMessageJsonPath { get; set; }
+    public string? SuccessStatusValue { get; set; }
+    public string OutputContentType { get; set; } = "audio/mpeg";
+}
+
 public sealed class VoiceProviderOption
 {
     public string Id { get; set; } = "";
@@ -157,6 +209,8 @@ public sealed class VoiceProviderOption
     public string Runtime { get; set; } = "windows";
     public bool Enabled { get; set; } = true;
     public string? Description { get; set; }
+    public List<VoiceProviderSettingDefinition> Settings { get; set; } = [];
+    public VoiceTextToSpeechHttpContract? TextToSpeechHttp { get; set; }
 }
 
 public sealed class VoiceProviderCatalog

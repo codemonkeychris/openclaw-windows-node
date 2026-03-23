@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json;
 using OpenClaw.Shared;
 
@@ -57,14 +58,31 @@ public class SettingsRoundTripTests
                     ChatWindowSubmitMode = VoiceChatWindowSubmitMode.WaitForUser
                 }
             },
-            VoiceProviderCredentials = new VoiceProviderCredentials
+            VoiceProviderConfiguration = new VoiceProviderConfigurationStore
             {
-                MiniMaxApiKey = "minimax-key",
-                MiniMaxModel = "speech-2.8-turbo",
-                MiniMaxVoiceId = "English_MatureBoss",
-                ElevenLabsApiKey = "eleven-key",
-                ElevenLabsModel = "eleven-v3",
-                ElevenLabsVoiceId = "voice-42"
+                Providers =
+                [
+                    new VoiceProviderConfiguration
+                    {
+                        ProviderId = VoiceProviderIds.MiniMax,
+                        Values = new Dictionary<string, string>
+                        {
+                            [VoiceProviderSettingKeys.ApiKey] = "minimax-key",
+                            [VoiceProviderSettingKeys.Model] = "speech-2.8-turbo",
+                            [VoiceProviderSettingKeys.VoiceId] = "English_MatureBoss"
+                        }
+                    },
+                    new VoiceProviderConfiguration
+                    {
+                        ProviderId = VoiceProviderIds.ElevenLabs,
+                        Values = new Dictionary<string, string>
+                        {
+                            [VoiceProviderSettingKeys.ApiKey] = "eleven-key",
+                            [VoiceProviderSettingKeys.Model] = "eleven_multilingual_v2",
+                            [VoiceProviderSettingKeys.VoiceId] = "voice-42"
+                        }
+                    }
+                ]
             },
             UserRules = new List<UserNotificationRule>
             {
@@ -107,13 +125,13 @@ public class SettingsRoundTripTests
         Assert.Equal(0.72f, restored.Voice.WakeWord.TriggerThreshold);
         Assert.Equal(300, restored.Voice.AlwaysOn.MinSpeechMs);
         Assert.Equal(VoiceChatWindowSubmitMode.WaitForUser, restored.Voice.AlwaysOn.ChatWindowSubmitMode);
-        Assert.NotNull(restored.VoiceProviderCredentials);
-        Assert.Equal("minimax-key", restored.VoiceProviderCredentials.MiniMaxApiKey);
-        Assert.Equal("speech-2.8-turbo", restored.VoiceProviderCredentials.MiniMaxModel);
-        Assert.Equal("English_MatureBoss", restored.VoiceProviderCredentials.MiniMaxVoiceId);
-        Assert.Equal("eleven-key", restored.VoiceProviderCredentials.ElevenLabsApiKey);
-        Assert.Equal("eleven-v3", restored.VoiceProviderCredentials.ElevenLabsModel);
-        Assert.Equal("voice-42", restored.VoiceProviderCredentials.ElevenLabsVoiceId);
+        Assert.NotNull(restored.VoiceProviderConfiguration);
+        Assert.Equal("minimax-key", restored.VoiceProviderConfiguration.GetValue(VoiceProviderIds.MiniMax, VoiceProviderSettingKeys.ApiKey));
+        Assert.Equal("speech-2.8-turbo", restored.VoiceProviderConfiguration.GetValue(VoiceProviderIds.MiniMax, VoiceProviderSettingKeys.Model));
+        Assert.Equal("English_MatureBoss", restored.VoiceProviderConfiguration.GetValue(VoiceProviderIds.MiniMax, VoiceProviderSettingKeys.VoiceId));
+        Assert.Equal("eleven-key", restored.VoiceProviderConfiguration.GetValue(VoiceProviderIds.ElevenLabs, VoiceProviderSettingKeys.ApiKey));
+        Assert.Equal("eleven_multilingual_v2", restored.VoiceProviderConfiguration.GetValue(VoiceProviderIds.ElevenLabs, VoiceProviderSettingKeys.Model));
+        Assert.Equal("voice-42", restored.VoiceProviderConfiguration.GetValue(VoiceProviderIds.ElevenLabs, VoiceProviderSettingKeys.VoiceId));
         Assert.NotNull(restored.UserRules);
         Assert.Single(restored.UserRules);
         Assert.Equal("build.*fail", restored.UserRules[0].Pattern);
@@ -165,16 +183,33 @@ public class SettingsRoundTripTests
         Assert.False(settings.Voice.ShowConversationToasts);
         Assert.Equal(VoiceProviderIds.Windows, settings.Voice.SpeechToTextProviderId);
         Assert.Equal(VoiceProviderIds.Windows, settings.Voice.TextToSpeechProviderId);
-        Assert.NotNull(settings.VoiceProviderCredentials);
-        Assert.Null(settings.VoiceProviderCredentials.MiniMaxApiKey);
-        Assert.Equal("speech-2.8-turbo", settings.VoiceProviderCredentials.MiniMaxModel);
-        Assert.Equal("English_MatureBoss", settings.VoiceProviderCredentials.MiniMaxVoiceId);
-        Assert.Null(settings.VoiceProviderCredentials.ElevenLabsApiKey);
-        Assert.Null(settings.VoiceProviderCredentials.ElevenLabsModel);
-        Assert.Null(settings.VoiceProviderCredentials.ElevenLabsVoiceId);
+        Assert.NotNull(settings.VoiceProviderConfiguration);
+        Assert.Empty(settings.VoiceProviderConfiguration.Providers);
         Assert.Equal(16000, settings.Voice.SampleRateHz);
         Assert.Equal("NanoWakeWord", settings.Voice.WakeWord.Engine);
         Assert.Null(settings.UserRules);
+    }
+
+    [Fact]
+    public void LegacyVoiceProviderCredentials_Deserialize_ForMigration()
+    {
+        var json = """
+        {
+          "VoiceProviderCredentials": {
+            "MiniMaxApiKey": "minimax-key",
+            "MiniMaxModel": "speech-2.8-turbo",
+            "MiniMaxVoiceId": "English_MatureBoss"
+          }
+        }
+        """;
+
+        var settings = SettingsData.FromJson(json);
+
+        Assert.NotNull(settings);
+        Assert.NotNull(settings.VoiceProviderCredentials);
+        Assert.Equal("minimax-key", settings.VoiceProviderCredentials.MiniMaxApiKey);
+        Assert.Equal("speech-2.8-turbo", settings.VoiceProviderCredentials.MiniMaxModel);
+        Assert.Equal("English_MatureBoss", settings.VoiceProviderCredentials.MiniMaxVoiceId);
     }
 
     [Fact]

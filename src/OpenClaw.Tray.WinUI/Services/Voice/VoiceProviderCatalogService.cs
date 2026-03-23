@@ -81,14 +81,15 @@ public static class VoiceProviderCatalogService
         return string.Equals(providerId, VoiceProviderIds.Windows, StringComparison.OrdinalIgnoreCase);
     }
 
-    public static bool SupportsMiniMaxTextToSpeech(string? providerId)
-    {
-        return string.Equals(providerId, VoiceProviderIds.MiniMax, StringComparison.OrdinalIgnoreCase);
-    }
-
     public static bool SupportsTextToSpeechRuntime(string? providerId)
     {
-        return SupportsWindowsRuntime(providerId) || SupportsMiniMaxTextToSpeech(providerId);
+        if (SupportsWindowsRuntime(providerId))
+        {
+            return true;
+        }
+
+        var provider = ResolveTextToSpeechProvider(providerId);
+        return provider.TextToSpeechHttp != null;
     }
 
     private static VoiceProviderCatalog CreateBuiltInCatalog()
@@ -119,14 +120,107 @@ public static class VoiceProviderCatalogService
                     Id = VoiceProviderIds.MiniMax,
                     Name = "MiniMax Speech 2.8 Turbo",
                     Runtime = "cloud",
-                    Description = "Cloud TTS using speech-2.8-turbo with English_MatureBoss."
+                    Description = "Cloud TTS using MiniMax HTTP text-to-speech.",
+                    Settings =
+                    [
+                        new VoiceProviderSettingDefinition
+                        {
+                            Key = VoiceProviderSettingKeys.ApiKey,
+                            Label = "API key",
+                            Secret = true
+                        },
+                        new VoiceProviderSettingDefinition
+                        {
+                            Key = VoiceProviderSettingKeys.Model,
+                            Label = "Model",
+                            DefaultValue = "speech-2.8-turbo"
+                        },
+                        new VoiceProviderSettingDefinition
+                        {
+                            Key = VoiceProviderSettingKeys.VoiceId,
+                            Label = "Voice ID",
+                            DefaultValue = "English_MatureBoss"
+                        }
+                    ],
+                    TextToSpeechHttp = new VoiceTextToSpeechHttpContract
+                    {
+                        EndpointTemplate = "https://api.minimax.io/v1/t2a_v2",
+                        AuthenticationHeaderName = "Authorization",
+                        AuthenticationScheme = "Bearer",
+                        ApiKeySettingKey = VoiceProviderSettingKeys.ApiKey,
+                        RequestContentType = "application/json",
+                        RequestBodyTemplate = """
+                        {
+                          "model": {{model}},
+                          "text": {{text}},
+                          "stream": false,
+                          "language_boost": "English",
+                          "output_format": "hex",
+                          "voice_setting": {
+                            "voice_id": {{voiceId}},
+                            "speed": 1,
+                            "vol": 1,
+                            "pitch": 0
+                          },
+                          "audio_setting": {
+                            "sample_rate": 32000,
+                            "bitrate": 128000,
+                            "format": "mp3",
+                            "channel": 1
+                          }
+                        }
+                        """,
+                        ResponseAudioMode = VoiceTextToSpeechResponseModes.HexJsonString,
+                        ResponseAudioJsonPath = "data.audio",
+                        ResponseStatusCodeJsonPath = "base_resp.status_code",
+                        ResponseStatusMessageJsonPath = "base_resp.status_msg",
+                        SuccessStatusValue = "0",
+                        OutputContentType = "audio/mpeg"
+                    }
                 },
                 new VoiceProviderOption
                 {
                     Id = VoiceProviderIds.ElevenLabs,
                     Name = "ElevenLabs",
                     Runtime = "cloud",
-                    Description = "Cloud TTS provider planned for the next phase."
+                    Description = "Cloud TTS using the ElevenLabs create speech API.",
+                    Settings =
+                    [
+                        new VoiceProviderSettingDefinition
+                        {
+                            Key = VoiceProviderSettingKeys.ApiKey,
+                            Label = "API key",
+                            Secret = true
+                        },
+                        new VoiceProviderSettingDefinition
+                        {
+                            Key = VoiceProviderSettingKeys.Model,
+                            Label = "Model",
+                            DefaultValue = "eleven_multilingual_v2"
+                        },
+                        new VoiceProviderSettingDefinition
+                        {
+                            Key = VoiceProviderSettingKeys.VoiceId,
+                            Label = "Voice ID",
+                            Placeholder = "Enter an ElevenLabs voice ID"
+                        }
+                    ],
+                    TextToSpeechHttp = new VoiceTextToSpeechHttpContract
+                    {
+                        EndpointTemplate = "https://api.elevenlabs.io/v1/text-to-speech/{{voiceId}}?output_format=mp3_44100_128",
+                        AuthenticationHeaderName = "xi-api-key",
+                        AuthenticationScheme = null,
+                        ApiKeySettingKey = VoiceProviderSettingKeys.ApiKey,
+                        RequestContentType = "application/json",
+                        RequestBodyTemplate = """
+                        {
+                          "text": {{text}},
+                          "model_id": {{model}}
+                        }
+                        """,
+                        ResponseAudioMode = VoiceTextToSpeechResponseModes.Binary,
+                        OutputContentType = "audio/mpeg"
+                    }
                 }
             ]
         };
@@ -184,7 +278,47 @@ public static class VoiceProviderCatalogService
             Name = source.Name,
             Runtime = source.Runtime,
             Enabled = source.Enabled,
+            Description = source.Description,
+            Settings = source.Settings.Select(Clone).ToList(),
+            TextToSpeechHttp = Clone(source.TextToSpeechHttp)
+        };
+    }
+
+    private static VoiceProviderSettingDefinition Clone(VoiceProviderSettingDefinition source)
+    {
+        return new VoiceProviderSettingDefinition
+        {
+            Key = source.Key,
+            Label = source.Label,
+            Secret = source.Secret,
+            DefaultValue = source.DefaultValue,
+            Placeholder = source.Placeholder,
             Description = source.Description
+        };
+    }
+
+    private static VoiceTextToSpeechHttpContract? Clone(VoiceTextToSpeechHttpContract? source)
+    {
+        if (source == null)
+        {
+            return null;
+        }
+
+        return new VoiceTextToSpeechHttpContract
+        {
+            EndpointTemplate = source.EndpointTemplate,
+            HttpMethod = source.HttpMethod,
+            AuthenticationHeaderName = source.AuthenticationHeaderName,
+            AuthenticationScheme = source.AuthenticationScheme,
+            ApiKeySettingKey = source.ApiKeySettingKey,
+            RequestContentType = source.RequestContentType,
+            RequestBodyTemplate = source.RequestBodyTemplate,
+            ResponseAudioMode = source.ResponseAudioMode,
+            ResponseAudioJsonPath = source.ResponseAudioJsonPath,
+            ResponseStatusCodeJsonPath = source.ResponseStatusCodeJsonPath,
+            ResponseStatusMessageJsonPath = source.ResponseStatusMessageJsonPath,
+            SuccessStatusValue = source.SuccessStatusValue,
+            OutputContentType = source.OutputContentType
         };
     }
 }

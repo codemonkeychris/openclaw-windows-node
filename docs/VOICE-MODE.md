@@ -5,6 +5,7 @@ This document defines the voice subsystem for the Windows node only. It introduc
 ## Goals
 
 - Add a node-local voice mode with two activation modes: `wakeword` and `alwaysOn`
+- Utilise minimal touch points to the existing app to reduce the potential for screw-ups.
 - Use NanoWakeWord for wakeword detection on-device
 - Present the user-facing mode names as `Voice Wake` and `Talk Mode`
 - Keep STT/TTS provider selection configurable, with Windows implementations as the default built-ins
@@ -131,8 +132,9 @@ The built-in default for both is `windows`.
 Runtime behavior in the current phase:
 
 - `windows` is implemented for both STT and TTS
-- `minimax` TTS is implemented with `speech-2.8-turbo` and `English_MatureBoss`
-- `elevenlabs` TTS remains required next-phase work, not an optional future nice-to-have
+- built-in catalog entries exist for both `minimax` and `elevenlabs` TTS
+- `minimax` defaults to `speech-2.8-turbo` and `English_MatureBoss`
+- `elevenlabs` defaults to `eleven_multilingual_v2` and a user-supplied voice id
 - non-Windows providers can be selected and persisted now
 - unsupported providers fall back to Windows at runtime with a status warning
 
@@ -168,40 +170,74 @@ Example:
       "name": "MiniMax Speech 2.8 Turbo",
       "runtime": "cloud",
       "enabled": true,
-      "description": "speech-2.8-turbo using English_MatureBoss."
+      "description": "Cloud TTS using MiniMax HTTP text-to-speech.",
+      "settings": [
+        { "key": "apiKey", "label": "API key", "secret": true },
+        { "key": "model", "label": "Model", "defaultValue": "speech-2.8-turbo" },
+        { "key": "voiceId", "label": "Voice ID", "defaultValue": "English_MatureBoss" }
+      ],
+      "textToSpeechHttp": {
+        "endpointTemplate": "https://api.minimax.io/v1/t2a_v2",
+        "httpMethod": "POST",
+        "authenticationHeaderName": "Authorization",
+        "authenticationScheme": "Bearer",
+        "apiKeySettingKey": "apiKey",
+        "requestContentType": "application/json",
+        "requestBodyTemplate": "{ \"model\": {{model}}, \"text\": {{text}}, \"stream\": false, \"language_boost\": \"English\", \"output_format\": \"hex\", \"voice_setting\": { \"voice_id\": {{voiceId}}, \"speed\": 1, \"vol\": 1, \"pitch\": 0 }, \"audio_setting\": { \"sample_rate\": 32000, \"bitrate\": 128000, \"format\": \"mp3\", \"channel\": 1 } }",
+        "responseAudioMode": "hexJsonString",
+        "responseAudioJsonPath": "data.audio",
+        "responseStatusCodeJsonPath": "base_resp.status_code",
+        "responseStatusMessageJsonPath": "base_resp.status_msg",
+        "successStatusValue": "0",
+        "outputContentType": "audio/mpeg"
+      }
     },
     {
       "id": "elevenlabs",
       "name": "ElevenLabs",
-      "runtime": "gateway",
+      "runtime": "cloud",
       "enabled": true,
-      "description": "Required next-phase provider."
+      "description": "Cloud TTS using the ElevenLabs create speech API.",
+      "settings": [
+        { "key": "apiKey", "label": "API key", "secret": true },
+        { "key": "model", "label": "Model", "defaultValue": "eleven_multilingual_v2" },
+        { "key": "voiceId", "label": "Voice ID", "placeholder": "Enter an ElevenLabs voice ID" }
+      ],
+      "textToSpeechHttp": {
+        "endpointTemplate": "https://api.elevenlabs.io/v1/text-to-speech/{{voiceId}}?output_format=mp3_44100_128",
+        "httpMethod": "POST",
+        "authenticationHeaderName": "xi-api-key",
+        "apiKeySettingKey": "apiKey",
+        "requestContentType": "application/json",
+        "requestBodyTemplate": "{ \"text\": {{text}}, \"model_id\": {{model}} }",
+        "responseAudioMode": "binary",
+        "outputContentType": "audio/mpeg"
+      }
     }
   ]
 }
 ```
 
-This file only defines selectable providers. It does not carry API keys.
+For HTTP-backed TTS providers, the catalog carries the request/response contract. That allows a new provider to be added without recompilation, as long as it follows the same general HTTP template approach.
 
-### Local Credentials
+This file defines provider metadata and HTTP contracts. It does not carry API keys.
+
+### Local Provider Configuration
 
 That means the current design is:
 
 - local tray settings choose the preferred STT/TTS provider ids
-- provider API keys are stored in `%APPDATA%\\OpenClawTray\\settings.json` under `VoiceProviderCredentials`
+- provider API keys and editable values are stored in `%APPDATA%\\OpenClawTray\\settings.json` under `VoiceProviderConfiguration`
 - OpenClaw remains the conversation endpoint for `chat.send`
 - the local provider catalog remains metadata-only and must not contain secrets
 
 This is an intentional short-term design choice so the Windows tray app can use cloud TTS providers without inventing a second catalog file for secrets. It can be revisited later if provider ownership is split differently.
 
-Current credential fields:
+Current configuration values are keyed by provider id. The built-in providers use:
 
-- `VoiceProviderCredentials.MiniMaxApiKey`
-- `VoiceProviderCredentials.MiniMaxModel`
-- `VoiceProviderCredentials.MiniMaxVoiceId`
-- `VoiceProviderCredentials.ElevenLabsApiKey`
-- `VoiceProviderCredentials.ElevenLabsModel`
-- `VoiceProviderCredentials.ElevenLabsVoiceId`
+- `apiKey`
+- `model`
+- `voiceId`
 
 When the selected TTS provider in the Voice Mode window is not `windows`, the tray app shows provider-specific fields in the configuration form so the user can enter or edit:
 
@@ -242,7 +278,7 @@ These contracts are defined in [VoiceModeSchema.cs](../src/OpenClaw.Shared/Voice
 ## Settings Schema
 
 Voice settings are persisted as `SettingsData.Voice` in [SettingsData.cs](../src/OpenClaw.Shared/SettingsData.cs).
-Provider credentials are persisted as `SettingsData.VoiceProviderCredentials` in the same local settings file.
+Provider configuration is persisted as `SettingsData.VoiceProviderConfiguration` in the same local settings file.
 
 The editable voice configuration now lives in the main Settings window.
 The tray `Voice Mode` window is a read-only runtime status/detail surface with a shortcut back into Settings.
@@ -276,13 +312,25 @@ The tray `Voice Mode` window is a read-only runtime status/detail surface with a
       "ChatWindowSubmitMode": "AutoSend"
     }
   },
-  "VoiceProviderCredentials": {
-    "MiniMaxApiKey": "<local secret>",
-    "MiniMaxModel": "speech-2.8-turbo",
-    "MiniMaxVoiceId": "English_MatureBoss",
-    "ElevenLabsApiKey": null,
-    "ElevenLabsModel": null,
-    "ElevenLabsVoiceId": null
+  "VoiceProviderConfiguration": {
+    "Providers": [
+      {
+        "ProviderId": "minimax",
+        "Values": {
+          "apiKey": "<local secret>",
+          "model": "speech-2.8-turbo",
+          "voiceId": "English_MatureBoss"
+        }
+      },
+      {
+        "ProviderId": "elevenlabs",
+        "Values": {
+          "apiKey": "<local secret>",
+          "model": "eleven_multilingual_v2",
+          "voiceId": "voice-id"
+        }
+      }
+    ]
   }
 }
 ```
@@ -325,12 +373,10 @@ The tray `Voice Mode` window is a read-only runtime status/detail surface with a
 | `Voice.AlwaysOn.EndSilenceMs` | int | `900` | always-on | Silence timeout used to finalize an utterance |
 | `Voice.AlwaysOn.MaxUtteranceMs` | int | `15000` | always-on | Hard cap on utterance length before forced submission/finalization |
 | `Voice.AlwaysOn.ChatWindowSubmitMode` | enum | `AutoSend` | always-on | When the tray chat window is open, either auto-send the finalized utterance or leave it in the compose box for manual send |
-| `VoiceProviderCredentials.MiniMaxApiKey` | string? | `null` | minimax tts | API key used for MiniMax cloud TTS requests |
-| `VoiceProviderCredentials.MiniMaxModel` | string | `speech-2.8-turbo` | minimax tts | MiniMax TTS model identifier editable in the Voice Mode form |
-| `VoiceProviderCredentials.MiniMaxVoiceId` | string | `English_MatureBoss` | minimax tts | MiniMax TTS voice id editable in the Voice Mode form |
-| `VoiceProviderCredentials.ElevenLabsApiKey` | string? | `null` | elevenlabs tts | Reserved for the required ElevenLabs TTS implementation |
-| `VoiceProviderCredentials.ElevenLabsModel` | string? | `null` | elevenlabs tts | Reserved for future ElevenLabs model selection in the Voice Mode form |
-| `VoiceProviderCredentials.ElevenLabsVoiceId` | string? | `null` | elevenlabs tts | Reserved for future ElevenLabs voice selection in the Voice Mode form |
+| `VoiceProviderConfiguration.Providers[].ProviderId` | string | none | cloud providers | Provider id matching a `voice-providers.json` entry |
+| `VoiceProviderConfiguration.Providers[].Values["apiKey"]` | string? | `null` | cloud providers | API key sent using the provider contract's configured auth header |
+| `VoiceProviderConfiguration.Providers[].Values["model"]` | string? | provider default | cloud providers | Model identifier inserted into the configured request template |
+| `VoiceProviderConfiguration.Providers[].Values["voiceId"]` | string? | provider default | cloud providers | Voice id inserted into the configured request template or URL |
 
 At runtime today, those device ids are persisted and surfaced in the UI, but the v1 `AlwaysOn` path still uses the Windows system speech stack defaults for capture and playback.
 
@@ -460,14 +506,14 @@ sequenceDiagram
 
 Provider support is now part of the Windows voice subsystem roadmap, not a hypothetical extension:
 
-- `MiniMax` TTS is implemented first in the tray app
-- `ElevenLabs` TTS remains required follow-up work
+- `MiniMax` and `ElevenLabs` TTS are both expressed through built-in catalog contracts
+- additional HTTP TTS providers can be added through the local catalog without recompiling the tray app
 - Windows STT remains the active speech-recognition baseline until a non-Windows STT provider is deliberately added
 
 The Windows node still keeps provider choice bounded:
 
 - local tray settings choose the provider ids
-- local tray settings store the provider secrets for now
+- local tray settings store the provider secrets and editable values for now
 - OpenClaw still owns the conversation/session flow
 
 This keeps the provider surface narrow while still meeting the required MiniMax/ElevenLabs support direction.

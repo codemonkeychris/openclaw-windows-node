@@ -85,15 +85,32 @@ public class VoiceSchemaDefaultsTests
     }
 
     [Fact]
-    public void VoiceProviderCredentials_Defaults_ToEmptySecrets()
+    public void VoiceProviderConfigurationStore_Defaults_ToEmptyProviders()
     {
-        var credentials = new VoiceProviderCredentials();
+        var configuration = new VoiceProviderConfigurationStore();
 
-        Assert.Null(credentials.MiniMaxApiKey);
-        Assert.Equal("speech-2.8-turbo", credentials.MiniMaxModel);
-        Assert.Equal("English_MatureBoss", credentials.MiniMaxVoiceId);
-        Assert.Null(credentials.ElevenLabsApiKey);
-        Assert.Null(credentials.ElevenLabsModel);
-        Assert.Null(credentials.ElevenLabsVoiceId);
+        Assert.Empty(configuration.Providers);
+    }
+
+    [Fact]
+    public void VoiceProviderConfigurationStore_MigratesLegacyProviderCredentials()
+    {
+        var configuration = new VoiceProviderConfigurationStore();
+        configuration.MigrateLegacyCredentials(new VoiceProviderCredentials
+        {
+            MiniMaxApiKey = "minimax-key",
+            MiniMaxModel = "speech-2.8-turbo",
+            MiniMaxVoiceId = "English_MatureBoss",
+            ElevenLabsApiKey = "eleven-key",
+            ElevenLabsModel = "eleven_multilingual_v2",
+            ElevenLabsVoiceId = "voice-42"
+        });
+
+        Assert.Equal("minimax-key", configuration.GetValue(VoiceProviderIds.MiniMax, VoiceProviderSettingKeys.ApiKey));
+        Assert.Equal("speech-2.8-turbo", configuration.GetValue(VoiceProviderIds.MiniMax, VoiceProviderSettingKeys.Model));
+        Assert.Equal("English_MatureBoss", configuration.GetValue(VoiceProviderIds.MiniMax, VoiceProviderSettingKeys.VoiceId));
+        Assert.Equal("eleven-key", configuration.GetValue(VoiceProviderIds.ElevenLabs, VoiceProviderSettingKeys.ApiKey));
+        Assert.Equal("eleven_multilingual_v2", configuration.GetValue(VoiceProviderIds.ElevenLabs, VoiceProviderSettingKeys.Model));
+        Assert.Equal("voice-42", configuration.GetValue(VoiceProviderIds.ElevenLabs, VoiceProviderSettingKeys.VoiceId));
     }
 }

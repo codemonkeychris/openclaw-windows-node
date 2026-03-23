@@ -43,7 +43,7 @@ public class SettingsManager
     public bool PreferStructuredCategories { get; set; } = true;
     public List<OpenClaw.Shared.UserNotificationRule> UserRules { get; set; } = new();
     public VoiceSettings Voice { get; set; } = new();
-    public VoiceProviderCredentials VoiceProviderCredentials { get; set; } = new();
+    public VoiceProviderConfigurationStore VoiceProviderConfiguration { get; set; } = new();
     
     // Node mode (enables Windows as a node, not just operator)
     public bool EnableNodeMode { get; set; } = false;
@@ -85,7 +85,8 @@ public class SettingsManager
                     if (loaded.UserRules != null)
                         UserRules = loaded.UserRules;
                     Voice = loaded.Voice ?? new VoiceSettings();
-                    VoiceProviderCredentials = loaded.VoiceProviderCredentials ?? new VoiceProviderCredentials();
+                    VoiceProviderConfiguration = loaded.VoiceProviderConfiguration?.Clone() ?? new VoiceProviderConfigurationStore();
+                    VoiceProviderConfiguration.MigrateLegacyCredentials(loaded.VoiceProviderCredentials);
                 }
             }
         }
@@ -123,7 +124,7 @@ public class SettingsManager
                 PreferStructuredCategories = PreferStructuredCategories,
                 UserRules = UserRules,
                 Voice = Voice,
-                VoiceProviderCredentials = VoiceProviderCredentials
+                VoiceProviderConfiguration = VoiceProviderConfiguration.Clone()
             };
 
             var json = data.ToJson();

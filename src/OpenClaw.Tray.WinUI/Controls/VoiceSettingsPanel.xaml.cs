@@ -14,11 +14,11 @@ public sealed partial class VoiceSettingsPanel : UserControl
 {
     private SettingsManager? _settings;
     private VoiceService? _voiceService;
-    private VoiceProviderCredentials _voiceProviderCredentialsDraft = new();
+    private VoiceProviderConfigurationStore _voiceProviderConfigurationDraft = new();
     private string _activeTtsProviderId = VoiceProviderIds.Windows;
     private bool _updatingVoiceProviderFields;
-    private List<ProviderOption> _speechToTextOptions = new();
-    private List<ProviderOption> _textToSpeechOptions = new();
+    private List<VoiceProviderOption> _speechToTextOptions = new();
+    private List<VoiceProviderOption> _textToSpeechOptions = new();
     private List<DeviceOption> _inputOptions = new();
     private List<DeviceOption> _outputOptions = new();
 
@@ -45,8 +45,8 @@ public sealed partial class VoiceSettingsPanel : UserControl
             Mode = GetSelectedVoiceMode(),
             Enabled = GetSelectedVoiceMode() != VoiceActivationMode.Off,
             ShowConversationToasts = VoiceConversationToastsCheckBox.IsChecked ?? false,
-            SpeechToTextProviderId = (VoiceSpeechToTextProviderComboBox.SelectedItem as ProviderOption)?.Id ?? VoiceProviderIds.Windows,
-            TextToSpeechProviderId = (VoiceTextToSpeechProviderComboBox.SelectedItem as ProviderOption)?.Id ?? VoiceProviderIds.Windows,
+            SpeechToTextProviderId = (VoiceSpeechToTextProviderComboBox.SelectedItem as VoiceProviderOption)?.Id ?? VoiceProviderIds.Windows,
+            TextToSpeechProviderId = (VoiceTextToSpeechProviderComboBox.SelectedItem as VoiceProviderOption)?.Id ?? VoiceProviderIds.Windows,
             InputDeviceId = (VoiceInputDeviceComboBox.SelectedItem as DeviceOption)?.DeviceId,
             OutputDeviceId = (VoiceOutputDeviceComboBox.SelectedItem as DeviceOption)?.DeviceId,
             SampleRateHz = settings.Voice.SampleRateHz,
@@ -69,7 +69,7 @@ public sealed partial class VoiceSettingsPanel : UserControl
                 ChatWindowSubmitMode = GetSelectedChatWindowSubmitMode()
             }
         };
-        settings.VoiceProviderCredentials = Clone(_voiceProviderCredentialsDraft);
+        settings.VoiceProviderConfiguration = _voiceProviderConfigurationDraft.Clone();
     }
 
     private void LoadVoiceSettings()
@@ -79,7 +79,7 @@ public sealed partial class VoiceSettingsPanel : UserControl
             return;
         }
 
-        _voiceProviderCredentialsDraft = Clone(_settings.VoiceProviderCredentials);
+        _voiceProviderConfigurationDraft = _settings.VoiceProviderConfiguration.Clone();
         LoadVoiceProviders();
         SelectVoiceMode(_settings.Voice.Mode);
         SelectChatWindowSubmitMode(_settings.Voice.AlwaysOn.ChatWindowSubmitMode);
@@ -93,10 +93,10 @@ public sealed partial class VoiceSettingsPanel : UserControl
         var catalog = _voiceService!.GetProviderCatalog();
 
         _speechToTextOptions = catalog.SpeechToTextProviders
-            .Select(p => new ProviderOption(p.Id, p.Name, p.Runtime, p.Description))
+            .Select(Clone)
             .ToList();
         _textToSpeechOptions = catalog.TextToSpeechProviders
-            .Select(p => new ProviderOption(p.Id, p.Name, p.Runtime, p.Description))
+            .Select(Clone)
             .ToList();
 
         VoiceSpeechToTextProviderComboBox.ItemsSource = _speechToTextOptions;
@@ -210,13 +210,13 @@ public sealed partial class VoiceSettingsPanel : UserControl
 
     private void UpdateVoiceSettingsInfo()
     {
-        var stt = (VoiceSpeechToTextProviderComboBox.SelectedItem as ProviderOption)?.Name ?? "Windows Speech Recognition";
-        var tts = (VoiceTextToSpeechProviderComboBox.SelectedItem as ProviderOption)?.Name ?? "Windows Speech Synthesis";
+        var stt = (VoiceSpeechToTextProviderComboBox.SelectedItem as VoiceProviderOption)?.Name ?? "Windows Speech Recognition";
+        var tts = (VoiceTextToSpeechProviderComboBox.SelectedItem as VoiceProviderOption)?.Name ?? "Windows Speech Synthesis";
         var input = (VoiceInputDeviceComboBox.SelectedItem as DeviceOption)?.Name ?? "System default microphone";
         var output = (VoiceOutputDeviceComboBox.SelectedItem as DeviceOption)?.Name ?? "System default speaker";
         var fallbackNotice = string.Empty;
 
-        if (VoiceTextToSpeechProviderComboBox.SelectedItem is ProviderOption ttsOption &&
+        if (VoiceTextToSpeechProviderComboBox.SelectedItem is VoiceProviderOption ttsOption &&
             !VoiceProviderCatalogService.SupportsTextToSpeechRuntime(ttsOption.Id))
         {
             fallbackNotice = " Unsupported TTS providers will fall back to Windows until their runtime adapters are added.";
@@ -238,13 +238,28 @@ public sealed partial class VoiceSettingsPanel : UserControl
             return;
         }
 
+        var provider = GetSelectedTextToSpeechProvider();
+        var apiKeySetting = FindSetting(provider, VoiceProviderSettingKeys.ApiKey);
+        var modelSetting = FindSetting(provider, VoiceProviderSettingKeys.Model);
+        var voiceIdSetting = FindSetting(provider, VoiceProviderSettingKeys.VoiceId);
+
         _updatingVoiceProviderFields = true;
         try
         {
             VoiceTtsProviderSettingsTitleTextBlock.Text = $"{GetSelectedTextToSpeechProviderName().ToUpperInvariant()} SETTINGS";
-            VoiceTtsApiKeyPasswordBox.Password = GetProviderApiKey(providerId) ?? string.Empty;
-            VoiceTtsModelTextBox.Text = GetProviderModel(providerId);
-            VoiceTtsVoiceIdTextBox.Text = GetProviderVoiceId(providerId);
+            VoiceTtsApiKeyPasswordBox.Header = apiKeySetting?.Label ?? "API key";
+            VoiceTtsApiKeyPasswordBox.Visibility = apiKeySetting != null ? Visibility.Visible : Visibility.Collapsed;
+            VoiceTtsApiKeyPasswordBox.Password = GetProviderValue(providerId, apiKeySetting) ?? string.Empty;
+
+            VoiceTtsModelTextBox.Header = modelSetting?.Label ?? "Model";
+            VoiceTtsModelTextBox.PlaceholderText = modelSetting?.Placeholder ?? string.Empty;
+            VoiceTtsModelTextBox.Visibility = modelSetting != null ? Visibility.Visible : Visibility.Collapsed;
+            VoiceTtsModelTextBox.Text = GetProviderValue(providerId, modelSetting) ?? string.Empty;
+
+            VoiceTtsVoiceIdTextBox.Header = voiceIdSetting?.Label ?? "Voice ID";
+            VoiceTtsVoiceIdTextBox.PlaceholderText = voiceIdSetting?.Placeholder ?? string.Empty;
+            VoiceTtsVoiceIdTextBox.Visibility = voiceIdSetting != null ? Visibility.Visible : Visibility.Collapsed;
+            VoiceTtsVoiceIdTextBox.Text = GetProviderValue(providerId, voiceIdSetting) ?? string.Empty;
             _activeTtsProviderId = providerId;
         }
         finally
@@ -255,12 +270,17 @@ public sealed partial class VoiceSettingsPanel : UserControl
 
     private string GetSelectedTextToSpeechProviderId()
     {
-        return (VoiceTextToSpeechProviderComboBox.SelectedItem as ProviderOption)?.Id ?? VoiceProviderIds.Windows;
+        return (VoiceTextToSpeechProviderComboBox.SelectedItem as VoiceProviderOption)?.Id ?? VoiceProviderIds.Windows;
     }
 
     private string GetSelectedTextToSpeechProviderName()
     {
-        return (VoiceTextToSpeechProviderComboBox.SelectedItem as ProviderOption)?.Name ?? "Provider";
+        return (VoiceTextToSpeechProviderComboBox.SelectedItem as VoiceProviderOption)?.Name ?? "Provider";
+    }
+
+    private VoiceProviderOption? GetSelectedTextToSpeechProvider()
+    {
+        return VoiceTextToSpeechProviderComboBox.SelectedItem as VoiceProviderOption;
     }
 
     private void CaptureSelectedVoiceProviderSettings()
@@ -276,102 +296,11 @@ public sealed partial class VoiceSettingsPanel : UserControl
             return;
         }
 
-        SetProviderApiKey(providerId, VoiceTtsApiKeyPasswordBox.Password);
-        SetProviderModel(providerId, VoiceTtsModelTextBox.Text);
-        SetProviderVoiceId(providerId, VoiceTtsVoiceIdTextBox.Text);
-    }
-
-    private string? GetProviderApiKey(string providerId)
-    {
-        return providerId switch
-        {
-            VoiceProviderIds.MiniMax => _voiceProviderCredentialsDraft.MiniMaxApiKey,
-            VoiceProviderIds.ElevenLabs => _voiceProviderCredentialsDraft.ElevenLabsApiKey,
-            _ => null
-        };
-    }
-
-    private string GetProviderModel(string providerId)
-    {
-        return providerId switch
-        {
-            VoiceProviderIds.MiniMax => _voiceProviderCredentialsDraft.MiniMaxModel,
-            VoiceProviderIds.ElevenLabs => _voiceProviderCredentialsDraft.ElevenLabsModel ?? string.Empty,
-            _ => string.Empty
-        };
-    }
-
-    private string GetProviderVoiceId(string providerId)
-    {
-        return providerId switch
-        {
-            VoiceProviderIds.MiniMax => _voiceProviderCredentialsDraft.MiniMaxVoiceId,
-            VoiceProviderIds.ElevenLabs => _voiceProviderCredentialsDraft.ElevenLabsVoiceId ?? string.Empty,
-            _ => string.Empty
-        };
-    }
-
-    private void SetProviderApiKey(string providerId, string? value)
-    {
-        var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-        switch (providerId)
-        {
-            case VoiceProviderIds.MiniMax:
-                _voiceProviderCredentialsDraft.MiniMaxApiKey = normalized;
-                break;
-            case VoiceProviderIds.ElevenLabs:
-                _voiceProviderCredentialsDraft.ElevenLabsApiKey = normalized;
-                break;
-        }
-    }
-
-    private void SetProviderModel(string providerId, string? value)
-    {
-        var normalized = string.IsNullOrWhiteSpace(value) ? GetDefaultModel(providerId) : value.Trim();
-
-        switch (providerId)
-        {
-            case VoiceProviderIds.MiniMax:
-                _voiceProviderCredentialsDraft.MiniMaxModel = normalized;
-                break;
-            case VoiceProviderIds.ElevenLabs:
-                _voiceProviderCredentialsDraft.ElevenLabsModel = normalized;
-                break;
-        }
-    }
-
-    private void SetProviderVoiceId(string providerId, string? value)
-    {
-        var normalized = string.IsNullOrWhiteSpace(value) ? GetDefaultVoiceId(providerId) : value.Trim();
-
-        switch (providerId)
-        {
-            case VoiceProviderIds.MiniMax:
-                _voiceProviderCredentialsDraft.MiniMaxVoiceId = normalized;
-                break;
-            case VoiceProviderIds.ElevenLabs:
-                _voiceProviderCredentialsDraft.ElevenLabsVoiceId = normalized;
-                break;
-        }
-    }
-
-    private static string GetDefaultModel(string providerId)
-    {
-        return providerId switch
-        {
-            VoiceProviderIds.MiniMax => "speech-2.8-turbo",
-            _ => string.Empty
-        };
-    }
-
-    private static string GetDefaultVoiceId(string providerId)
-    {
-        return providerId switch
-        {
-            VoiceProviderIds.MiniMax => "English_MatureBoss",
-            _ => string.Empty
-        };
+        var provider = _textToSpeechOptions.FirstOrDefault(option =>
+            string.Equals(option.Id, providerId, StringComparison.OrdinalIgnoreCase));
+        SetProviderValue(providerId, FindSetting(provider, VoiceProviderSettingKeys.ApiKey), VoiceTtsApiKeyPasswordBox.Password);
+        SetProviderValue(providerId, FindSetting(provider, VoiceProviderSettingKeys.Model), VoiceTtsModelTextBox.Text);
+        SetProviderValue(providerId, FindSetting(provider, VoiceProviderSettingKeys.VoiceId), VoiceTtsVoiceIdTextBox.Text);
     }
 
     private async void OnRefreshVoiceDevices(object sender, RoutedEventArgs e)
@@ -396,19 +325,78 @@ public sealed partial class VoiceSettingsPanel : UserControl
         CaptureSelectedVoiceProviderSettings();
     }
 
-    private static VoiceProviderCredentials Clone(VoiceProviderCredentials source)
+    private string? GetProviderValue(string providerId, VoiceProviderSettingDefinition? setting)
     {
-        return new VoiceProviderCredentials
+        if (setting == null)
         {
-            MiniMaxApiKey = source.MiniMaxApiKey,
-            MiniMaxModel = source.MiniMaxModel,
-            MiniMaxVoiceId = source.MiniMaxVoiceId,
-            ElevenLabsApiKey = source.ElevenLabsApiKey,
-            ElevenLabsModel = source.ElevenLabsModel,
-            ElevenLabsVoiceId = source.ElevenLabsVoiceId
-        };
+            return null;
+        }
+
+        return _voiceProviderConfigurationDraft.GetValue(providerId, setting.Key) ?? setting.DefaultValue;
     }
 
     private sealed record DeviceOption(string? DeviceId, string Name);
-    private sealed record ProviderOption(string Id, string Name, string Runtime, string? Description);
+
+    private void SetProviderValue(
+        string providerId,
+        VoiceProviderSettingDefinition? setting,
+        string? value)
+    {
+        if (setting == null)
+        {
+            return;
+        }
+
+        var normalized = string.IsNullOrWhiteSpace(value)
+            ? setting.DefaultValue
+            : value.Trim();
+        _voiceProviderConfigurationDraft.SetValue(providerId, setting.Key, normalized);
+    }
+
+    private static VoiceProviderSettingDefinition? FindSetting(VoiceProviderOption? provider, string settingKey)
+    {
+        return provider?.Settings.FirstOrDefault(setting =>
+            string.Equals(setting.Key, settingKey, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static VoiceProviderOption Clone(VoiceProviderOption source)
+    {
+        return new VoiceProviderOption
+        {
+            Id = source.Id,
+            Name = source.Name,
+            Runtime = source.Runtime,
+            Enabled = source.Enabled,
+            Description = source.Description,
+            Settings = source.Settings
+                .Select(setting => new VoiceProviderSettingDefinition
+                {
+                    Key = setting.Key,
+                    Label = setting.Label,
+                    Secret = setting.Secret,
+                    DefaultValue = setting.DefaultValue,
+                    Placeholder = setting.Placeholder,
+                    Description = setting.Description
+                })
+                .ToList(),
+            TextToSpeechHttp = source.TextToSpeechHttp == null
+                ? null
+                : new VoiceTextToSpeechHttpContract
+                {
+                    EndpointTemplate = source.TextToSpeechHttp.EndpointTemplate,
+                    HttpMethod = source.TextToSpeechHttp.HttpMethod,
+                    AuthenticationHeaderName = source.TextToSpeechHttp.AuthenticationHeaderName,
+                    AuthenticationScheme = source.TextToSpeechHttp.AuthenticationScheme,
+                    ApiKeySettingKey = source.TextToSpeechHttp.ApiKeySettingKey,
+                    RequestContentType = source.TextToSpeechHttp.RequestContentType,
+                    RequestBodyTemplate = source.TextToSpeechHttp.RequestBodyTemplate,
+                    ResponseAudioMode = source.TextToSpeechHttp.ResponseAudioMode,
+                    ResponseAudioJsonPath = source.TextToSpeechHttp.ResponseAudioJsonPath,
+                    ResponseStatusCodeJsonPath = source.TextToSpeechHttp.ResponseStatusCodeJsonPath,
+                    ResponseStatusMessageJsonPath = source.TextToSpeechHttp.ResponseStatusMessageJsonPath,
+                    SuccessStatusValue = source.TextToSpeechHttp.SuccessStatusValue,
+                    OutputContentType = source.TextToSpeechHttp.OutputContentType
+                }
+        };
+    }
 }

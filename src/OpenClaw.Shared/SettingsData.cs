@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using System.Text.Json;
 
 namespace OpenClaw.Shared;
@@ -27,7 +28,9 @@ public class SettingsData
     public bool PreferStructuredCategories { get; set; } = true;
     public List<UserNotificationRule>? UserRules { get; set; }
     public VoiceSettings Voice { get; set; } = new();
-    public VoiceProviderCredentials VoiceProviderCredentials { get; set; } = new();
+    public VoiceProviderConfigurationStore VoiceProviderConfiguration { get; set; } = new();
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public VoiceProviderCredentials? VoiceProviderCredentials { get; set; }
 
     private static readonly JsonSerializerOptions s_options = new() { WriteIndented = true };
 

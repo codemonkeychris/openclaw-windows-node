@@ -746,22 +746,7 @@ public partial class App : Application
             return "Off";
         }
 
-        if (status.State == VoiceRuntimeState.Paused)
-        {
-            return $"{status.Mode} (Paused)";
-        }
-
-        if (status.Running)
-        {
-            return status.Mode switch
-            {
-                VoiceActivationMode.WakeWord => "WakeWord",
-                VoiceActivationMode.AlwaysOn => "AlwaysOn",
-                _ => "Off"
-            };
-        }
-
-        return "Off";
+        return VoiceDisplayHelper.GetRuntimeLabel(status);
     }
 
     private bool CanQuickToggleVoiceMode()
@@ -1670,9 +1655,12 @@ public partial class App : Application
 
     private void ShowSettings()
     {
+        if (_settings == null || _voiceService == null)
+            return;
+
         if (_settingsWindow == null || _settingsWindow.IsClosed)
         {
-            _settingsWindow = new SettingsWindow(_settings!);
+            _settingsWindow = new SettingsWindow(_settings, _voiceService);
             _settingsWindow.Closed += (s, e) => 
             {
                 _settingsWindow.SettingsSaved -= OnSettingsSaved;
@@ -1691,9 +1679,11 @@ public partial class App : Application
         if (_voiceModeWindow == null || _voiceModeWindow.IsClosed)
         {
             _voiceModeWindow = new VoiceModeWindow(_settings, _voiceService);
+            _voiceModeWindow.OpenSettingsRequested += (s, e) => ShowSettings();
             _voiceModeWindow.Closed += (s, e) => _voiceModeWindow = null;
         }
 
+        _voiceModeWindow.RefreshStatus();
         _voiceModeWindow.Activate();
     }
 

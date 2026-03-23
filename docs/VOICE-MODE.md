@@ -6,9 +6,7 @@ This document defines the voice subsystem for the Windows node only. It introduc
 
 - Add a node-local voice mode with two activation modes: `wakeword` and `alwaysOn`
 - Use NanoWakeWord for wakeword detection on-device
-- Provide parity targets with the macOS app:
-  - `WakeWord` maps to Voice Wake
-  - `AlwaysOn` maps to Talk Mode
+- Present the user-facing mode names as `Voice Wake` and `Talk Mode`
 - Keep STT/TTS provider selection configurable, with Windows implementations as the default built-ins
 - Implement `MiniMax` TTS and `ElevenLabs` TTS as required non-Windows providers after the Windows baseline
 - Reuse the existing node capability pattern instead of introducing a parallel control path
@@ -33,21 +31,21 @@ OpenClaw remains responsible for conversation/session routing and upstream voice
 
 This keeps the Windows node lean for the first implementation and avoids introducing provider-routing settings before they are needed.
 
-## macOS Parity Mapping
+## Visible Mode Names
 
-Windows voice mode aims for functional parity with the existing macOS voice surfaces:
+The tray app now uses user-facing names rather than exposing the internal enum names directly:
 
-| Windows Mode | macOS Equivalent | Behavior |
+| Internal Mode | Visible Name | Availability |
 |---|---|---|
-| `WakeWord` | Voice Wake | passively listen for a trigger phrase, capture one utterance, then submit after end silence |
-| `AlwaysOn` | Talk Mode | continuous listen -> think -> speak loop with barge-in support, while still remaining turn-based rather than true simultaneous duplex audio |
+| `Off` | Off | available |
+| `WakeWord` | Voice Wake | visible but disabled for now |
+| `AlwaysOn` | Talk Mode | available |
 
-For v1 on Windows, `AlwaysOn` is Talk Mode parity, not a new full-duplex transport.
-The current implementation is still turn-based: listen, send transcript, wait, speak, resume listening.
+Internally the contracts and persisted settings still use `WakeWord` and `AlwaysOn`.
 
 ## Transport Boundary
 
-For macOS parity, `AlwaysOn` should follow Talk Mode's documented control flow:
+`AlwaysOn` follows a talk-mode style control flow:
 
 - the node captures audio locally
 - local speech recognition turns that audio into transcript text
@@ -56,7 +54,7 @@ For macOS parity, `AlwaysOn` should follow Talk Mode's documented control flow:
 - OpenClaw returns the assistant reply as normal chat output
 - the node performs local TTS playback of that reply
 
-That means the first Windows parity target is transcript transport, not raw audio upload. Streaming audio frames in or out of OpenClaw remains a future protocol extension, not part of this design.
+That means the first Windows target is transcript transport, not raw audio upload. Streaming audio frames in or out of OpenClaw remains a future protocol extension, not part of this design.
 
 The current Windows implementation uses a voice-local operator connection inside the tray app while node mode is active. That sidecar connection exists to carry assistant chat events for `AlwaysOn`, and to provide a fallback direct `chat.send` path when the tray chat window is not open.
 
@@ -245,6 +243,9 @@ These contracts are defined in [VoiceModeSchema.cs](../src/OpenClaw.Shared/Voice
 
 Voice settings are persisted as `SettingsData.Voice` in [SettingsData.cs](../src/OpenClaw.Shared/SettingsData.cs).
 Provider credentials are persisted as `SettingsData.VoiceProviderCredentials` in the same local settings file.
+
+The editable voice configuration now lives in the main Settings window.
+The tray `Voice Mode` window is a read-only runtime status/detail surface with a shortcut back into Settings.
 
 ### Effective Schema
 
@@ -445,7 +446,7 @@ sequenceDiagram
 - `WindowsNodeClient` remains the gateway/node transport
 - existing node capability registration remains the integration pattern
 - current request/response transport remains the v1 control plane
-- `AlwaysOn` parity should reuse existing `chat.send` message flow instead of inventing an audio-upload protocol
+- `AlwaysOn` should reuse existing `chat.send` message flow instead of inventing an audio-upload protocol
 
 ### New Components Expected Later
 

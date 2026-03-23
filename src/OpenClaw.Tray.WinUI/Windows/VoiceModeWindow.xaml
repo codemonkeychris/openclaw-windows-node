@@ -22,79 +22,69 @@
             <StackPanel Spacing="24" MaxWidth="500">
                 <StackPanel Spacing="8">
                     <TextBlock Text="VOICE MODE" Style="{StaticResource CaptionTextBlockStyle}" Foreground="#E74C3C" FontWeight="Bold"/>
-                    <TextBlock Text="Windows voice mode targets macOS parity: Always On maps to Talk Mode, and WakeWord maps to Voice Wake." TextWrapping="Wrap"/>
-                </StackPanel>
-
-                <StackPanel Spacing="8">
-                    <ComboBox x:Name="ModeComboBox" Header="Mode" SelectionChanged="OnModeChanged">
-                        <ComboBoxItem Content="Off" Tag="Off"/>
-                        <ComboBoxItem Content="WakeWord" Tag="WakeWord"/>
-                        <ComboBoxItem Content="AlwaysOn" Tag="AlwaysOn"/>
-                    </ComboBox>
-
-                    <InfoBar x:Name="ModeInfoBar" IsOpen="True" Severity="Informational" IsClosable="False"
-                             Title="Implementation status"
-                             Message="AlwaysOn is the current runtime target. WakeWord settings can be configured now, and NanoWakeWord activation will follow in a later step."/>
-                </StackPanel>
-
-                <StackPanel Spacing="8">
-                    <TextBlock Text="PROVIDERS" Style="{StaticResource CaptionTextBlockStyle}" Foreground="#E74C3C" FontWeight="Bold"/>
-                    <ComboBox x:Name="SpeechToTextProviderComboBox" Header="Speech to text provider" DisplayMemberPath="Name" SelectionChanged="OnProviderChanged"/>
-                    <ComboBox x:Name="TextToSpeechProviderComboBox" Header="Text to speech provider" DisplayMemberPath="Name" SelectionChanged="OnProviderChanged"/>
-                    <StackPanel x:Name="TtsProviderSettingsPanel" Spacing="8" Visibility="Collapsed">
-                        <TextBlock x:Name="TtsProviderSettingsTitleTextBlock"
-                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                   Foreground="#E74C3C"
-                                   FontWeight="Bold"/>
-                        <PasswordBox x:Name="TtsApiKeyPasswordBox"
-                                     Header="API key"
-                                     PasswordChanged="OnProviderSettingsChanged"/>
-                        <TextBox x:Name="TtsModelTextBox"
-                                 Header="Model"
-                                 TextChanged="OnProviderSettingsChanged"/>
-                        <TextBox x:Name="TtsVoiceIdTextBox"
-                                 Header="Voice ID"
-                                 TextChanged="OnProviderSettingsChanged"/>
-                        <TextBlock Text="These values are stored in your local tray settings file and are not read from the provider catalog."
-                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   TextWrapping="Wrap"/>
-                    </StackPanel>
-                    <TextBlock x:Name="ProviderInfoTextBlock"
-                               Style="{StaticResource CaptionTextBlockStyle}"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    <TextBlock Text="Current voice runtime status and configuration summary."
                                TextWrapping="Wrap"/>
                 </StackPanel>
 
                 <StackPanel Spacing="8">
-                    <TextBlock Text="DEVICES" Style="{StaticResource CaptionTextBlockStyle}" Foreground="#E74C3C" FontWeight="Bold"/>
-                    <ComboBox x:Name="InputDeviceComboBox" Header="Listen device (microphone)" DisplayMemberPath="Name"/>
-                    <ComboBox x:Name="OutputDeviceComboBox" Header="Talk device (speaker)" DisplayMemberPath="Name"/>
-                    <Button Content="Refresh devices" HorizontalAlignment="Left" Click="OnRefreshDevices"/>
+                    <TextBlock Text="STATUS" Style="{StaticResource CaptionTextBlockStyle}" Foreground="#E74C3C" FontWeight="Bold"/>
+                    <ItemsControl x:Name="StatusItemsControl">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Padding="8" Margin="0,2" CornerRadius="4"
+                                      Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Label}" Grid.Column="0"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <TextBlock Text="{Binding Value}" Grid.Column="1" TextWrapping="Wrap"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
 
                 <StackPanel Spacing="8">
-                    <TextBlock Text="NOTIFICATIONS" Style="{StaticResource CaptionTextBlockStyle}" Foreground="#E74C3C" FontWeight="Bold"/>
-                    <CheckBox x:Name="VoiceConversationToastsCheckBox"
-                              Content="Show voice transcripts and replies as toasts"/>
+                    <TextBlock Text="CONFIGURATION" Style="{StaticResource CaptionTextBlockStyle}" Foreground="#E74C3C" FontWeight="Bold"/>
+                    <ItemsControl x:Name="ConfigurationItemsControl">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Padding="8" Margin="0,2" CornerRadius="4"
+                                      Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Label}" Grid.Column="0"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <TextBlock Text="{Binding Value}" Grid.Column="1" TextWrapping="Wrap"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
 
                 <StackPanel Spacing="8">
-                    <TextBlock Text="CHAT WINDOW" Style="{StaticResource CaptionTextBlockStyle}" Foreground="#E74C3C" FontWeight="Bold"/>
-                    <ComboBox x:Name="ChatWindowSubmitModeComboBox" Header="When the tray chat window is open">
-                        <ComboBoxItem Content="Send automatically" Tag="AutoSend"/>
-                        <ComboBoxItem Content="Fill message box and wait for me to send" Tag="WaitForUser"/>
-                    </ComboBox>
-                    <TextBlock Text="This setting only applies while the tray chat window is open. In windowless voice mode, utterances are always sent automatically."
-                               Style="{StaticResource CaptionTextBlockStyle}"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                               TextWrapping="Wrap"/>
+                    <TextBlock Text="RECENT" Style="{StaticResource CaptionTextBlockStyle}" Foreground="#E74C3C" FontWeight="Bold"/>
+                    <ItemsControl x:Name="RecentItemsControl">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Padding="8" Margin="0,2" CornerRadius="4"
+                                      Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Label}" Grid.Column="0"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <TextBlock Text="{Binding Value}" Grid.Column="1" TextWrapping="Wrap"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
-
-                <TextBlock x:Name="StatusTextBlock"
-                           Style="{StaticResource CaptionTextBlockStyle}"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                           TextWrapping="Wrap"/>
 
                 <StackPanel x:Name="TroubleshootingPanel" Spacing="8" Visibility="Collapsed">
                     <TextBlock x:Name="TroubleshootingTextBlock"
@@ -121,8 +111,9 @@
                 BorderThickness="0,1,0,0"
                 Padding="24,16">
             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                <Button Content="Cancel" Click="OnCancel" Width="80"/>
-                <Button Content="Save" Click="OnSave" Width="80" Style="{ThemeResource AccentButtonStyle}"/>
+                <Button Content="Refresh" Click="OnRefresh" Width="90"/>
+                <Button Content="Settings" Click="OnOpenSettings" Width="90"/>
+                <Button Content="Close" Click="OnClose" Width="90" Style="{ThemeResource AccentButtonStyle}"/>
             </StackPanel>
         </Border>
     </Grid>

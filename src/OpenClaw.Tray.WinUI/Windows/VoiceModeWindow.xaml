@@ -54,6 +54,24 @@
                     <Button Content="Refresh devices" HorizontalAlignment="Left" Click="OnRefreshDevices"/>
                 </StackPanel>
 
+                <StackPanel Spacing="8">
+                    <TextBlock Text="NOTIFICATIONS" Style="{StaticResource CaptionTextBlockStyle}" Foreground="#E74C3C" FontWeight="Bold"/>
+                    <CheckBox x:Name="VoiceConversationToastsCheckBox"
+                              Content="Show voice transcripts and replies as toasts"/>
+                </StackPanel>
+
+                <StackPanel Spacing="8">
+                    <TextBlock Text="CHAT WINDOW" Style="{StaticResource CaptionTextBlockStyle}" Foreground="#E74C3C" FontWeight="Bold"/>
+                    <ComboBox x:Name="ChatWindowSubmitModeComboBox" Header="When the tray chat window is open">
+                        <ComboBoxItem Content="Send automatically" Tag="AutoSend"/>
+                        <ComboBoxItem Content="Fill message box and wait for me to send" Tag="WaitForUser"/>
+                    </ComboBox>
+                    <TextBlock Text="This setting only applies while the tray chat window is open. In windowless voice mode, utterances are always sent automatically."
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+
                 <TextBlock x:Name="StatusTextBlock"
                            Style="{StaticResource CaptionTextBlockStyle}"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"

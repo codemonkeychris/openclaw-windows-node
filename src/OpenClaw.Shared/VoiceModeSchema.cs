@@ -37,21 +37,31 @@ public enum VoiceActivationMode
 public enum VoiceRuntimeState
 {
     Stopped,
+    Paused,
     Idle,
     Arming,
     ListeningForWakeWord,
     ListeningContinuously,
     RecordingUtterance,
     SubmittingAudio,
+    PendingManualSend,
     AwaitingResponse,
     PlayingResponse,
     Error
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<VoiceChatWindowSubmitMode>))]
+public enum VoiceChatWindowSubmitMode
+{
+    AutoSend,
+    WaitForUser
 }
 
 public sealed class VoiceSettings
 {
     public VoiceActivationMode Mode { get; set; } = VoiceActivationMode.Off;
     public bool Enabled { get; set; }
+    public bool ShowConversationToasts { get; set; }
     public string SpeechToTextProviderId { get; set; } = VoiceProviderIds.Windows;
     public string TextToSpeechProviderId { get; set; } = VoiceProviderIds.Windows;
     public string? InputDeviceId { get; set; }
@@ -79,6 +89,7 @@ public sealed class VoiceAlwaysOnSettings
     public int EndSilenceMs { get; set; } = 900;
     public int MaxUtteranceMs { get; set; } = 15000;
     public bool AutoSubmit { get; set; } = true;
+    public VoiceChatWindowSubmitMode ChatWindowSubmitMode { get; set; } = VoiceChatWindowSubmitMode.AutoSend;
 }
 
 public sealed class VoiceAudioDeviceInfo

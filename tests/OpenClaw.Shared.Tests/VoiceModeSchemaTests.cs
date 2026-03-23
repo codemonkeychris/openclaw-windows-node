@@ -30,6 +30,7 @@ public class VoiceSchemaDefaultsTests
 
         Assert.False(settings.Enabled);
         Assert.Equal(VoiceActivationMode.Off, settings.Mode);
+        Assert.False(settings.ShowConversationToasts);
         Assert.Equal(VoiceProviderIds.Windows, settings.SpeechToTextProviderId);
         Assert.Equal(VoiceProviderIds.Windows, settings.TextToSpeechProviderId);
         Assert.Equal(16000, settings.SampleRateHz);
@@ -40,6 +41,7 @@ public class VoiceSchemaDefaultsTests
         Assert.Equal(0.65f, settings.WakeWord.TriggerThreshold);
         Assert.Equal(250, settings.AlwaysOn.MinSpeechMs);
         Assert.True(settings.AlwaysOn.AutoSubmit);
+        Assert.Equal(VoiceChatWindowSubmitMode.AutoSend, settings.AlwaysOn.ChatWindowSubmitMode);
     }
 
     [Fact]

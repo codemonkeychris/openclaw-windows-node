@@ -45,6 +45,8 @@ public sealed partial class VoiceModeWindow : WindowEx
     {
         LoadProviders();
         SelectMode(_settings.Voice.Mode);
+        SelectChatWindowSubmitMode(_settings.Voice.AlwaysOn.ChatWindowSubmitMode);
+        VoiceConversationToastsCheckBox.IsChecked = _settings.Voice.ShowConversationToasts;
         UpdateModeInfo();
         UpdateProviderInfo();
         StatusTextBlock.Text = BuildStatusText();
@@ -141,12 +143,38 @@ public sealed partial class VoiceModeWindow : WindowEx
         };
     }
 
+    private void SelectChatWindowSubmitMode(VoiceChatWindowSubmitMode mode)
+    {
+        var target = mode == VoiceChatWindowSubmitMode.WaitForUser ? "WaitForUser" : "AutoSend";
+
+        foreach (var item in ChatWindowSubmitModeComboBox.Items.OfType<ComboBoxItem>())
+        {
+            if (string.Equals(item.Tag?.ToString(), target, StringComparison.Ordinal))
+            {
+                ChatWindowSubmitModeComboBox.SelectedItem = item;
+                return;
+            }
+        }
+
+        ChatWindowSubmitModeComboBox.SelectedIndex = 0;
+    }
+
+    private VoiceChatWindowSubmitMode GetSelectedChatWindowSubmitMode()
+    {
+        var tag = (ChatWindowSubmitModeComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString();
+        return tag == "WaitForUser"
+            ? VoiceChatWindowSubmitMode.WaitForUser
+            : VoiceChatWindowSubmitMode.AutoSend;
+    }
+
     private string BuildStatusText()
     {
         var running = _voiceService.CurrentStatus;
-        var runtime = running.Running
+        var runtime = running.State == VoiceRuntimeState.Paused
             ? $"{running.Mode} ({running.State})"
-            : "Off";
+            : running.Running
+                ? $"{running.Mode} ({running.State})"
+                : "Off";
         var nodeMode = _settings.EnableNodeMode ? "enabled" : "disabled";
         var stt = (SpeechToTextProviderComboBox.SelectedItem as ProviderOption)?.Name ?? "Windows Speech Recognition";
         var tts = (TextToSpeechProviderComboBox.SelectedItem as ProviderOption)?.Name ?? "Windows Speech Synthesis";
@@ -155,6 +183,11 @@ public sealed partial class VoiceModeWindow : WindowEx
             : $" Last issue: {running.LastError}.";
         UpdateTroubleshooting(running.LastError);
         return $"Runtime: {runtime}. Node Mode is {nodeMode}. STT: {stt}. TTS: {tts}.{error}";
+    }
+
+    public void RefreshStatus()
+    {
+        StatusTextBlock.Text = BuildStatusText();
     }
 
     private void UpdateModeInfo()
@@ -256,6 +289,7 @@ public sealed partial class VoiceModeWindow : WindowEx
         {
             Mode = GetSelectedMode(),
             Enabled = GetSelectedMode() != VoiceActivationMode.Off,
+            ShowConversationToasts = VoiceConversationToastsCheckBox.IsChecked ?? false,
             SpeechToTextProviderId = (SpeechToTextProviderComboBox.SelectedItem as ProviderOption)?.Id ?? VoiceProviderIds.Windows,
             TextToSpeechProviderId = (TextToSpeechProviderComboBox.SelectedItem as ProviderOption)?.Id ?? VoiceProviderIds.Windows,
             InputDeviceId = (InputDeviceComboBox.SelectedItem as DeviceOption)?.DeviceId,
@@ -277,7 +311,8 @@ public sealed partial class VoiceModeWindow : WindowEx
                 MinSpeechMs = _settings.Voice.AlwaysOn.MinSpeechMs,
                 EndSilenceMs = _settings.Voice.AlwaysOn.EndSilenceMs,
                 MaxUtteranceMs = _settings.Voice.AlwaysOn.MaxUtteranceMs,
-                AutoSubmit = _settings.Voice.AlwaysOn.AutoSubmit
+                AutoSubmit = _settings.Voice.AlwaysOn.AutoSubmit,
+                ChatWindowSubmitMode = GetSelectedChatWindowSubmitMode()
             }
         };
 

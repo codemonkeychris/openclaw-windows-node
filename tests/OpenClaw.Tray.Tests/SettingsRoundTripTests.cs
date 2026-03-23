@@ -32,6 +32,7 @@ public class SettingsRoundTripTests
             {
                 Enabled = true,
                 Mode = VoiceActivationMode.WakeWord,
+                ShowConversationToasts = true,
                 SpeechToTextProviderId = "windows",
                 TextToSpeechProviderId = "elevenlabs",
                 InputDeviceId = "mic-1",
@@ -53,7 +54,8 @@ public class SettingsRoundTripTests
                     MinSpeechMs = 300,
                     EndSilenceMs = 1100,
                     MaxUtteranceMs = 18000,
-                    AutoSubmit = false
+                    AutoSubmit = false,
+                    ChatWindowSubmitMode = VoiceChatWindowSubmitMode.WaitForUser
                 }
             },
             UserRules = new List<UserNotificationRule>
@@ -87,6 +89,7 @@ public class SettingsRoundTripTests
         Assert.NotNull(restored.Voice);
         Assert.True(restored.Voice.Enabled);
         Assert.Equal(VoiceActivationMode.WakeWord, restored.Voice.Mode);
+        Assert.True(restored.Voice.ShowConversationToasts);
         Assert.Equal("windows", restored.Voice.SpeechToTextProviderId);
         Assert.Equal("elevenlabs", restored.Voice.TextToSpeechProviderId);
         Assert.Equal("mic-1", restored.Voice.InputDeviceId);
@@ -96,6 +99,7 @@ public class SettingsRoundTripTests
         Assert.Equal(0.72f, restored.Voice.WakeWord.TriggerThreshold);
         Assert.Equal(300, restored.Voice.AlwaysOn.MinSpeechMs);
         Assert.False(restored.Voice.AlwaysOn.AutoSubmit);
+        Assert.Equal(VoiceChatWindowSubmitMode.WaitForUser, restored.Voice.AlwaysOn.ChatWindowSubmitMode);
         Assert.NotNull(restored.UserRules);
         Assert.Single(restored.UserRules);
         Assert.Equal("build.*fail", restored.UserRules[0].Pattern);
@@ -144,6 +148,7 @@ public class SettingsRoundTripTests
         Assert.NotNull(settings.Voice);
         Assert.False(settings.Voice.Enabled);
         Assert.Equal(VoiceActivationMode.Off, settings.Voice.Mode);
+        Assert.False(settings.Voice.ShowConversationToasts);
         Assert.Equal(VoiceProviderIds.Windows, settings.Voice.SpeechToTextProviderId);
         Assert.Equal(VoiceProviderIds.Windows, settings.Voice.TextToSpeechProviderId);
         Assert.Equal(16000, settings.Voice.SampleRateHz);
@@ -187,6 +192,7 @@ public class SettingsRoundTripTests
         Assert.NotNull(settings.Voice);
         Assert.False(settings.Voice.Enabled);
         Assert.Equal(VoiceActivationMode.Off, settings.Voice.Mode);
+        Assert.False(settings.Voice.ShowConversationToasts);
         Assert.Equal(VoiceProviderIds.Windows, settings.Voice.SpeechToTextProviderId);
         Assert.Equal(VoiceProviderIds.Windows, settings.Voice.TextToSpeechProviderId);
         Assert.Null(settings.UserRules);

@@ -17,9 +17,12 @@ namespace OpenClawTray.Windows;
 public sealed partial class WebChatWindow : WindowEx
     , IVoiceChatWindow
 {
+    private const string VoiceManualSubmitMessageType = "voice-manual-submit";
     private readonly string _gatewayUrl;
     private readonly string _token;
+    private readonly string _voiceMessageNonce = Guid.NewGuid().ToString("N");
     private string _pendingVoiceDraft = string.Empty;
+    private string? _trustedVoiceMessageOrigin;
     
     // Store event handlers for cleanup
     private TypedEventHandler<CoreWebView2, CoreWebView2NavigationCompletedEventArgs>? _navigationCompletedHandler;
@@ -29,8 +32,9 @@ public sealed partial class WebChatWindow : WindowEx
     public bool IsClosed { get; private set; }
     public event EventHandler<VoiceTranscriptSubmittedEventArgs>? VoiceTranscriptSubmitted;
 
-    private const string TrayVoiceIntegrationScript = """
+    private const string TrayVoiceIntegrationScriptTemplate = """
 (() => {
+  const submitNonce = __VOICE_NONCE__;
   const memoryPattern = /<relevant-memories>[\s\S]*?<\/relevant-memories>\s*/gi;
   const sanitize = (value) => typeof value === 'string' ? value.replace(memoryPattern, '').trimStart() : value;
   const isVisible = (el) => !!el && !(el.disabled === true) && el.getClientRects().length > 0;
@@ -123,7 +127,7 @@ public sealed partial class WebChatWindow : WindowEx
     pendingManual = false;
     desiredDraft = '';
     if (window.chrome?.webview?.postMessage) {
-      window.chrome.webview.postMessage(JSON.stringify({ type: 'voice-manual-submit', text: current }));
+      window.chrome.webview.postMessage(JSON.stringify({ type: 'voice-manual-submit', text: current, nonce: submitNonce }));
     }
   };
   const cleanTextNodes = () => {
@@ -277,7 +281,8 @@ public sealed partial class WebChatWindow : WindowEx
             WebView.CoreWebView2.Settings.IsStatusBarEnabled = false;
             WebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
             WebView.CoreWebView2.Settings.IsZoomControlEnabled = true;
-            await WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(TrayVoiceIntegrationScript);
+            await WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                BuildTrayVoiceIntegrationScript(_voiceMessageNonce));
 
             // Handle navigation events (store for cleanup)
             _navigationCompletedHandler = (s, e) =>
@@ -322,17 +327,12 @@ public sealed partial class WebChatWindow : WindowEx
             {
                 try
                 {
-                    using var doc = JsonDocument.Parse(e.TryGetWebMessageAsString());
-                    if (!doc.RootElement.TryGetProperty("type", out var typeProp) ||
-                        !string.Equals(typeProp.GetString(), "voice-manual-submit", StringComparison.Ordinal))
-                    {
-                        return;
-                    }
-
-                    var text = doc.RootElement.TryGetProperty("text", out var textProp)
-                        ? textProp.GetString() ?? string.Empty
-                        : string.Empty;
-                    if (string.IsNullOrWhiteSpace(text))
+                    if (!TryExtractTrustedVoiceManualSubmit(
+                        e.TryGetWebMessageAsString(),
+                        e.Source,
+                        _trustedVoiceMessageOrigin,
+                        _voiceMessageNonce,
+                        out var text))
                     {
                         return;
                     }
@@ -444,6 +444,7 @@ public sealed partial class WebChatWindow : WindowEx
         if (!string.IsNullOrEmpty(DEBUG_TEST_URL))
         {
             Logger.Info($"WebChatWindow: DEBUG MODE - Navigating to test URL: {DEBUG_TEST_URL}");
+            _trustedVoiceMessageOrigin = TryGetOrigin(DEBUG_TEST_URL);
             WebView.CoreWebView2.Navigate(DEBUG_TEST_URL);
             return;
         }
@@ -457,7 +458,65 @@ public sealed partial class WebChatWindow : WindowEx
 
         var safeBaseUrl = url.Split('?')[0];
         Logger.Info($"WebChatWindow: Navigating to {safeBaseUrl} (token hidden)");
+        _trustedVoiceMessageOrigin = TryGetOrigin(url);
         WebView.CoreWebView2.Navigate(url);
+    }
+
+    private static string BuildTrayVoiceIntegrationScript(string nonce)
+    {
+        return TrayVoiceIntegrationScriptTemplate.Replace(
+            "__VOICE_NONCE__",
+            JsonSerializer.Serialize(nonce),
+            StringComparison.Ordinal);
+    }
+
+    private static bool TryExtractTrustedVoiceManualSubmit(
+        string payload,
+        string? source,
+        string? expectedOrigin,
+        string expectedNonce,
+        out string text)
+    {
+        text = string.Empty;
+
+        if (!IsTrustedVoiceMessageSource(source, expectedOrigin))
+        {
+            return false;
+        }
+
+        using var doc = JsonDocument.Parse(payload);
+        if (!doc.RootElement.TryGetProperty("type", out var typeProp) ||
+            !string.Equals(typeProp.GetString(), VoiceManualSubmitMessageType, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (!doc.RootElement.TryGetProperty("nonce", out var nonceProp) ||
+            !string.Equals(nonceProp.GetString(), expectedNonce, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        text = doc.RootElement.TryGetProperty("text", out var textProp)
+            ? textProp.GetString() ?? string.Empty
+            : string.Empty;
+
+        return !string.IsNullOrWhiteSpace(text);
+    }
+
+    private static bool IsTrustedVoiceMessageSource(string? source, string? expectedOrigin)
+    {
+        var actualOrigin = TryGetOrigin(source);
+        return !string.IsNullOrWhiteSpace(expectedOrigin) &&
+               !string.IsNullOrWhiteSpace(actualOrigin) &&
+               string.Equals(actualOrigin, expectedOrigin, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? TryGetOrigin(string? url)
+    {
+        return Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            ? uri.GetLeftPart(UriPartial.Authority)
+            : null;
     }
 
     private void OnHome(object sender, RoutedEventArgs e)

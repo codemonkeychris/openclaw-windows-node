@@ -29,6 +29,7 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
     private static readonly TimeSpan TransportConnectTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan DuplicateTranscriptWindow = TimeSpan.FromMilliseconds(750);
+    private static readonly TimeSpan RecognitionResumeRetryDelay = TimeSpan.FromMilliseconds(500);
 
     private readonly IOpenClawLogger _logger;
     private readonly SettingsManager _settings;
@@ -604,6 +605,61 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
         _logger.Info("Speech recognition session started");
     }
 
+    private async Task ResumeRecognitionSessionAsync(
+        CancellationToken cancellationToken,
+        string reason,
+        string? lastError = null)
+    {
+        const int maxAttempts = 2;
+        string? currentError = lastError;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                await StartRecognitionSessionAsync();
+                return;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                currentError = GetUserFacingErrorMessage(ex);
+                _logger.Warn(
+                    $"Voice recognition resume failed ({reason}, attempt {attempt}/{maxAttempts}): {ex.Message}");
+
+                lock (_gate)
+                {
+                    if (_runtimeCts == null ||
+                        !_status.Running ||
+                        _status.Mode != VoiceActivationMode.TalkMode ||
+                        _awaitingReply ||
+                        _isSpeaking)
+                    {
+                        return;
+                    }
+
+                    _status = BuildRunningStatus(
+                        VoiceActivationMode.TalkMode,
+                        _status.SessionKey,
+                        VoiceRuntimeState.Arming,
+                        currentError);
+                }
+
+                if (attempt == maxAttempts)
+                {
+                    return;
+                }
+
+                await Task.Delay(RecognitionResumeRetryDelay, cancellationToken);
+            }
+        }
+    }
+
     private async Task StopRecognitionSessionAsync()
     {
         SpeechRecognizer? recognizer;
@@ -656,11 +712,38 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
         catch (Exception ex)
         {
             _logger.Error("Voice recognition handler failed", ex);
+            CancellationToken cancellationToken;
+            var shouldResume = false;
+            var userMessage = GetUserFacingErrorMessage(ex);
             lock (_gate)
             {
-                if (_status.Running)
+                if (_runtimeCts != null &&
+                    _status.Running &&
+                    _status.Mode == VoiceActivationMode.TalkMode)
                 {
-                    _status = BuildErrorStatus(VoiceActivationMode.TalkMode, _status.SessionKey, GetUserFacingErrorMessage(ex));
+                    cancellationToken = _runtimeCts.Token;
+                    _awaitingReply = false;
+                    _status = BuildRunningStatus(
+                        VoiceActivationMode.TalkMode,
+                        _status.SessionKey,
+                        VoiceRuntimeState.Arming,
+                        userMessage);
+                    shouldResume = true;
+                }
+                else
+                {
+                    return;
+                }
+            }
+
+            if (shouldResume)
+            {
+                try
+                {
+                    await ResumeRecognitionSessionAsync(cancellationToken, "result handler failure", userMessage);
+                }
+                catch (OperationCanceledException)
+                {
                 }
             }
         }
@@ -821,6 +904,7 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
         catch (Exception ex)
         {
             _logger.Error("Voice transcript submit failed", ex);
+            var userMessage = GetUserFacingErrorMessage(ex);
 
             lock (_gate)
             {
@@ -828,11 +912,11 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
                 _status = BuildRunningStatus(
                     VoiceActivationMode.TalkMode,
                     _status.SessionKey,
-                    VoiceRuntimeState.ListeningContinuously,
-                    GetUserFacingErrorMessage(ex));
+                    VoiceRuntimeState.Arming,
+                    userMessage);
             }
 
-            await StartRecognitionSessionAsync();
+            await ResumeRecognitionSessionAsync(cancellationToken, "transcript submit failure", userMessage);
         }
     }
 
@@ -890,7 +974,7 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
 
             if (shouldResume)
             {
-                await StartRecognitionSessionAsync();
+                await ResumeRecognitionSessionAsync(cancellationToken, "reply timeout");
             }
         }
         catch (OperationCanceledException)
@@ -948,7 +1032,7 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
                     }
                 }
 
-                await StartRecognitionSessionAsync();
+                await ResumeRecognitionSessionAsync(CancellationToken.None, "empty assistant reply");
                 return;
             }
 
@@ -986,7 +1070,7 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
 
                 try
                 {
-                    await StartRecognitionSessionAsync();
+                    await ResumeRecognitionSessionAsync(CancellationToken.None, "assistant reply playback completed");
                 }
                 catch (Exception ex)
                 {
@@ -1107,7 +1191,7 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
             if (shouldRestart && !token.IsCancellationRequested)
             {
                 await Task.Delay(250, token);
-                await StartRecognitionSessionAsync();
+                await ResumeRecognitionSessionAsync(token, $"recognition completed ({args.Status})");
             }
         }
         catch (OperationCanceledException)

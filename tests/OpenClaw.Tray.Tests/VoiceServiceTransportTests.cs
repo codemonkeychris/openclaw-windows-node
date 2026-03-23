@@ -45,6 +45,27 @@ public class VoiceServiceTransportTests
         Assert.True((bool)arguments[2]!);
     }
 
+    [Fact]
+    public void UsesCloudTextToSpeechRuntime_ReturnsTrueForWebSocketProviders()
+    {
+        var method = typeof(VoiceService).GetMethod(
+            "UsesCloudTextToSpeechRuntime",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var provider = new VoiceProviderOption
+        {
+            Id = VoiceProviderIds.MiniMax,
+            TextToSpeechWebSocket = new VoiceTextToSpeechWebSocketContract
+            {
+                EndpointTemplate = "wss://example.test/tts"
+            }
+        };
+
+        var result = (bool)method.Invoke(null, [provider])!;
+
+        Assert.True(result);
+    }
+
     private static MethodInfo GetMethod()
     {
         return typeof(VoiceService).GetMethod(

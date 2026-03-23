@@ -997,7 +997,7 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
             settings.TextToSpeechProviderId,
             _logger);
 
-        if (provider.TextToSpeechHttp != null)
+        if (UsesCloudTextToSpeechRuntime(provider))
         {
             using var result = await _cloudTextToSpeechClient.SynthesizeAsync(text, provider, providerConfiguration, _logger);
             await PlayStreamAsync(player, result.Stream, result.ContentType);
@@ -1013,6 +1013,11 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
         using var stream = await synthesizer.SynthesizeTextToStreamAsync(text);
         _logger.Info($"Windows TTS latency: total={stopwatch.ElapsedMilliseconds}ms");
         await PlayStreamAsync(player, stream, stream.ContentType);
+    }
+
+    private static bool UsesCloudTextToSpeechRuntime(VoiceProviderOption provider)
+    {
+        return provider.TextToSpeechHttp != null || provider.TextToSpeechWebSocket != null;
     }
 
     private static async Task PlayStreamAsync(

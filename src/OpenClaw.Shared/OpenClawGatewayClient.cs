@@ -22,6 +22,17 @@ public class OpenClawGatewayClient : WebSocketClientBase
     private bool _usageCostUnsupported;
     private bool _sessionPreviewUnsupported;
     private bool _nodeListUnsupported;
+    private bool _preferStructuredCategories = true;
+
+    /// <summary>
+    /// Controls whether structured notification metadata (Intent, Channel) takes priority
+    /// over keyword-based classification. Mirrors the <c>PreferStructuredCategories</c>
+    /// setting. Call after construction and whenever settings change.
+    /// </summary>
+    public void SetPreferStructuredCategories(bool value)
+    {
+        _preferStructuredCategories = value;
+    }
 
     private void ResetUnsupportedMethodFlags()
     {
@@ -851,7 +862,7 @@ public class OpenClawGatewayClient : WebSocketClientBase
             Message = displayText,
             IsChat = true
         };
-        var (title, type) = _categorizer.Classify(notification);
+        var (title, type) = _categorizer.Classify(notification, preferStructuredCategories: _preferStructuredCategories);
         notification.Title = title;
         notification.Type = type;
         NotificationReceived?.Invoke(this, notification);
@@ -1556,7 +1567,7 @@ public class OpenClawGatewayClient : WebSocketClientBase
         {
             Message = text.Length > 200 ? text[..200] + "…" : text
         };
-        var (title, type) = _categorizer.Classify(notification);
+        var (title, type) = _categorizer.Classify(notification, preferStructuredCategories: _preferStructuredCategories);
         notification.Title = title;
         notification.Type = type;
         NotificationReceived?.Invoke(this, notification);

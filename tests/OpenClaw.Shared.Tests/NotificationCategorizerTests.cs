@@ -272,7 +272,82 @@ public class NotificationCategorizerTests
         Assert.Equal("health", _categorizer.Classify(notification).type);
     }
 
-    // --- ClassifyByKeywords static method ---
+    // --- PreferStructuredCategories = false ---
+
+    [Fact]
+    public void PreferStructuredCategories_False_SkipsIntent()
+    {
+        // Intent says "build" but with preferStructuredCategories=false it should be ignored;
+        // message keyword "email" drives the result.
+        var notification = new OpenClawNotification
+        {
+            Message = "New email notification",
+            Intent = "build"
+        };
+        var (_, type) = _categorizer.Classify(notification, preferStructuredCategories: false);
+        Assert.Equal("email", type);
+    }
+
+    [Fact]
+    public void PreferStructuredCategories_False_SkipsChannel()
+    {
+        // Channel says "calendar" but with preferStructuredCategories=false it should be ignored;
+        // message keyword "email" drives the result.
+        var notification = new OpenClawNotification
+        {
+            Message = "Check your email",
+            Channel = "calendar"
+        };
+        var (_, type) = _categorizer.Classify(notification, preferStructuredCategories: false);
+        Assert.Equal("email", type);
+    }
+
+    [Fact]
+    public void PreferStructuredCategories_False_UserRulesStillApply()
+    {
+        var rules = new List<UserNotificationRule>
+        {
+            new() { Pattern = "invoice", Category = "email", Enabled = true }
+        };
+        // Intent would win when preferStructuredCategories=true, but is skipped here;
+        // user rule matches the message.
+        var notification = new OpenClawNotification
+        {
+            Message = "New invoice received",
+            Intent = "urgent"
+        };
+        var (_, type) = _categorizer.Classify(notification, rules, preferStructuredCategories: false);
+        Assert.Equal("email", type);
+    }
+
+    [Fact]
+    public void PreferStructuredCategories_False_FallsBackToKeywords()
+    {
+        // No user rules, no keywords for "hello world" → "info"
+        var notification = new OpenClawNotification
+        {
+            Message = "Hello world",
+            Intent = "build",
+            Channel = "email"
+        };
+        var (_, type) = _categorizer.Classify(notification, preferStructuredCategories: false);
+        Assert.Equal("info", type);
+    }
+
+    [Fact]
+    public void PreferStructuredCategories_True_Default_BehaviourUnchanged()
+    {
+        // Ensure the default (true) still gives structured metadata priority.
+        var notification = new OpenClawNotification
+        {
+            Message = "New email notification",
+            Intent = "build"
+        };
+        Assert.Equal("build", _categorizer.Classify(notification).type);
+        Assert.Equal("build", _categorizer.Classify(notification, preferStructuredCategories: true).type);
+    }
+
+
 
     [Fact]
     public void ClassifyByKeywords_DefaultsToInfo()

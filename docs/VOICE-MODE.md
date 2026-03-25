@@ -770,3 +770,4 @@ Append one new line to this timeline for every future voice-mode commit.
 - `2026-03-25` Rebuilt the Windows speech recognizer after repeated deaf `UserCanceled` and watchdog-recycle failures instead of repeatedly restarting the same broken recognizer instance.
 - `2026-03-25` Fixed the tray-chat draft mirror so it clears immediately after direct send, and primed media playback before `Play()` so spoken replies stop clipping their opening syllables.
 - `2026-03-25` Added a backlog story for true streaming TTS playback, including provider-catalog and latency-measurement notes.
+- `2026-03-25` Corrected the MiniMax WebSocket request sequence by sending `task_finish` before reading audio, and added a guarded fallback that promotes a recent longer hypothesis when Windows only finalizes the tail of an utterance.

@@ -106,6 +106,11 @@ public sealed class VoiceCloudTextToSpeechClient
         var continueMessage = ApplyJsonTemplate(contract.ContinueMessageTemplate, templateValues);
         await SendTextMessageAsync(socket, continueMessage);
 
+        if (!string.IsNullOrWhiteSpace(contract.FinishMessageTemplate))
+        {
+            await SendTextMessageAsync(socket, ApplyJsonTemplate(contract.FinishMessageTemplate, templateValues));
+        }
+
         var audioBytes = new List<byte>();
         long? firstChunkMs = null;
 
@@ -128,17 +133,6 @@ public sealed class VoiceCloudTextToSpeechClient
             if (IsFinalWebSocketMessage(message, contract))
             {
                 break;
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(contract.FinishMessageTemplate))
-        {
-            try
-            {
-                await SendTextMessageAsync(socket, ApplyJsonTemplate(contract.FinishMessageTemplate, templateValues));
-            }
-            catch
-            {
             }
         }
 

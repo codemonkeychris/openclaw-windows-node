@@ -177,6 +177,30 @@ public class VoiceServiceTransportTests
         Assert.Equal(expected, result);
     }
 
+    [Theory]
+    [InlineData("Now again testing", "again testing", 1, true, "Now again testing")]
+    [InlineData("again testing", "again testing", 1, false, "again testing")]
+    [InlineData("Now again testing", "again testing", 3, false, "again testing")]
+    [InlineData("This is different", "again testing", 1, false, "again testing")]
+    public void SelectRecognizedText_PromotesRecentLongerHypothesisWhenFinalLooksTruncated(
+        string hypothesis,
+        string recognized,
+        int hypothesisAgeSeconds,
+        bool expectedPromoted,
+        string expected)
+    {
+        var method = typeof(VoiceService).GetMethod(
+            "SelectRecognizedText",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        var now = new DateTime(2026, 3, 25, 16, 45, 30, DateTimeKind.Utc);
+        var args = new object?[] { recognized, hypothesis, now.AddSeconds(-hypothesisAgeSeconds), now, null };
+
+        var result = (string)method.Invoke(null, args)!;
+
+        Assert.Equal(expected, result);
+        Assert.Equal(expectedPromoted, (bool)args[4]!);
+    }
+
     private static MethodInfo GetMethod()
     {
         return typeof(VoiceService).GetMethod(

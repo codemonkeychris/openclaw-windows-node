@@ -32,6 +32,7 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
     private static readonly TimeSpan InitialRecognitionReadyDelay = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan RecognitionHealthCheckDelay = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan DuplicateTranscriptWindow = TimeSpan.FromMilliseconds(750);
+    private static readonly TimeSpan HypothesisPromotionWindow = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RecognitionResumeRetryDelay = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan QueuedReplyPlaybackGap = TimeSpan.FromMilliseconds(500);
 
@@ -60,6 +61,8 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
     private bool _quickPaused;
     private string? _lastTranscript;
     private DateTime _lastTranscriptUtc;
+    private string? _lastHypothesisText;
+    private DateTime _lastHypothesisUtc;
     private readonly Queue<(string Text, string? SessionKey)> _pendingAssistantReplies = new();
     private CancellationTokenSource? _playbackSkipCts;
     private string? _currentReplyPreview;
@@ -720,6 +723,8 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
         {
             _recognitionActive = true;
             _recognitionSessionHadActivity = false;
+            _lastHypothesisText = null;
+            _lastHypothesisUtc = default;
             if (updateListeningStatus && _status.Running && !_awaitingReply && !_isSpeaking)
             {
                 _status = BuildRunningStatus(
@@ -809,6 +814,8 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
 
             _recognitionActive = false;
             _recognitionHealthCheckArmed = false;
+            _lastHypothesisText = null;
+            _lastHypothesisUtc = default;
         }
 
         try
@@ -829,6 +836,7 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
         {
             var result = args.Result;
             var text = result.Text?.Trim();
+            var promotedHypothesis = false;
             if (string.IsNullOrWhiteSpace(text))
             {
                 return;
@@ -840,6 +848,21 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
             {
                 _logger.Info($"Voice recognition ignored result with confidence {result.Confidence}: {text}");
                 return;
+            }
+
+            lock (_gate)
+            {
+                text = SelectRecognizedText(
+                    text,
+                    _lastHypothesisText,
+                    _lastHypothesisUtc,
+                    DateTime.UtcNow,
+                    out promotedHypothesis);
+            }
+
+            if (promotedHypothesis)
+            {
+                _logger.Info($"Voice recognition promoted recent hypothesis to recover truncated final result: {text}");
             }
 
             _logger.Info($"Voice recognition result ({result.Confidence}): {text}");
@@ -905,6 +928,8 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
             sessionKey = GetCurrentVoiceSessionKey();
             _recognitionSessionHadActivity = true;
             _recognitionHealthCheckArmed = false;
+            _lastHypothesisText = text;
+            _lastHypothesisUtc = DateTime.UtcNow;
             if (_status.State != VoiceRuntimeState.RecordingUtterance)
             {
                 _status = BuildRunningStatus(
@@ -955,6 +980,8 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
             _lastTranscriptUtc = DateTime.UtcNow;
             _recognitionSessionHadActivity = true;
             _recognitionHealthCheckArmed = false;
+            _lastHypothesisText = null;
+            _lastHypothesisUtc = default;
             cancellationToken = _runtimeCts.Token;
             sessionKey = GetCurrentVoiceSessionKey();
         }
@@ -1397,6 +1424,39 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
                status == SpeechRecognitionResultStatus.TimeoutExceeded;
     }
 
+    internal static string SelectRecognizedText(
+        string recognizedText,
+        string? latestHypothesisText,
+        DateTime latestHypothesisUtc,
+        DateTime utcNow,
+        out bool promotedHypothesis)
+    {
+        promotedHypothesis = false;
+
+        if (string.IsNullOrWhiteSpace(recognizedText) ||
+            string.IsNullOrWhiteSpace(latestHypothesisText) ||
+            utcNow - latestHypothesisUtc > HypothesisPromotionWindow)
+        {
+            return recognizedText;
+        }
+
+        var normalizedResult = recognizedText.Trim();
+        var normalizedHypothesis = latestHypothesisText.Trim();
+
+        if (normalizedHypothesis.Length <= normalizedResult.Length + 3)
+        {
+            return normalizedResult;
+        }
+
+        if (!normalizedHypothesis.EndsWith(normalizedResult, StringComparison.OrdinalIgnoreCase))
+        {
+            return normalizedResult;
+        }
+
+        promotedHypothesis = true;
+        return normalizedHypothesis;
+    }
+
     private static string CreateReplyPreview(string text)
     {
         var trimmed = text.Trim();
@@ -1603,6 +1663,8 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
             _recognitionActive = false;
             _recognitionSessionHadActivity = false;
             _recognitionRestartInProgress = false;
+            _lastHypothesisText = null;
+            _lastHypothesisUtc = default;
 
             synthesizer = _speechSynthesizer;
             _speechSynthesizer = null;

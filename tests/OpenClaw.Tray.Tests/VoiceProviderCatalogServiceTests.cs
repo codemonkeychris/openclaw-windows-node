@@ -88,6 +88,7 @@ public class VoiceProviderCatalogServiceTests
         Assert.Equal(string.Empty, elevenLabs.TextToSpeechWebSocket.StartSuccessEventName);
         Assert.Contains("\"xi_api_key\": {{apiKey}}", elevenLabs.TextToSpeechWebSocket.StartMessageTemplate);
         Assert.Contains("\"flush\": true", elevenLabs.TextToSpeechWebSocket.ContinueMessageTemplate);
+        Assert.Equal(string.Empty, elevenLabs.TextToSpeechWebSocket.FinishMessageTemplate);
         Assert.Equal(VoiceTextToSpeechResponseModes.Base64JsonString, elevenLabs.TextToSpeechWebSocket.ResponseAudioMode);
         Assert.Equal("audio", elevenLabs.TextToSpeechWebSocket.ResponseAudioJsonPath);
         Assert.Equal("isFinal", elevenLabs.TextToSpeechWebSocket.FinalFlagJsonPath);

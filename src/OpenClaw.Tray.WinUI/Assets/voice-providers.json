@@ -127,7 +127,7 @@
         "startMessageTemplate": "{ \"text\": \" \", {{voiceSettingsJson}}, \"xi_api_key\": {{apiKey}} }",
         "startSuccessEventName": "",
         "continueMessageTemplate": "{ \"text\": {{text}}, \"flush\": true }",
-        "finishMessageTemplate": "{ \"text\": \"\" }",
+        "finishMessageTemplate": "",
         "responseAudioMode": "base64JsonString",
         "responseAudioJsonPath": "audio",
         "finalFlagJsonPath": "isFinal",

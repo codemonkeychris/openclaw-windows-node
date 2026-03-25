@@ -347,7 +347,7 @@ Example:
         "startMessageTemplate": "{ \"text\": \" \", {{voiceSettingsJson}}, \"xi_api_key\": {{apiKey}} }",
         "startSuccessEventName": "",
         "continueMessageTemplate": "{ \"text\": {{text}}, \"flush\": true }",
-        "finishMessageTemplate": "{ \"text\": \"\" }",
+        "finishMessageTemplate": "",
         "responseAudioMode": "base64JsonString",
         "responseAudioJsonPath": "audio",
         "finalFlagJsonPath": "isFinal",
@@ -1073,3 +1073,4 @@ Append one new line to this timeline for every future voice-mode commit.
 - `2026-03-25` Generalized the catalog-driven WebSocket TTS client to support providers without explicit connect/start acknowledgements and switched ElevenLabs to the `stream-input` WebSocket API with default voice settings.
 - `2026-03-25` Reworked the dynamic tray icon language so listening shows activity waves around the headphones and speaking uses a microphone badge instead of a speaker icon.
 - `2026-03-25` Adjusted the ElevenLabs `stream-input` contract to send `xi_api_key` in the init message and `flush: true` with the text turn so short replies are emitted promptly instead of being buffered then closed.
+- `2026-03-25` Stopped sending an immediate ElevenLabs EOS message before reading audio, so single-turn `stream-input` replies rely on `flush: true` instead of prematurely closing the socket.

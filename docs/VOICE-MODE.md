@@ -778,3 +778,4 @@ Append one new line to this timeline for every future voice-mode commit.
 - `2026-03-25` Corrected the MiniMax WebSocket request sequence by sending `task_finish` before reading audio, and added a guarded fallback that promotes a recent longer hypothesis when Windows only finalizes the tail of an utterance.
 - `2026-03-25` Added live default-microphone change handling for Talk Mode, so using the system default capture device now refreshes the recognizer when Windows switches to a new default mic such as AirPods.
 - `2026-03-25` Applied `Voice.OutputDeviceId` to Talk Mode playback via `MediaPlayer.AudioDevice`, so selected non-default speaker devices now work even though explicit non-default microphone capture is still pending.
+- `2026-03-25` Hardened the gateway preview fallback so a bare final chat event does not replay the previous assistant reply when `sessions.preview` lags behind the real session update.

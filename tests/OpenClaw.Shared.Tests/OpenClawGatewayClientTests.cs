@@ -1,6 +1,8 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using Xunit;
 using OpenClaw.Shared;
@@ -194,14 +196,26 @@ public class OpenClawGatewayClientTests
 
         public int GetPendingChatPreviewSessionCount()
         {
-            var pending = GetPrivateField<HashSet<string>>("_pendingChatPreviewSessionKeys");
+            var pending = GetPrivateField<IDictionary>("_pendingChatPreviewSessionKeys");
             return pending.Count;
         }
 
-        public void AddPendingChatPreviewSession(string sessionKey)
+        public void AddPendingChatPreviewSession(string sessionKey, string? lastKnownAssistantText = null, int attemptCount = 0)
         {
-            var pending = GetPrivateField<HashSet<string>>("_pendingChatPreviewSessionKeys");
-            pending.Add(sessionKey);
+            var pending = GetPrivateField<IDictionary>("_pendingChatPreviewSessionKeys");
+            var stateType = typeof(OpenClawGatewayClient).GetNestedType(
+                "PendingChatPreviewState",
+                BindingFlags.NonPublic)!;
+            var state = Activator.CreateInstance(stateType)!;
+            stateType.GetProperty("LastKnownAssistantText")!.SetValue(state, lastKnownAssistantText);
+            stateType.GetProperty("AttemptCount")!.SetValue(state, attemptCount);
+            pending[sessionKey] = state;
+        }
+
+        public void SetLastAssistantMessage(string sessionKey, string text)
+        {
+            var lastMessages = GetPrivateField<IDictionary>("_lastAssistantMessagesBySession");
+            lastMessages[sessionKey] = text;
         }
 
         public ChatMessageEventArgs? ParseSessionsPreviewPayloadAndCaptureMessage(string payloadJson)
@@ -883,6 +897,34 @@ public class OpenClawGatewayClientTests
         Assert.Equal("world", captured.Message);
         Assert.True(captured.IsFinal);
         Assert.Equal(0, helper.GetPendingChatPreviewSessionCount());
+    }
+
+    [Fact]
+    public void ParseSessionsPreview_DoesNotEmitStaleAssistantMessage_ForQueuedFinalPreview()
+    {
+        var helper = new GatewayClientTestHelper();
+        helper.SetUnsupportedMethodFlags(usageStatus: false, usageCost: false, sessionPreview: true, nodeList: false);
+        helper.SetLastAssistantMessage("main", "world");
+        helper.AddPendingChatPreviewSession("main", lastKnownAssistantText: "world");
+
+        var captured = helper.ParseSessionsPreviewPayloadAndCaptureMessage("""
+            {
+              "ts": 1739760000000,
+              "previews": [
+                {
+                  "key": "agent:main:main",
+                  "status": "ok",
+                  "items": [
+                    { "role": "user", "text": "hello again" },
+                    { "role": "assistant", "text": "world" }
+                  ]
+                }
+              ]
+            }
+            """);
+
+        Assert.Null(captured);
+        Assert.Equal(1, helper.GetPendingChatPreviewSessionCount());
     }
 
     [Fact]

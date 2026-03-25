@@ -15,7 +15,8 @@ public class OpenClawGatewayClient : WebSocketClientBase
     private GatewayUsageStatusInfo? _usageStatus;
     private GatewayCostUsageInfo? _usageCost;
     private readonly Dictionary<string, string> _pendingRequestMethods = new();
-    private readonly HashSet<string> _pendingChatPreviewSessionKeys = new();
+    private readonly Dictionary<string, PendingChatPreviewState> _pendingChatPreviewSessionKeys = new();
+    private readonly Dictionary<string, string> _lastAssistantMessagesBySession = new();
     private readonly object _pendingRequestLock = new();
     private readonly object _pendingChatPreviewLock = new();
     private readonly object _sessionsLock = new();
@@ -27,6 +28,11 @@ public class OpenClawGatewayClient : WebSocketClientBase
     private string _defaultChatSessionKey = DefaultChatSessionKey;
 
     private const string DefaultChatSessionKey = "main";
+    private sealed class PendingChatPreviewState
+    {
+        public string? LastKnownAssistantText { get; init; }
+        public int AttemptCount { get; set; }
+    }
 
     private void ResetUnsupportedMethodFlags()
     {
@@ -880,6 +886,14 @@ public class OpenClawGatewayClient : WebSocketClientBase
 
     private void EmitChatMessage(string sessionKey, string role, string text, bool isFinal)
     {
+        if (isFinal && string.Equals(role, "assistant", StringComparison.OrdinalIgnoreCase))
+        {
+            lock (_pendingChatPreviewLock)
+            {
+                _lastAssistantMessagesBySession[NormalizeChatSessionKey(sessionKey)] = text;
+            }
+        }
+
         ChatMessageReceived?.Invoke(this, new ChatMessageEventArgs
         {
             SessionKey = sessionKey,
@@ -1199,18 +1213,36 @@ public class OpenClawGatewayClient : WebSocketClientBase
         }
 
         var normalizedSessionKey = NormalizeChatSessionKey(sessionKey);
+        string? lastKnownAssistantText;
         lock (_pendingChatPreviewLock)
         {
-            if (!_pendingChatPreviewSessionKeys.Add(normalizedSessionKey))
+            if (_pendingChatPreviewSessionKeys.ContainsKey(normalizedSessionKey))
             {
                 return;
             }
+
+            _lastAssistantMessagesBySession.TryGetValue(normalizedSessionKey, out lastKnownAssistantText);
+            _pendingChatPreviewSessionKeys[normalizedSessionKey] = new PendingChatPreviewState
+            {
+                LastKnownAssistantText = lastKnownAssistantText,
+                AttemptCount = 0
+            };
         }
 
+        RequestChatPreviewForFinalStateAsync(normalizedSessionKey, delayMs: 0);
+    }
+
+    private void RequestChatPreviewForFinalStateAsync(string normalizedSessionKey, int delayMs)
+    {
         _ = Task.Run(async () =>
         {
             try
             {
+                if (delayMs > 0)
+                {
+                    await Task.Delay(delayMs);
+                }
+
                 await RequestSessionPreviewAsync([normalizedSessionKey], limit: 2, maxChars: 4000);
             }
             catch (Exception ex)
@@ -1229,17 +1261,14 @@ public class OpenClawGatewayClient : WebSocketClientBase
         foreach (var preview in payload.Previews)
         {
             var normalizedSessionKey = NormalizeChatSessionKey(preview.Key);
-            var shouldEmit = false;
+            PendingChatPreviewState? pendingState = null;
 
             lock (_pendingChatPreviewLock)
             {
-                if (_pendingChatPreviewSessionKeys.Remove(normalizedSessionKey))
-                {
-                    shouldEmit = true;
-                }
+                _pendingChatPreviewSessionKeys.TryGetValue(normalizedSessionKey, out pendingState);
             }
 
-            if (!shouldEmit)
+            if (pendingState == null)
             {
                 continue;
             }
@@ -1252,6 +1281,23 @@ public class OpenClawGatewayClient : WebSocketClientBase
             if (string.IsNullOrWhiteSpace(assistantText))
             {
                 continue;
+            }
+
+            if (string.Equals(assistantText, pendingState.LastKnownAssistantText, StringComparison.Ordinal))
+            {
+                if (pendingState.AttemptCount < 3)
+                {
+                    pendingState.AttemptCount++;
+                    _logger.Warn(
+                        $"sessions.preview returned the previous assistant reply for {normalizedSessionKey}; retrying preview ({pendingState.AttemptCount}/3)");
+                    RequestChatPreviewForFinalStateAsync(normalizedSessionKey, delayMs: 400 * pendingState.AttemptCount);
+                    continue;
+                }
+            }
+
+            lock (_pendingChatPreviewLock)
+            {
+                _pendingChatPreviewSessionKeys.Remove(normalizedSessionKey);
             }
 
             _logger.Info($"Assistant response (preview): {assistantText.Substring(0, Math.Min(100, assistantText.Length))}...");

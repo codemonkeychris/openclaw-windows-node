@@ -66,6 +66,25 @@ public class VoiceServiceTransportTests
         Assert.True(result);
     }
 
+    [Theory]
+    [InlineData(true, false, 0, true)]
+    [InlineData(false, true, 0, true)]
+    [InlineData(false, false, 1, true)]
+    [InlineData(false, false, 0, false)]
+    public void ShouldAcceptAssistantReply_MatchesPlaybackAndAwaitingState(
+        bool awaitingReply,
+        bool isSpeaking,
+        int queuedReplyCount,
+        bool expected)
+    {
+        var method = typeof(VoiceService).GetMethod(
+            "ShouldAcceptAssistantReply",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        var result = (bool)method.Invoke(null, [awaitingReply, isSpeaking, queuedReplyCount])!;
+
+        Assert.Equal(expected, result);
+    }
+
     private static MethodInfo GetMethod()
     {
         return typeof(VoiceService).GetMethod(

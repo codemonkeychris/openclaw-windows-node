@@ -55,6 +55,7 @@ The contracts and persisted settings now use `VoiceWake` and `TalkMode` as well.
 - otherwise, the transcript is sent to OpenClaw via direct `chat.send` on the main session
 - OpenClaw returns the assistant reply as normal chat output
 - the node performs local TTS playback of that reply
+- assistant replies are queued locally and spoken sequentially, with a short 500 ms pause between queued replies so overlapping responses are not lost
 
 To avoid obvious duplicate sends from the Windows recognizer, exact duplicate final transcripts are suppressed within a short 750 ms window.
 

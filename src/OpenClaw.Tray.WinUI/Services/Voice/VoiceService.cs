@@ -30,6 +30,7 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
     private static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan DuplicateTranscriptWindow = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan RecognitionResumeRetryDelay = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan QueuedReplyPlaybackGap = TimeSpan.FromMilliseconds(500);
 
     private readonly IOpenClawLogger _logger;
     private readonly SettingsManager _settings;
@@ -48,10 +49,12 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
     private bool _recognitionActive;
     private bool _awaitingReply;
     private bool _isSpeaking;
+    private bool _replyPlaybackLoopActive;
     private bool _quickPaused;
     private string? _lastTranscript;
     private DateTime _lastTranscriptUtc;
     private string? _pendingManualTranscript;
+    private readonly Queue<(string Text, string? SessionKey)> _pendingAssistantReplies = new();
     private bool _disposed;
 
     public event EventHandler<VoiceConversationTurnEventArgs>? ConversationTurnAvailable;
@@ -994,10 +997,11 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
             }
 
             string text;
+            bool shouldStartPlaybackLoop = false;
 
             lock (_gate)
             {
-                if (!_awaitingReply || !_status.Running || _status.Mode != VoiceActivationMode.TalkMode)
+                if (!_status.Running || _status.Mode != VoiceActivationMode.TalkMode)
                 {
                     return;
                 }
@@ -1007,80 +1011,149 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
                     return;
                 }
 
+                if (!ShouldAcceptAssistantReply(_awaitingReply, _isSpeaking, _pendingAssistantReplies.Count))
+                {
+                    return;
+                }
+
                 _awaitingReply = false;
-                _isSpeaking = true;
-                _status = BuildRunningStatus(
-                    VoiceActivationMode.TalkMode,
-                    _status.SessionKey,
-                    VoiceRuntimeState.PlayingResponse,
-                    _status.LastError);
                 text = PrepareReplyForSpeech(args.Message);
             }
 
             if (string.IsNullOrWhiteSpace(text))
             {
+                var shouldResumeRecognition = false;
                 lock (_gate)
                 {
-                    _isSpeaking = false;
-                    if (_status.Running)
+                    if (_status.Running && !_replyPlaybackLoopActive)
                     {
                         _status = BuildRunningStatus(
                             VoiceActivationMode.TalkMode,
                             _status.SessionKey,
                             VoiceRuntimeState.ListeningContinuously,
                             _status.LastError);
+                        shouldResumeRecognition = true;
                     }
                 }
 
-                await ResumeRecognitionSessionAsync(CancellationToken.None, "empty assistant reply");
+                if (shouldResumeRecognition)
+                {
+                    await ResumeRecognitionSessionAsync(CancellationToken.None, "empty assistant reply");
+                }
                 return;
             }
 
-            try
+            RaiseConversationTurn(VoiceConversationDirection.Incoming, text, args.SessionKey);
+
+            lock (_gate)
             {
-                RaiseConversationTurn(VoiceConversationDirection.Incoming, text, args.SessionKey);
-                await SpeakTextAsync(text);
-            }
-            catch (Exception ex)
-            {
-                _logger.Error("Voice reply playback failed", ex);
-                lock (_gate)
+                _pendingAssistantReplies.Enqueue((text, args.SessionKey));
+                _logger.Info($"Voice reply queued: pending={_pendingAssistantReplies.Count}");
+
+                if (!_replyPlaybackLoopActive)
                 {
+                    _replyPlaybackLoopActive = true;
+                    _isSpeaking = true;
                     _status = BuildRunningStatus(
                         VoiceActivationMode.TalkMode,
                         _status.SessionKey,
-                        VoiceRuntimeState.ListeningContinuously,
-                        GetUserFacingErrorMessage(ex));
+                        VoiceRuntimeState.PlayingResponse,
+                        _status.LastError);
+                    shouldStartPlaybackLoop = true;
                 }
             }
-            finally
-            {
-                lock (_gate)
-                {
-                    _isSpeaking = false;
-                    if (_status.Running)
-                    {
-                        _status = BuildRunningStatus(
-                            VoiceActivationMode.TalkMode,
-                            _status.SessionKey,
-                            VoiceRuntimeState.ListeningContinuously,
-                            _status.LastError);
-                    }
-                }
 
-                try
-                {
-                    await ResumeRecognitionSessionAsync(CancellationToken.None, "assistant reply playback completed");
-                }
-                catch (Exception ex)
-                {
-                    _logger.Warn($"Voice recognition resume failed: {ex.Message}");
-                }
+            if (shouldStartPlaybackLoop)
+            {
+                _ = ProcessQueuedAssistantRepliesAsync();
             }
         }
         catch (Exception ex)
         {
             _logger.Warn($"Voice chat message handler failed: {ex.Message}");
+        }
+    }
+
+    private async Task ProcessQueuedAssistantRepliesAsync()
+    {
+        try
+        {
+            while (true)
+            {
+                (string Text, string? SessionKey) reply;
+                var shouldPauseBeforeNextReply = false;
+
+                lock (_gate)
+                {
+                    if (_pendingAssistantReplies.Count == 0)
+                    {
+                        _replyPlaybackLoopActive = false;
+                        _isSpeaking = false;
+
+                        if (_status.Running)
+                        {
+                            _status = BuildRunningStatus(
+                                VoiceActivationMode.TalkMode,
+                                _status.SessionKey,
+                                VoiceRuntimeState.ListeningContinuously,
+                                _status.LastError);
+                        }
+
+                        break;
+                    }
+
+                    reply = _pendingAssistantReplies.Dequeue();
+                    shouldPauseBeforeNextReply = _pendingAssistantReplies.Count > 0;
+                }
+
+                try
+                {
+                    await SpeakTextAsync(reply.Text);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error("Voice reply playback failed", ex);
+                    lock (_gate)
+                    {
+                        _status = BuildRunningStatus(
+                            VoiceActivationMode.TalkMode,
+                            _status.SessionKey,
+                            shouldPauseBeforeNextReply ? VoiceRuntimeState.PlayingResponse : VoiceRuntimeState.ListeningContinuously,
+                            GetUserFacingErrorMessage(ex));
+                    }
+                }
+
+                if (shouldPauseBeforeNextReply)
+                {
+                    _logger.Info($"Voice reply playback paused before next queued response ({QueuedReplyPlaybackGap.TotalMilliseconds}ms)");
+                    await Task.Delay(QueuedReplyPlaybackGap);
+                }
+            }
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                _replyPlaybackLoopActive = false;
+                _isSpeaking = false;
+                if (_status.Running)
+                {
+                    _status = BuildRunningStatus(
+                        VoiceActivationMode.TalkMode,
+                        _status.SessionKey,
+                        VoiceRuntimeState.ListeningContinuously,
+                        _status.LastError);
+                }
+            }
+
+            try
+            {
+                await ResumeRecognitionSessionAsync(CancellationToken.None, "queued assistant reply playback completed");
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn($"Voice recognition resume failed: {ex.Message}");
+            }
         }
     }
 
@@ -1129,6 +1202,11 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
     private static bool UsesCloudTextToSpeechRuntime(VoiceProviderOption provider)
     {
         return provider.TextToSpeechHttp != null || provider.TextToSpeechWebSocket != null;
+    }
+
+    internal static bool ShouldAcceptAssistantReply(bool awaitingReply, bool isSpeaking, int queuedReplyCount)
+    {
+        return awaitingReply || isSpeaking || queuedReplyCount > 0;
     }
 
     private static async Task PlayStreamAsync(
@@ -1284,7 +1362,9 @@ public sealed class VoiceService : IVoiceRuntime, IDisposable
 
             _awaitingReply = false;
             _isSpeaking = false;
+            _replyPlaybackLoopActive = false;
             _pendingManualTranscript = null;
+            _pendingAssistantReplies.Clear();
         }
 
         try { runtimeCts?.Cancel(); } catch { }

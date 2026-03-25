@@ -346,8 +346,8 @@ Example:
         "connectSuccessEventName": "",
         "startMessageTemplate": "{ \"text\": \" \", {{voiceSettingsJson}}, \"xi_api_key\": {{apiKey}} }",
         "startSuccessEventName": "",
-        "continueMessageTemplate": "{ \"text\": {{text}}, \"flush\": true }",
-        "finishMessageTemplate": "",
+        "continueMessageTemplate": "{ \"text\": {{textWithTrailingSpace}}, \"try_trigger_generation\": true }",
+        "finishMessageTemplate": "{ \"text\": \"\" }",
         "responseAudioMode": "base64JsonString",
         "responseAudioJsonPath": "audio",
         "finalFlagJsonPath": "isFinal",
@@ -1074,3 +1074,4 @@ Append one new line to this timeline for every future voice-mode commit.
 - `2026-03-25` Reworked the dynamic tray icon language so listening shows activity waves around the headphones and speaking uses a microphone badge instead of a speaker icon.
 - `2026-03-25` Adjusted the ElevenLabs `stream-input` contract to send `xi_api_key` in the init message and `flush: true` with the text turn so short replies are emitted promptly instead of being buffered then closed.
 - `2026-03-25` Stopped sending an immediate ElevenLabs EOS message before reading audio, so single-turn `stream-input` replies rely on `flush: true` instead of prematurely closing the socket.
+- `2026-03-25` Switched ElevenLabs `stream-input` to the published text-generation pattern: send the text turn with a trailing-space variant plus `try_trigger_generation: true`, then send EOS, and include the WebSocket close status in playback errors.

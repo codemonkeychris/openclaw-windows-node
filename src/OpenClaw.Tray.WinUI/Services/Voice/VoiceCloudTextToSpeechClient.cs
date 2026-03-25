@@ -179,7 +179,9 @@ public sealed class VoiceCloudTextToSpeechClient
     {
         var values = new Dictionary<string, TemplateValue>(StringComparer.OrdinalIgnoreCase)
         {
-            ["text"] = TemplateValue.FromString(text)
+            ["text"] = TemplateValue.FromString(text),
+            ["textWithTrailingSpace"] = TemplateValue.FromString(
+                text.EndsWith(' ') ? text : text + " ")
         };
 
         foreach (var setting in provider.Settings)
@@ -496,7 +498,14 @@ public sealed class VoiceCloudTextToSpeechClient
 
             if (result.MessageType == WebSocketMessageType.Close)
             {
-                throw new InvalidOperationException("Voice provider closed the WebSocket unexpectedly.");
+                var closeStatus = socket.CloseStatus?.ToString() ?? "Unknown";
+                var closeDescription = string.IsNullOrWhiteSpace(socket.CloseStatusDescription)
+                    ? null
+                    : socket.CloseStatusDescription;
+                throw new InvalidOperationException(
+                    string.IsNullOrWhiteSpace(closeDescription)
+                        ? $"Voice provider closed the WebSocket unexpectedly ({closeStatus})."
+                        : $"Voice provider closed the WebSocket unexpectedly ({closeStatus}: {closeDescription}).");
             }
 
             buffer.Write(receiveBuffer, 0, result.Count);

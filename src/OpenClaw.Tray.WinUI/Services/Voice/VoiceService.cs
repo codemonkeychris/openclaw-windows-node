@@ -29,6 +29,7 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
     private static readonly TimeSpan TransportConnectTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan LateReplyGraceWindow = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan InitialRecognitionReadyDelay = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan DuplicateTranscriptWindow = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan RecognitionResumeRetryDelay = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan QueuedReplyPlaybackGap = TimeSpan.FromMilliseconds(500);
@@ -537,7 +538,8 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
             }
 
             await EnsureChatTransportAsync(runtimeCts.Token);
-            await StartRecognitionSessionAsync();
+            await StartRecognitionSessionAsync(updateListeningStatus: false);
+            await Task.Delay(InitialRecognitionReadyDelay, runtimeCts.Token);
 
             lock (_gate)
             {
@@ -551,6 +553,7 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
                 }
             }
 
+            _logger.Info($"Speech recognition warm-up completed ({InitialRecognitionReadyDelay.TotalMilliseconds:0}ms)");
             _logger.Info("Voice runtime started in mode TalkMode");
         }
         catch
@@ -688,7 +691,7 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
         return new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    private async Task StartRecognitionSessionAsync()
+    private async Task StartRecognitionSessionAsync(bool updateListeningStatus = true)
     {
         SpeechRecognizer? recognizer;
 
@@ -707,7 +710,7 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
         lock (_gate)
         {
             _recognitionActive = true;
-            if (_status.Running && !_awaitingReply && !_isSpeaking)
+            if (updateListeningStatus && _status.Running && !_awaitingReply && !_isSpeaking)
             {
                 _status = BuildRunningStatus(
                     VoiceActivationMode.TalkMode,

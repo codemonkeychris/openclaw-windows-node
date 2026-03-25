@@ -152,16 +152,18 @@ public class VoiceServiceTransportTests
     }
 
     [Theory]
-    [InlineData(SpeechRecognitionResultStatus.UserCanceled, false, false, false, false, true)]
-    [InlineData(SpeechRecognitionResultStatus.TimeoutExceeded, false, false, false, false, true)]
-    [InlineData(SpeechRecognitionResultStatus.Success, false, false, false, false, false)]
-    [InlineData(SpeechRecognitionResultStatus.UserCanceled, true, false, false, false, false)]
-    [InlineData(SpeechRecognitionResultStatus.UserCanceled, false, true, false, false, false)]
-    [InlineData(SpeechRecognitionResultStatus.UserCanceled, false, false, true, false, false)]
-    [InlineData(SpeechRecognitionResultStatus.UserCanceled, false, false, false, true, false)]
+    [InlineData(SpeechRecognitionResultStatus.UserCanceled, false, false, false, false, false, true)]
+    [InlineData(SpeechRecognitionResultStatus.TimeoutExceeded, false, false, false, false, false, true)]
+    [InlineData(SpeechRecognitionResultStatus.Success, false, false, false, false, false, false)]
+    [InlineData(SpeechRecognitionResultStatus.Success, false, true, false, false, false, true)]
+    [InlineData(SpeechRecognitionResultStatus.UserCanceled, true, false, false, false, false, false)]
+    [InlineData(SpeechRecognitionResultStatus.UserCanceled, false, false, true, false, false, false)]
+    [InlineData(SpeechRecognitionResultStatus.UserCanceled, false, false, false, true, false, false)]
+    [InlineData(SpeechRecognitionResultStatus.UserCanceled, false, false, false, false, true, false)]
     public void ShouldRebuildRecognitionAfterCompletion_OnlyRebuildsForDeafCanceledSessions(
         SpeechRecognitionResultStatus status,
         bool sessionHadActivity,
+        bool sessionHadCaptureSignal,
         bool restartInProgress,
         bool awaitingReply,
         bool isSpeaking,
@@ -173,9 +175,48 @@ public class VoiceServiceTransportTests
 
         var result = (bool)method.Invoke(
             null,
-            [status, sessionHadActivity, restartInProgress, awaitingReply, isSpeaking])!;
+            [status, sessionHadActivity, sessionHadCaptureSignal, restartInProgress, awaitingReply, isSpeaking])!;
 
         Assert.Equal(expected, result);
+    }
+
+    [Theory]
+    [InlineData(16000, 80, 1280)]
+    [InlineData(16000, 0, 1280)]
+    [InlineData(0, 80, 1280)]
+    [InlineData(48000, 20, 960)]
+    public void ResolveDesiredSamplesPerQuantum_UsesSpeechFriendlyDefaults(
+        int sampleRateHz,
+        int chunkMs,
+        uint expected)
+    {
+        var method = typeof(VoiceCaptureService).GetMethod(
+            "ResolveDesiredSamplesPerQuantum",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var result = (uint)method.Invoke(null, [sampleRateHz, chunkMs])!;
+
+        Assert.Equal(expected, result);
+    }
+
+    public static IEnumerable<object[]> PeakLevelCases()
+    {
+        yield return [new byte[] { 0, 0, 0, 0 }, 0f];
+        yield return [new byte[] { 0, 0, 0, 63 }, 0.5f];
+        yield return [new byte[] { 0, 0, 128, 63, 0, 0, 0, 191 }, 1f];
+    }
+
+    [Theory]
+    [MemberData(nameof(PeakLevelCases))]
+    public void ComputePeakLevel_FindsLargestAbsoluteFloatSample(byte[] data, float expected)
+    {
+        var method = typeof(VoiceCaptureService).GetMethod(
+            "ComputePeakLevel",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var result = (float)method.Invoke(null, [data])!;
+
+        Assert.Equal(expected, result, 3);
     }
 
     [Theory]

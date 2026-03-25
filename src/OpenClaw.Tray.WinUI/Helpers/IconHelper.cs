@@ -219,11 +219,10 @@ public static class IconHelper
                 break;
             case VoiceTrayIconState.Listening:
                 DrawHeadphones(graphics);
-                DrawMicrophone(graphics);
+                DrawHeadphoneWaves(graphics);
                 break;
             case VoiceTrayIconState.Speaking:
-                DrawHeadphones(graphics);
-                DrawSpeaker(graphics);
+                DrawMicrophone(graphics);
                 break;
         }
 
@@ -253,23 +252,16 @@ public static class IconHelper
         graphics.DrawLine(pen, 20, 21, 15, 19);
     }
 
-    private static void DrawSpeaker(Graphics graphics)
+    private static void DrawHeadphoneWaves(Graphics graphics)
     {
-        using var brush = new SolidBrush(Color.FromArgb(76, 175, 80));
-        using var pen = new Pen(Color.FromArgb(76, 175, 80), 2f);
-        using var thinPen = new Pen(Color.FromArgb(76, 175, 80), 1.5f);
+        using var wavePen = new Pen(Color.FromArgb(76, 175, 80), 2f);
+        using var accentPen = new Pen(Color.FromArgb(76, 175, 80), 1.5f);
 
-        var points = new[]
-        {
-            new Point(24, 17),
-            new Point(19, 20),
-            new Point(19, 24),
-            new Point(24, 27)
-        };
+        graphics.DrawArc(wavePen, 0, 12, 8, 8, 270, 180);
+        graphics.DrawArc(accentPen, 2, 14, 4, 4, 270, 180);
 
-        graphics.FillPolygon(brush, points);
-        graphics.DrawArc(pen, 22, 17, 6, 10, 300, 120);
-        graphics.DrawArc(thinPen, 21, 14, 10, 16, 300, 120);
+        graphics.DrawArc(wavePen, 24, 12, 8, 8, 90, 180);
+        graphics.DrawArc(accentPen, 26, 14, 4, 4, 90, 180);
     }
 
     private static Icon CreateIcon(Bitmap bitmap)

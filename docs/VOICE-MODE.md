@@ -1071,3 +1071,4 @@ Append one new line to this timeline for every future voice-mode commit.
 - `2026-03-25` Fixed overlapping Talk Mode recovery watchdogs so a new recognition session no longer launches duplicate deaf-recognizer recycle loops.
 - `2026-03-25` Fixed Talk Mode media playback failure handling so a failed reply no longer leaks an unobserved task exception after the reply audio arrives.
 - `2026-03-25` Generalized the catalog-driven WebSocket TTS client to support providers without explicit connect/start acknowledgements and switched ElevenLabs to the `stream-input` WebSocket API with default voice settings.
+- `2026-03-25` Reworked the dynamic tray icon language so listening shows activity waves around the headphones and speaking uses a microphone badge instead of a speaker icon.

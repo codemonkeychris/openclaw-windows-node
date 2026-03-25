@@ -778,7 +778,91 @@ The Windows node still keeps provider choice bounded:
 
 This keeps the provider surface narrow while still meeting the required MiniMax/ElevenLabs support direction.
 
+## Parity with macOS Node
+
+Status values used below:
+
+- `Supported`
+- `Partial`
+- `NotSupported (planned)`
+- `Exceeded*`
+
+| macOS feature | Current Windows state | Notes |
+|---|---|---|
+| Talk Mode continuous loop (`listen -> chat.send(main) -> wait -> speak`) | `Supported` | Windows Talk Mode uses direct `chat.send` on the active main session and loops back to listening after reply playback. |
+| Talk Mode sends after a short silence window | `Supported` | The current runtime finalizes on recognition pause and uses configurable Talk Mode silence settings. |
+| Talk Mode visible phase transitions (`Listening -> Thinking -> Speaking`) | `Partial` | Runtime states and tray icon changes exist, but there is no always-visible overlay yet. |
+| Talk Mode always-on overlay with click-to-stop / click-X controls | `NotSupported (planned)` | Windows currently has a tray icon, status window, and draft mirroring, but no overlay surface. |
+| Talk Mode writes replies into WebChat the same way typed chat does | `Partial` | Replies appear in WebChat through normal session updates, but Talk Mode uses direct send rather than a same-as-typing transport path. |
+| Talk Mode interrupt-on-speech / barge-in | `NotSupported (planned)` | Windows is still half-duplex during reply playback. |
+| Talk Mode voice directives in replies | `NotSupported (planned)` | Windows does not yet parse or apply the JSON voice directive line described in the Talk Mode docs. |
+| Talk Mode true streaming TTS playback | `NotSupported (planned)` | MiniMax uses WebSocket transport, but playback still waits for a complete playable stream. |
+| Talk Mode cloud TTS provider flexibility | `Exceeded*` | Windows already supports Windows built-in TTS plus catalog-driven cloud providers rather than being limited to a single provider path.[^parity-tts] |
+| Voice Wake wake-word runtime | `NotSupported (planned)` | `VoiceWake` remains a documented target mode, but there is no active wake-word runtime yet. |
+| Voice Wake push-to-talk capture | `NotSupported (planned)` | There is no Windows push-to-talk path yet. |
+| Voice Wake overlay with committed / volatile transcript states | `NotSupported (planned)` | No Voice Wake overlay exists on Windows yet. |
+| Voice Wake restart invariants when UI is dismissed | `NotSupported (planned)` | The macOS overlay-dismiss resilience behavior has no Windows equivalent yet because the overlay/runtime does not exist. |
+| Voice Wake forwarding to the active gateway / agent | `NotSupported (planned)` | Forwarding semantics are only implemented for Talk Mode today. |
+| Voice Wake machine-hint transcript prefixing | `NotSupported (planned)` | Windows does not currently prepend a machine hint on forwarded wake transcripts. |
+| Voice Wake mic picker, live level meter, trigger-word table, and tester | `NotSupported (planned)` | Windows has general voice settings and device lists, but not the Voice Wake-specific settings surface from macOS. |
+| Voice mic device selection | `Partial` | Selected output device is implemented; selected microphone binding exists in `AudioGraph`, but actual transcript generation still follows the Windows speech-input path. |
+| Voice Wake send / trigger chimes | `NotSupported (planned)` | Windows currently has no configurable trigger/send sounds. |
+
+[^parity-tts]: Windows supports provider-catalog TTS contracts with Windows built-in, MiniMax, and ElevenLabs entries today, whereas the documented macOS baseline is ElevenLabs-centric. Windows does not yet exceed macOS on true streaming playback latency because incremental playback is still pending.
+
 ## Feature List (Backlog)
+
+### Story: True selected-microphone transcription support
+
+Make actual STT transcription follow the selected microphone device, not just the `AudioGraph` capture path.
+
+Notes:
+
+- current Windows Talk Mode capture can bind to the selected mic through `VoiceCaptureService`
+- final transcript generation still follows the Windows speech-input path rather than the selected device id
+- the implementation should complete the planned `AudioGraph` -> `ISpeechToTextAdapter` migration so the chosen microphone controls the whole input pipeline
+
+### Story: Talk Mode overlay and visible phase parity
+
+Add a Talk Mode overlay that makes `Listening`, `Thinking`, and `Speaking` visible to the user in the same way the macOS experience does.
+
+Notes:
+
+- the current tray icon and status window are not equivalent to an always-visible Talk Mode surface
+- the overlay should expose phase transitions clearly and support later stop / dismiss controls
+- this should be designed alongside the existing compact voice-strip idea so the two UI surfaces do not conflict
+
+### Story: Talk Mode overlay controls
+
+Add explicit Talk Mode overlay controls for stopping speech playback and exiting Talk Mode.
+
+Notes:
+
+- macOS exposes click-to-stop and click-to-exit controls directly on the overlay
+- Windows currently requires tray or settings interaction instead
+- this should plug into the shared runtime control API rather than directly manipulating `VoiceService`
+
+### Story: Same-as-typing WebChat parity for Talk Mode
+
+Decide whether Windows Talk Mode should optionally route sent transcripts through a typed-chat equivalent path so WebChat behavior matches manual typing more closely.
+
+Notes:
+
+- current Windows Talk Mode intentionally uses direct `chat.send`
+- replies still appear in WebChat through session updates, but the send path is not literally the same as typed WebChat submission
+- this should only be revisited if the memory / prompt-shaping issues can be fixed without reintroducing transport fragility
+
+### Story: Voice directives in replies
+
+Support the Talk Mode reply-prefix JSON directive described in the OpenClaw docs.
+
+Notes:
+
+- parse only the first non-empty reply line
+- strip the directive before playback
+- support per-reply `once: true` and persistent default updates
+- supported keys should at least include voice, model, and the documented voice-shaping parameters
+- provider-specific validation should happen through the provider contract layer where possible
 
 ### Story: Support non-local (or non-Windows, local) STT providers
 
@@ -804,6 +888,88 @@ Notes:
   - a policy for whether interrupt speech cancels the current reply or queues behind it
   - additional runtime control/status so the UI can show when barge-in is armed
 - this should be treated as a separate engineering phase, not a small extension of the current Talk Mode runtime
+
+### Story: Voice Wake wake-word runtime
+
+Implement the actual Windows Voice Wake runtime.
+
+Notes:
+
+- this should cover wake-word listening, trigger detection, post-trigger capture, silence finalization, hard-stop protection, and debounce between sessions
+- the runtime should restart cleanly after send and should remain armed whenever Voice Wake is enabled and permissions are available
+- the implementation should be based on the planned `AudioGraph` capture pipeline rather than a second unrelated microphone stack
+
+### Story: Voice Wake push-to-talk
+
+Implement a Windows push-to-talk capture path alongside wake-word activation.
+
+Notes:
+
+- this should support press-to-capture, release-to-finalize semantics
+- it should pause the wake runtime while push-to-talk capture is active, then resume it cleanly afterward
+- Windows-specific hotkey and permissions behavior should be documented explicitly once chosen
+
+### Story: Voice Wake overlay lifecycle
+
+Add the Windows Voice Wake overlay and harden its lifecycle so dismissing or hiding the UI can never leave the wake runtime dead.
+
+Notes:
+
+- support committed and volatile transcript presentation
+- manual dismiss must never block recognizer restart
+- overlay and runtime should be coordinated through a session controller rather than direct UI coupling
+
+### Story: Voice Wake settings parity
+
+Add the user-facing Voice Wake settings surface that exists on macOS.
+
+Notes:
+
+- include language and mic pickers
+- include a live level meter
+- include trigger-word editing or table management
+- include a local-only tester that does not forward
+- preserve the chosen mic if it disconnects, surface a disconnected hint, and fall back to the system default until it returns
+
+### Story: Voice Wake sounds and chimes
+
+Add configurable trigger and send sounds for Voice Wake.
+
+Notes:
+
+- trigger and send events should be independently configurable
+- support `No Sound`
+- keep the sound implementation distinct from assistant reply playback
+
+### Story: Voice Wake forwarding semantics
+
+Implement the documented Voice Wake forwarding behavior.
+
+Notes:
+
+- forwarded transcripts should go to the active gateway / agent path
+- reply delivery and logging behavior should match the rest of the node session model
+- the forwarding path should be resilient even when UI surfaces are closed
+
+### Story: Voice Wake machine-hint prefixing
+
+Implement the documented transcript prefixing / machine-hint behavior for forwarded Voice Wake utterances.
+
+Notes:
+
+- the prefixing rule should be explicit and testable
+- both wake-word and push-to-talk paths should share the same forwarding helper
+
+### Story: Voice Wake trigger tuning and pause semantics
+
+Implement the documented Voice Wake trigger-gap, silence-window, hard-stop, and debounce semantics.
+
+Notes:
+
+- include the wake-word gap behavior before command capture begins
+- support distinct silence windows for trigger-only vs flowing speech cases
+- include a hard maximum capture duration
+- expose the tuning through voice settings rather than hard-coded constants alone
 
 
 ### Story: Compact Voice Status Strip

@@ -712,6 +712,19 @@ Notes:
 - the runtime control surface should drive this window rather than the window manipulating `VoiceService` internals directly
 - if implemented later, the strip should use the shared runtime control API described elsewhere in this document.
 
+### Story: True streaming TTS playback
+
+Start speaking assistant replies from the first usable audio chunk instead of waiting for a complete playable stream.
+
+Notes:
+
+- the current implementation uses WebSocket transport for MiniMax, but still buffers the entire audio response before playback begins
+- `firstChunk=...ms` in the log is currently provider-chunk arrival time, not actual speech-start time
+- implement a playback path that can consume incremental audio data as it arrives from the provider
+- the provider catalog contract should remain transport-driven and provider-agnostic, so streaming behavior should be expressed through the existing TTS contract model rather than hard-coded for MiniMax
+- preserve the existing queued reply behavior, skip support, and late-reply handling while switching playback to progressive output
+- add timing logs that separate `firstChunk`, `playbackStart`, and `playbackEnd` so latency improvements are measurable
+
 ## Commit Timeline
 
 Append one new line to this timeline for every future voice-mode commit.
@@ -756,3 +769,4 @@ Append one new line to this timeline for every future voice-mode commit.
 - `2026-03-25` Fixed the recognizer watchdog so a stalled Talk Mode session is actually canceled and restarted instead of logging a recycle and then remaining deaf.
 - `2026-03-25` Rebuilt the Windows speech recognizer after repeated deaf `UserCanceled` and watchdog-recycle failures instead of repeatedly restarting the same broken recognizer instance.
 - `2026-03-25` Fixed the tray-chat draft mirror so it clears immediately after direct send, and primed media playback before `Play()` so spoken replies stop clipping their opening syllables.
+- `2026-03-25` Added a backlog story for true streaming TTS playback, including provider-catalog and latency-measurement notes.

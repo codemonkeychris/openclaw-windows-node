@@ -181,6 +181,44 @@ public class VoiceServiceTransportTests
     }
 
     [Theory]
+    [InlineData(0.029f, false)]
+    [InlineData(0.03f, true)]
+    [InlineData(0.08f, true)]
+    public void ShouldTreatCaptureSignalAsSpeech_RequiresSpeechLikePeak(float peakLevel, bool expected)
+    {
+        var method = typeof(VoiceService).GetMethod(
+            "ShouldTreatCaptureSignalAsSpeech",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var result = (bool)method.Invoke(null, [peakLevel])!;
+
+        Assert.Equal(expected, result);
+    }
+
+    [Theory]
+    [InlineData(false, false, 1, false)]
+    [InlineData(false, false, 3, false)]
+    [InlineData(false, false, 4, true)]
+    [InlineData(true, false, 4, false)]
+    [InlineData(false, true, 4, false)]
+    public void ShouldArmRecognitionRecoveryAfterCaptureSignal_RequiresBurstWithoutRecognitionActivity(
+        bool recognitionSessionHadActivity,
+        bool recognitionHealthCheckArmed,
+        int recognitionSignalBurstCount,
+        bool expected)
+    {
+        var method = typeof(VoiceService).GetMethod(
+            "ShouldArmRecognitionRecoveryAfterCaptureSignal",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var result = (bool)method.Invoke(
+            null,
+            [recognitionSessionHadActivity, recognitionHealthCheckArmed, recognitionSignalBurstCount])!;
+
+        Assert.Equal(expected, result);
+    }
+
+    [Theory]
     [InlineData(16000, 80, 1280)]
     [InlineData(16000, 0, 1280)]
     [InlineData(0, 80, 1280)]

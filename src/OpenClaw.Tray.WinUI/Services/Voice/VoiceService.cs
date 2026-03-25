@@ -52,6 +52,7 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
     private bool _recognitionActive;
     private int _recognitionSessionGeneration;
     private bool _recognitionHealthCheckArmed;
+    private bool _recognitionRestartInProgress;
     private bool _awaitingReply;
     private bool _isSpeaking;
     private bool _replyPlaybackLoopActive;
@@ -1355,6 +1356,20 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
                utcNow <= lateReplyGraceUntilUtc.Value;
     }
 
+    internal static bool ShouldRestartRecognitionAfterCompletion(
+        bool running,
+        VoiceActivationMode mode,
+        bool restartInProgress,
+        bool awaitingReply,
+        bool isSpeaking)
+    {
+        return running &&
+               mode == VoiceActivationMode.TalkMode &&
+               !restartInProgress &&
+               !awaitingReply &&
+               !isSpeaking;
+    }
+
     private static string CreateReplyPreview(string text)
     {
         var trimmed = text.Trim();
@@ -1412,6 +1427,7 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
         {
             CancellationToken token;
             var shouldRestart = false;
+            var restartInProgress = false;
 
             lock (_gate)
             {
@@ -1421,14 +1437,25 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
                 }
 
                 _recognitionActive = false;
-                _recognitionHealthCheckArmed =
-                    args.Status == SpeechRecognitionResultStatus.UserCanceled ||
-                    args.Status == SpeechRecognitionResultStatus.TimeoutExceeded;
+                restartInProgress = _recognitionRestartInProgress;
+                if (restartInProgress)
+                {
+                    _recognitionRestartInProgress = false;
+                    _recognitionHealthCheckArmed = false;
+                }
+                else
+                {
+                    _recognitionHealthCheckArmed =
+                        args.Status == SpeechRecognitionResultStatus.UserCanceled ||
+                        args.Status == SpeechRecognitionResultStatus.TimeoutExceeded;
+                }
                 token = _runtimeCts.Token;
-                shouldRestart = _status.Running &&
-                                _status.Mode == VoiceActivationMode.TalkMode &&
-                                !_awaitingReply &&
-                                !_isSpeaking;
+                shouldRestart = ShouldRestartRecognitionAfterCompletion(
+                    _status.Running,
+                    _status.Mode,
+                    restartInProgress,
+                    _awaitingReply,
+                    _isSpeaking);
             }
 
             _logger.Warn($"Speech recognition session completed with status {args.Status}; restart={shouldRestart}");
@@ -1521,6 +1548,7 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
             recognizer = _speechRecognizer;
             _speechRecognizer = null;
             _recognitionActive = false;
+            _recognitionRestartInProgress = false;
 
             synthesizer = _speechSynthesizer;
             _speechSynthesizer = null;
@@ -1702,6 +1730,7 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
 
                 if (shouldRecycle)
                 {
+                    _recognitionRestartInProgress = true;
                     _status = BuildRunningStatus(
                         VoiceActivationMode.TalkMode,
                         _status.SessionKey,
@@ -1717,6 +1746,7 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
 
             _logger.Warn(
                 $"Speech recognition session produced no hypotheses/results within {RecognitionHealthCheckDelay.TotalSeconds:0}s; recycling session");
+            await StopRecognitionSessionAsync();
             await ResumeRecognitionSessionAsync(cancellationToken, "recognition health check");
         }
         catch (OperationCanceledException)
@@ -1724,6 +1754,10 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
         }
         catch (Exception ex)
         {
+            lock (_gate)
+            {
+                _recognitionRestartInProgress = false;
+            }
             _logger.Warn($"Speech recognition health check failed: {ex.Message}");
         }
     }

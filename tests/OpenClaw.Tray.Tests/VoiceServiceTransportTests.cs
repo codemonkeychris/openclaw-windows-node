@@ -123,6 +123,32 @@ public class VoiceServiceTransportTests
         Assert.Equal(expected, result);
     }
 
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    public void ShouldRestartRecognitionAfterCompletion_SuppressesControlledRecycle(
+        bool restartInProgress,
+        bool awaitingReply,
+        bool expected)
+    {
+        var method = typeof(VoiceService).GetMethod(
+            "ShouldRestartRecognitionAfterCompletion",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var result = (bool)method.Invoke(
+            null,
+            [
+                true,
+                VoiceActivationMode.TalkMode,
+                restartInProgress,
+                awaitingReply,
+                false
+            ])!;
+
+        Assert.Equal(expected, result);
+    }
+
     private static MethodInfo GetMethod()
     {
         return typeof(VoiceService).GetMethod(

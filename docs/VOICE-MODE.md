@@ -753,3 +753,4 @@ Append one new line to this timeline for every future voice-mode commit.
 - `2026-03-25` Added a recognizer health-check watchdog so Talk Mode recycles a started-but-deaf recognition session instead of waiting minutes for Windows to cancel it.
 - `2026-03-25` Reverted Talk Mode to a single direct `chat.send` path and reduced the tray chat integration back to draft mirroring only.
 - `2026-03-25` Added a configurable tray-chat display filter for injected `<relevant-memories>` blocks.
+- `2026-03-25` Fixed the recognizer watchdog so a stalled Talk Mode session is actually canceled and restarted instead of logging a recycle and then remaining deaf.

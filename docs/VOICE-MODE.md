@@ -12,40 +12,6 @@ This document defines the voice subsystem for the Windows node only. It introduc
 - Implement `MiniMax` TTS and `ElevenLabs` TTS as required non-Windows providers after the Windows baseline
 - Reuse the existing node capability pattern instead of introducing a parallel control path
 
-## Feature List
-
-### Story: Full-duplex / barge-in Talk Mode
-
-Allow the node to keep listening while it is speaking, so the user can interrupt or interleave speech without waiting for reply playback to finish.
-
-Notes:
-
-- the current Windows implementation is half-duplex: recognition is stopped or ignored while a reply is being spoken
-- a true implementation will require a lower-level audio pipeline rather than only `SpeechRecognizer` plus `SpeechSynthesizer`
-- practical requirements are likely to include:
-  - microphone capture that can remain active during playback
-  - acoustic echo cancellation / echo suppression
-  - barge-in detection and playback interruption rules
-  - a policy for whether interrupt speech cancels the current reply or queues behind it
-  - additional runtime control/status so the UI can show when barge-in is armed
-- this should be treated as a separate engineering phase, not a small extension of the current Talk Mode runtime
-
-### Story: Compact Voice Status Strip
-
-Add an optional tiny always-on-top voice strip window for Talk Mode.
-
-Notes:
-
-- user-configurable show / hide
-- intended to be a minimal one-line-high display with a small amount of padding
-- should show:
-  - current voice state
-  - rolling live transcript while listening
-  - rolling assistant text while speaking
-  - a skip / cut-off control while speaking
-- the runtime control surface should drive this window rather than the window manipulating `VoiceService` internals directly
-- if implemented later, the strip should use the shared runtime control API described below
-
 ## Non-Goals
 
 - True full-duplex or chunk-streaming audio transport between node and gateway
@@ -90,6 +56,7 @@ The contracts and persisted settings now use `VoiceWake` and `TalkMode` as well.
 - OpenClaw returns the assistant reply as normal chat output
 - the node performs local TTS playback of that reply
 - assistant replies are queued locally and spoken sequentially, with a short 500 ms pause between queued replies so overlapping responses are not lost
+- if a reply arrives after the normal 45-second wait timeout, the tray still accepts and speaks that late reply for a short bounded grace window so slow upstream responses are not silently lost
 
 To avoid obvious duplicate sends from the Windows recognizer, exact duplicate final transcripts are suppressed within a short 750 ms window.
 
@@ -706,3 +673,87 @@ The Windows node still keeps provider choice bounded:
 - OpenClaw still owns the conversation/session flow
 
 This keeps the provider surface narrow while still meeting the required MiniMax/ElevenLabs support direction.
+
+## Feature List (Backlog)
+
+### Story: Support non-local (or non-Windows, local) STT providers
+
+Allow the user to select a non-local STT provider like OpenAI Whisper, or a local non-Windows 
+
+- Windows built-in local STT is working pretty well, however users should have the choice to utilise:
+  - a non-local STT provider
+  - a local non-Windows STT provider
+
+We're all about the choices, Baby!
+
+
+### Story: Full-duplex / barge-in Talk Mode
+
+Allow the node to keep listening while it is speaking, so the user can interrupt or interleave speech without waiting for reply playback to finish.
+
+Notes:
+
+- the current Windows implementation is half-duplex: recognition is stopped or ignored while a reply is being spoken
+- a true implementation will require a lower-level audio pipeline rather than only `SpeechRecognizer` plus `SpeechSynthesizer`
+- practical requirements are likely to include:
+  - microphone capture that can remain active during playback
+  - acoustic echo cancellation / echo suppression
+  - barge-in detection and playback interruption rules
+  - a policy for whether interrupt speech cancels the current reply or queues behind it
+  - additional runtime control/status so the UI can show when barge-in is armed
+- this should be treated as a separate engineering phase, not a small extension of the current Talk Mode runtime
+
+
+### Story: Compact Voice Status Strip
+
+Add an optional tiny always-on-top voice strip window for Talk Mode.
+
+Notes:
+
+- user-configurable show / hide
+- intended to be a minimal one-line-high display with a small amount of padding
+- should show:
+  - current voice state
+  - rolling live transcript while listening
+  - rolling assistant text while speaking
+  - a skip / cut-off control while speaking
+- the runtime control surface should drive this window rather than the window manipulating `VoiceService` internals directly
+- if implemented later, the strip should use the shared runtime control API described elsewhere in this document.
+
+## Commit Timeline
+
+Append one new line to this timeline for every future voice-mode commit.
+
+- `2026-03-21` `be624fe` Added the initial Windows voice-mode foundation and the first AlwaysOn runtime.
+- `2026-03-23` `f40ffc3` Fixed voice chat transport and reply routing.
+- `2026-03-23` `a81d31e` Added configurable voice settings and the setup UI.
+- `2026-03-23` `197a89b` Integrated always-on voice mode with the tray chat workflow.
+- `2026-03-23` `1340bde` Fixed tray voice startup and chat window submission.
+- `2026-03-23` `aed8cb8` Removed the stale always-on autosubmit setting.
+- `2026-03-23` `25dd06b` Added focused coordinator coverage for tray voice chat.
+- `2026-03-23` `1336472` Addressed review findings and hardened the voice runtime.
+- `2026-03-23` `0f1028a` Documented MiniMax and ElevenLabs as required provider support.
+- `2026-03-23` `2c8a46d` Hardened tray chat voice message handling.
+- `2026-03-23` `fdbf48e` Fixed voice transport connection task reuse.
+- `2026-03-23` `b556c64` Grouped voice runtime services under `Services/Voice`.
+- `2026-03-23` `7f31c12` Implemented MiniMax TTS for voice mode.
+- `2026-03-23` `c64f168` Added editable TTS provider settings to voice mode.
+- `2026-03-23` `907a1a0` Moved voice settings into the main settings window.
+- `2026-03-23` `6dba89b` Extracted the hosted voice settings panel from the settings window.
+- `2026-03-23` `ded41a2` Generalized cloud TTS providers through catalog contracts.
+- `2026-03-23` `199e534` Renamed voice modes to `VoiceWake` and `TalkMode`.
+- `2026-03-23` `47efc3e` Moved voice settings below the node mode toggle.
+- `2026-03-23` `85d7b90` Made cloud TTS voice settings fully catalog-driven.
+- `2026-03-23` `c1cc0ff` Shipped the voice provider catalog with the tray app.
+- `2026-03-23` `83f05ee` Instrumented voice output latency and reduced TTS buffering.
+- `2026-03-23` `d137409` Tightened talk-mode speech-recognition filtering.
+- `2026-03-23` `05d7bae` Switched MiniMax TTS to the `api-uw` endpoint.
+- `2026-03-23` `5efcebf` Added catalog-driven MiniMax WebSocket TTS.
+- `2026-03-23` `45ff8f8` Fixed voice restart after settings save.
+- `2026-03-23` `71d0de4` Fixed MiniMax WebSocket voice playback routing.
+- `2026-03-23` `91ccec3` Added dynamic tray icons for voice states.
+- `2026-03-23` `2ff57fc` Added pre-response voice latency timing logs.
+- `2026-03-23` `ffa3fa2` Kept Talk Mode alive after input failures.
+- `2026-03-25` `c3ded30` Queued Talk Mode replies for sequential playback.
+- `2026-03-25` `82e2958` Added voice control and configuration APIs.
+- `2026-03-25` `06d508f` Accepted late Talk Mode replies after timeout.

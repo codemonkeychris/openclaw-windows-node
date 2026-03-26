@@ -5,6 +5,7 @@ using OpenClawTray.Helpers;
 using OpenClawTray.Services;
 using OpenClawTray.Services.Voice;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -22,12 +23,15 @@ public sealed partial class WebChatWindow : WindowEx
     private readonly string _token;
     private bool _stripInjectedMemories;
     private string _pendingVoiceDraft = string.Empty;
+    private readonly List<VoiceConversationTurnMirror> _pendingVoiceTurns = [];
     
     // Store event handlers for cleanup
     private TypedEventHandler<CoreWebView2, CoreWebView2NavigationCompletedEventArgs>? _navigationCompletedHandler;
     private TypedEventHandler<CoreWebView2, CoreWebView2NavigationStartingEventArgs>? _navigationStartingHandler;
     
     public bool IsClosed { get; private set; }
+
+    private sealed record VoiceConversationTurnMirror(string Direction, string Text);
 
 private const string TrayVoiceIntegrationScript = """
 (() => {
@@ -57,6 +61,67 @@ private const string TrayVoiceIntegrationScript = """
       el.dispatchEvent(new InputEvent('input', { bubbles: true, data: value, inputType: 'insertText' }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
     }
+  };
+  let desiredTurns = [];
+  const ensureTurnsHost = () => {
+    if (!document.body) return null;
+    let host = document.getElementById('openclaw-tray-voice-turns');
+    if (host) return host;
+    host = document.createElement('div');
+    host.id = 'openclaw-tray-voice-turns';
+    Object.assign(host.style, {
+      position: 'fixed',
+      left: '16px',
+      right: '16px',
+      bottom: '88px',
+      zIndex: '2147483000',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '8px',
+      pointerEvents: 'none',
+      alignItems: 'stretch'
+    });
+    document.body.appendChild(host);
+    return host;
+  };
+  const renderTurns = () => {
+    const host = ensureTurnsHost();
+    if (!host) return false;
+    host.innerHTML = '';
+    const items = Array.isArray(desiredTurns) ? desiredTurns : [];
+    if (items.length === 0) {
+      host.style.display = 'none';
+      return true;
+    }
+    host.style.display = 'flex';
+    for (const item of items) {
+      if (!item || !item.text) continue;
+      const row = document.createElement('div');
+      Object.assign(row.style, {
+        display: 'flex',
+        justifyContent: item.direction === 'incoming' ? 'flex-start' : 'flex-end'
+      });
+      const bubble = document.createElement('div');
+      bubble.textContent = item.text;
+      Object.assign(bubble.style, {
+        maxWidth: 'min(70vw, 720px)',
+        padding: '10px 14px',
+        borderRadius: '16px',
+        boxShadow: '0 8px 20px rgba(15, 23, 42, 0.12)',
+        border: item.direction === 'incoming'
+          ? '1px solid rgba(148, 163, 184, 0.35)'
+          : '1px solid rgba(59, 130, 246, 0.35)',
+        background: item.direction === 'incoming'
+          ? 'rgba(255, 255, 255, 0.94)'
+          : 'rgba(219, 234, 254, 0.96)',
+        color: '#0f172a',
+        font: '500 14px/1.4 \"Segoe UI\", sans-serif',
+        whiteSpace: 'pre-wrap'
+      });
+      row.appendChild(bubble);
+      host.appendChild(row);
+    }
+    return true;
   };
   const applyDraftIfPossible = () => {
     const composer = findComposer();
@@ -95,6 +160,7 @@ private const string TrayVoiceIntegrationScript = """
       refreshScheduled = false;
       cleanTextNodes();
       applyDraftIfPossible();
+      renderTurns();
     });
   };
   const observer = new MutationObserver(() => refreshView());
@@ -117,6 +183,10 @@ private const string TrayVoiceIntegrationScript = """
       stripInjectedMemories = !!enabled;
       refreshView();
       return true;
+    },
+    setTurns(turns) {
+      desiredTurns = Array.isArray(turns) ? turns : [];
+      return renderTurns();
     },
     clearDraft() {
       desiredDraft = '';
@@ -378,6 +448,25 @@ private const string TrayVoiceIntegrationScript = """
         await RefreshTrayVoiceDomStateAsync();
     }
 
+    public async Task AppendVoiceConversationTurnAsync(VoiceConversationTurnEventArgs args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+
+        if (args.Direction != VoiceConversationDirection.Outgoing ||
+            string.IsNullOrWhiteSpace(args.Message))
+        {
+            return;
+        }
+
+        _pendingVoiceTurns.Add(new VoiceConversationTurnMirror("outgoing", args.Message.Trim()));
+        if (_pendingVoiceTurns.Count > 6)
+        {
+            _pendingVoiceTurns.RemoveAt(0);
+        }
+
+        await RefreshTrayVoiceDomStateAsync();
+    }
+
     public async Task SetStripInjectedMemoriesEnabledAsync(bool enabled)
     {
         _stripInjectedMemories = enabled;
@@ -403,6 +492,10 @@ private const string TrayVoiceIntegrationScript = """
                 : $"window.__openClawTrayVoice?.setDraft?.({draftJson});";
 
             await WebView.CoreWebView2.ExecuteScriptAsync(script);
+
+            var turnsJson = JsonSerializer.Serialize(_pendingVoiceTurns);
+            await WebView.CoreWebView2.ExecuteScriptAsync(
+                $"window.__openClawTrayVoice?.setTurns?.({turnsJson});");
         }
         catch (Exception ex)
         {

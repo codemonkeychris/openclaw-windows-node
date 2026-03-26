@@ -55,4 +55,5 @@ public interface IVoiceChatWindow
 {
     bool IsClosed { get; }
     Task UpdateVoiceTranscriptDraftAsync(string text, bool clear);
+    Task AppendVoiceConversationTurnAsync(VoiceConversationTurnEventArgs args);
 }

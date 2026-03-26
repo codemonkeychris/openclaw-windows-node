@@ -154,6 +154,7 @@ public sealed class VoiceSettingsUpdateArgs
 public static class VoiceProviderIds
 {
     public const string Windows = "windows";
+    public const string HttpWs = "http-ws";
     public const string FoundryLocal = "foundry-local";
     public const string OpenAiWhisper = "openai-whisper";
     public const string ElevenLabsSpeechToText = "elevenlabs-stt";

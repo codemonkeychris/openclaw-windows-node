@@ -95,6 +95,7 @@ public sealed partial class VoiceSettingsPanel : UserControl
         _voiceProviderConfigurationDraft = _settings.VoiceProviderConfiguration.Clone();
         LoadVoiceProviders();
         SelectVoiceMode(_settings.Voice.Mode);
+        UpdateVoiceSelectionDescriptions();
         VoiceConversationToastsCheckBox.IsChecked = _settings.Voice.ShowConversationToasts;
         VoiceStripInjectedMemoriesCheckBox.IsChecked = _settings.Voice.StripInjectedMemoriesInChat;
         UpdateVoiceProviderSettingsEditor();
@@ -124,6 +125,8 @@ public sealed partial class VoiceSettingsPanel : UserControl
 
         _ = EnsureSelectableProviderSelection(VoiceSpeechToTextProviderComboBox, _speechToTextOptions, ref _activeSttProviderId);
         _ = EnsureSelectableProviderSelection(VoiceTextToSpeechProviderComboBox, _textToSpeechOptions, ref _activeTtsProviderId);
+        UpdateVoiceSelectionDescriptions();
+        UpdateDeviceSelectionAvailability();
     }
 
     private async Task LoadVoiceDevicesAsync()
@@ -160,6 +163,7 @@ public sealed partial class VoiceSettingsPanel : UserControl
             VoiceInputDeviceComboBox.SelectedItem = _inputOptions.FirstOrDefault(o => o.DeviceId == _settings.Voice.InputDeviceId) ?? _inputOptions[0];
             VoiceOutputDeviceComboBox.SelectedItem = _outputOptions.FirstOrDefault(o => o.DeviceId == _settings.Voice.OutputDeviceId) ?? _outputOptions[0];
 
+            UpdateDeviceSelectionAvailability();
             UpdateVoiceSettingsInfo();
         }
         catch (Exception ex)
@@ -200,6 +204,25 @@ public sealed partial class VoiceSettingsPanel : UserControl
         };
     }
 
+    private void UpdateVoiceSelectionDescriptions()
+    {
+        VoiceModeDescriptionTextBlock.Text = GetVoiceModeDescription(GetSelectedVoiceMode());
+        VoiceSpeechToTextProviderDescriptionTextBlock.Text =
+            (VoiceSpeechToTextProviderComboBox.SelectedItem as VoiceProviderOption)?.Description ?? string.Empty;
+        VoiceTextToSpeechProviderDescriptionTextBlock.Text =
+            (VoiceTextToSpeechProviderComboBox.SelectedItem as VoiceProviderOption)?.Description ?? string.Empty;
+    }
+
+    private static string GetVoiceModeDescription(VoiceActivationMode mode)
+    {
+        return mode switch
+        {
+            VoiceActivationMode.TalkMode => "Continuous conversation mode. Listen after replies and send each completed utterance as a chat turn.",
+            VoiceActivationMode.VoiceWake => "Wake-word mode. Stays idle until the hotword is detected, then starts listening for a request.",
+            _ => "Voice features stay off until you start them manually."
+        };
+    }
+
     private void UpdateVoiceSettingsInfo()
     {
         var stt = (VoiceSpeechToTextProviderComboBox.SelectedItem as VoiceProviderOption)?.Name ?? "Windows Speech Recognition";
@@ -222,6 +245,30 @@ public sealed partial class VoiceSettingsPanel : UserControl
 
         VoiceSettingsInfoTextBlock.Text =
             $"Mode: {VoiceDisplayHelper.GetModeLabel(GetSelectedVoiceMode())}. STT: {stt}. TTS: {tts}. Listen: {input}. Talk: {output}. Chat cleanup: {(VoiceStripInjectedMemoriesCheckBox.IsChecked ?? true ? "on" : "off")}.{fallbackNotice}";
+    }
+
+    private void UpdateDeviceSelectionAvailability()
+    {
+        var lockToDefaultDevices = string.Equals(
+            (VoiceSpeechToTextProviderComboBox.SelectedItem as VoiceProviderOption)?.Id,
+            VoiceProviderIds.Windows,
+            StringComparison.OrdinalIgnoreCase);
+
+        if (lockToDefaultDevices)
+        {
+            if (_inputOptions.Count > 0)
+            {
+                VoiceInputDeviceComboBox.SelectedItem = _inputOptions[0];
+            }
+
+            if (_outputOptions.Count > 0)
+            {
+                VoiceOutputDeviceComboBox.SelectedItem = _outputOptions[0];
+            }
+        }
+
+        VoiceInputDeviceComboBox.IsEnabled = !lockToDefaultDevices;
+        VoiceOutputDeviceComboBox.IsEnabled = !lockToDefaultDevices;
     }
 
     private void UpdateVoiceProviderSettingsEditor()
@@ -344,6 +391,7 @@ public sealed partial class VoiceSettingsPanel : UserControl
 
     private void OnVoiceModeChanged(object sender, SelectionChangedEventArgs e)
     {
+        UpdateVoiceSelectionDescriptions();
         UpdateVoiceSettingsInfo();
     }
 
@@ -362,6 +410,8 @@ public sealed partial class VoiceSettingsPanel : UserControl
         }
 
         CaptureSelectedVoiceProviderSettings();
+        UpdateVoiceSelectionDescriptions();
+        UpdateDeviceSelectionAvailability();
         UpdateVoiceProviderSettingsEditor();
         UpdateVoiceSettingsInfo();
     }

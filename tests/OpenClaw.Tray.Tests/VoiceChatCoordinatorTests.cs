@@ -91,6 +91,50 @@ public class VoiceChatCoordinatorTests
         Assert.Equal(VoiceConversationDirection.Incoming, received.Direction);
     }
 
+    [Fact]
+    public async Task ConversationTurn_IsMirroredToAttachedWindow()
+    {
+        var runtime = new FakeVoiceRuntime();
+        using var coordinator = new VoiceChatCoordinator(runtime, new ImmediateDispatcher());
+        var window = new FakeVoiceChatWindow();
+        coordinator.AttachWindow(window);
+
+        runtime.RaiseConversationTurn(new VoiceConversationTurnEventArgs
+        {
+            Direction = VoiceConversationDirection.Outgoing,
+            Message = "hello from voice",
+            SessionKey = "main"
+        });
+        await Task.Yield();
+
+        Assert.Equal("hello from voice", window.LastTurnMessage);
+        Assert.Equal(VoiceConversationDirection.Outgoing, window.LastTurnDirection);
+        Assert.Equal(1, window.TurnCallCount);
+    }
+
+    [Fact]
+    public async Task AttachWindow_ReplaysBufferedConversationTurns()
+    {
+        var runtime = new FakeVoiceRuntime();
+        using var coordinator = new VoiceChatCoordinator(runtime, new ImmediateDispatcher());
+
+        runtime.RaiseConversationTurn(new VoiceConversationTurnEventArgs
+        {
+            Direction = VoiceConversationDirection.Outgoing,
+            Message = "replay this",
+            SessionKey = "main"
+        });
+        await Task.Yield();
+
+        var window = new FakeVoiceChatWindow();
+        coordinator.AttachWindow(window);
+        await Task.Yield();
+
+        Assert.Equal("replay this", window.LastTurnMessage);
+        Assert.Equal(VoiceConversationDirection.Outgoing, window.LastTurnDirection);
+        Assert.Equal(1, window.TurnCallCount);
+    }
+
     private sealed class ImmediateDispatcher : IUiDispatcher
     {
         public bool TryEnqueue(Action callback)
@@ -128,12 +172,23 @@ public class VoiceChatCoordinatorTests
         public string LastDraftText { get; private set; } = string.Empty;
         public bool LastDraftClear { get; private set; }
         public int UpdateCallCount { get; private set; }
+        public string LastTurnMessage { get; private set; } = string.Empty;
+        public VoiceConversationDirection? LastTurnDirection { get; private set; }
+        public int TurnCallCount { get; private set; }
 
         public Task UpdateVoiceTranscriptDraftAsync(string text, bool clear)
         {
             UpdateCallCount++;
             LastDraftText = text;
             LastDraftClear = clear;
+            return Task.CompletedTask;
+        }
+
+        public Task AppendVoiceConversationTurnAsync(VoiceConversationTurnEventArgs args)
+        {
+            TurnCallCount++;
+            LastTurnMessage = args.Message ?? string.Empty;
+            LastTurnDirection = args.Direction;
             return Task.CompletedTask;
         }
     }

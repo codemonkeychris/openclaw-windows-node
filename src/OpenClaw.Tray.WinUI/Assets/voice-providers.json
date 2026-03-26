@@ -5,7 +5,16 @@
       "name": "Windows Speech Recognition",
       "runtime": "windows",
       "enabled": true,
-      "description": "Built-in Windows.Media speech recognition without AudioGraph."
+      "description": "Built-in Windows.Media speech recognition, half-duplex, non-streamed."
+    },
+    {
+      "id": "http-ws",
+      "name": "http/ws",
+      "runtime": "streaming",
+      "enabled": false,
+      "visibleInSettings": true,
+      "selectable": false,
+      "description": "Will support most cloud and local stand-alone models full or half-duplex, streaming."
     },
     {
       "id": "foundry-local",
@@ -113,7 +122,7 @@
       "enabled": false,
       "visibleInSettings": true,
       "selectable": false,
-      "description": "Local embedded STT route for user-supplied sherpa-onnx model bundles.",
+      "description": "Can load a variety of models including OpenAI/Whisper, full-duplex, streaming.",
       "settings": [
         {
           "key": "modelPath",

@@ -14,20 +14,56 @@
         <TextBlock Text="VOICE" Style="{StaticResource CaptionTextBlockStyle}"
                    Foreground="#E74C3C" FontWeight="Bold"/>
 
-        <ComboBox x:Name="VoiceModeComboBox" Header="Mode" SelectionChanged="OnVoiceModeChanged">
-            <ComboBoxItem Content="Off" Tag="Off"/>
-            <ComboBoxItem Content="Voice Wake" Tag="VoiceWake" IsEnabled="False"/>
-            <ComboBoxItem Content="Talk Mode" Tag="TalkMode"/>
-        </ComboBox>
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*"/>
+                <ColumnDefinition Width="3*"/>
+            </Grid.ColumnDefinitions>
+            <ComboBox x:Name="VoiceModeComboBox" Header="Mode" SelectionChanged="OnVoiceModeChanged">
+                <ComboBoxItem Content="Off" Tag="Off"/>
+                <ComboBoxItem Content="Voice Wake" Tag="VoiceWake" IsEnabled="False"/>
+                <ComboBoxItem Content="Talk Mode" Tag="TalkMode"/>
+            </ComboBox>
+            <TextBlock x:Name="VoiceModeDescriptionTextBlock"
+                       Grid.Column="1"
+                       VerticalAlignment="Center"
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       TextWrapping="Wrap"/>
+        </Grid>
 
-        <ComboBox x:Name="VoiceSpeechToTextProviderComboBox"
-                  Header="Speech to text provider"
-                  ItemTemplate="{StaticResource VoiceProviderOptionTemplate}"
-                  SelectionChanged="OnVoiceProviderChanged"/>
-        <ComboBox x:Name="VoiceTextToSpeechProviderComboBox"
-                  Header="Text to speech provider"
-                  ItemTemplate="{StaticResource VoiceProviderOptionTemplate}"
-                  SelectionChanged="OnVoiceProviderChanged"/>
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*"/>
+                <ColumnDefinition Width="3*"/>
+            </Grid.ColumnDefinitions>
+            <ComboBox x:Name="VoiceSpeechToTextProviderComboBox"
+                      Header="Speech to text provider"
+                      ItemTemplate="{StaticResource VoiceProviderOptionTemplate}"
+                      SelectionChanged="OnVoiceProviderChanged"/>
+            <TextBlock x:Name="VoiceSpeechToTextProviderDescriptionTextBlock"
+                       Grid.Column="1"
+                       VerticalAlignment="Center"
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       TextWrapping="Wrap"/>
+        </Grid>
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*"/>
+                <ColumnDefinition Width="3*"/>
+            </Grid.ColumnDefinitions>
+            <ComboBox x:Name="VoiceTextToSpeechProviderComboBox"
+                      Header="Text to speech provider"
+                      ItemTemplate="{StaticResource VoiceProviderOptionTemplate}"
+                      SelectionChanged="OnVoiceProviderChanged"/>
+            <TextBlock x:Name="VoiceTextToSpeechProviderDescriptionTextBlock"
+                       Grid.Column="1"
+                       VerticalAlignment="Center"
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       TextWrapping="Wrap"/>
+        </Grid>
 
         <StackPanel x:Name="VoiceTtsProviderSettingsPanel" Spacing="8" Visibility="Collapsed">
             <TextBlock x:Name="VoiceTtsProviderSettingsTitleTextBlock"

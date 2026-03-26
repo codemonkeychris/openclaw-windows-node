@@ -51,8 +51,9 @@ The contracts and persisted settings now use `VoiceWake` and `TalkMode` as well.
 `TalkMode` follows the current talk-mode style control flow:
 
 - the node captures audio locally
-- local or remote speech recognition turns that audio into transcript text
+- local speech recognition turns that audio into transcript text on the active STT route
 - interim hypotheses are surfaced live, but only final `Medium` or `High` confidence recognizer results are submitted
+- if speech activity ends without any usable final transcript surviving, Talk Mode now clears the draft and gives a short local repeat prompt instead of silently doing nothing
 - the tray chat window, when open, mirrors the live transcript draft locally
 - the finalized transcript is always sent to OpenClaw via direct `chat.send` on the main session
 - OpenClaw returns the assistant reply as normal chat output
@@ -227,12 +228,28 @@ The built-in default for both is `windows`.
 Runtime behavior in the current phase:
 
 - `windows` is implemented for both STT and TTS
+- the `windows` STT route is a pure `Windows.Media.SpeechRecognition.SpeechRecognizer` path with no `AudioGraph` dependency
+- `windows` STT is currently treated as `half-duplex, non-streamed`
+- `http/ws` is now catalogued as a visible "coming soon" STT slot for generic streaming HTTP/WebSocket adapters
 - built-in catalog entries exist for both `minimax` and `elevenlabs` TTS
 - `minimax` defaults to `speech-2.8-turbo` and `English_MatureBoss` at present
 - `minimax` now uses a catalog-driven WebSocket contract for synchronous TTS
 - `elevenlabs` defaults to `eleven_multilingual_v2` and voice id `6aDn1KB0hjpdcocrUkmq (Tiffany)` for now
-- non-Windows providers can be selected and persisted now
+- only currently usable providers are selectable in Settings
+- `sherpa-onnx` is visible but greyed out as a coming-soon local embedded route
 - unsupported providers fall back to Windows at runtime with a status warning
+
+### Settings Surface Notes
+
+The Settings panel now shows short inline descriptions for:
+
+- the selected voice mode
+- the selected speech-to-text provider
+- the selected text-to-speech provider
+
+Those provider descriptions are drawn directly from the provider catalog.
+
+When `Windows Speech Recognition` is selected for STT, the Settings panel now forces both audio device pickers back to the system defaults and greys them out. That matches the current Windows route limitation and avoids advertising per-device microphone routing that does not exist on this route yet.
 
 ### Provider Catalog
 
@@ -250,7 +267,16 @@ Example:
       "name": "Windows Speech Recognition",
       "runtime": "windows",
       "enabled": true,
-      "description": "Built-in Windows dictation and speech recognition."
+      "description": "Built-in Windows.Media speech recognition, half-duplex, non-streamed."
+    },
+    {
+      "id": "http-ws",
+      "name": "http/ws",
+      "runtime": "streaming",
+      "enabled": false,
+      "visibleInSettings": true,
+      "selectable": false,
+      "description": "Will support most cloud and local stand-alone models full or half-duplex, streaming."
     },
   ],
   "textToSpeechProviders": [
@@ -819,7 +845,7 @@ Status values used below:
 | Voice Wake forwarding to the active gateway / agent | `NotSupported (planned)` | Forwarding semantics are only implemented for Talk Mode today. |
 | Voice Wake machine-hint transcript prefixing | `NotSupported (planned)` | Windows does not currently prepend a machine hint on forwarded wake transcripts. |
 | Voice Wake mic picker, live level meter, trigger-word table, and tester | `NotSupported (planned)` | Windows has general voice settings and device lists, but not the Voice Wake-specific settings surface from macOS. |
-| Voice mic device selection | `Partial` | Selected output device is implemented; selected microphone binding exists in `AudioGraph`, but actual transcript generation still follows the Windows speech-input path. |
+| Voice mic device selection | `Partial` | When `Windows Speech Recognition` is selected, Settings now locks both audio device pickers to the system defaults. Explicit per-device transcription routing remains a future AudioGraph/streaming-route feature. |
 | Voice Wake send / trigger chimes | `NotSupported (planned)` | Windows currently has no configurable trigger/send sounds. |
 
 ## Feature List (Backlog)
@@ -833,6 +859,16 @@ Notes:
 - current Windows Talk Mode capture can bind to the selected mic through `VoiceCaptureService`
 - final transcript generation still follows the Windows speech-input path rather than the selected device id
 - the implementation should complete the planned `AudioGraph` -> `ISpeechToTextAdapter` migration so the chosen microphone controls the whole input pipeline
+
+### Story: Generic http/ws streaming STT provider
+
+Implement the catalog-driven generic HTTP/WebSocket STT adapter shown in Settings as `http/ws (coming soon)`.
+
+Notes:
+
+- this route is intended to support a broad class of stand-alone cloud or local streaming models
+- it should remain visible but disabled in Settings until the adapter contract is real and testable
+- it should become the shared base path for provider-specific adapters when a generic contract is sufficient
 
 ### Story: Talk Mode overlay and visible phase parity
 
@@ -1120,3 +1156,4 @@ Append one new line to this timeline for every future voice-mode commit.
 - `2026-03-26` Merged the latest `feature/voice-mode` updates and added explicit recognizer completion decision logging so Talk Mode now records why a stopped Windows speech session did or did not restart/rebuild after idle or watchdog completions.
 - `2026-03-26` Cleared the controlled-restart latch as soon as a new recognition session successfully starts, and on failed resume attempts, so Talk Mode does not get stranded in `controlled-restart-in-progress` after an idle/deaf recognizer recycle.
 - `2026-03-26` Split Talk Mode STT startup into explicit route classes: the built-in `windows` provider now uses a pure `Windows.Media` path with no AudioGraph, while `foundry-local` and `sherpa-onnx` are separated into dedicated future AudioGraph/embedded route classes instead of sharing the Windows pipeline.
+- `2026-03-26` Updated Talk Mode to mirror sent voice turns back into the tray chat window, clear stale low-confidence drafts, locally reprompt when speech activity ends without a usable transcript, surface provider and mode descriptions in Settings, expose `http/ws` and `sherpa-onnx` as coming-soon STT catalog entries, and lock device selection to system defaults when Windows Speech Recognition is selected.

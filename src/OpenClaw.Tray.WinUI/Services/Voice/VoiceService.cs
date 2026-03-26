@@ -30,14 +30,11 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
     private static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan LateReplyGraceWindow = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan InitialRecognitionReadyDelay = TimeSpan.FromMilliseconds(500);
-    private static readonly TimeSpan RecognitionSpeechMismatchDelay = TimeSpan.FromSeconds(4);
-    private static readonly TimeSpan RecognitionPostSpeechSilenceBeforeRecycle = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan DuplicateTranscriptWindow = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan HypothesisPromotionWindow = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RecognitionResumeRetryDelay = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan QueuedReplyPlaybackGap = TimeSpan.FromMilliseconds(500);
-    private const int RecognitionSignalBurstThreshold = 4;
-    private const float RecognitionSignalPeakThreshold = 0.03f;
+    private const string LowConfidenceRepeatPrompt = "Sorry, I didn't catch that. Could you say it again?";
 
     private readonly IOpenClawLogger _logger;
     private readonly SettingsManager _settings;
@@ -59,10 +56,7 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
     private int _recognitionSessionGeneration;
     private bool _recognitionSessionHadActivity;
     private bool _recognitionSessionHadCaptureSignal;
-    private bool _recognitionHealthCheckArmed;
     private bool _recognitionRestartInProgress;
-    private int _recognitionSignalBurstCount;
-    private DateTime _lastCaptureSignalUtc;
     private bool _awaitingReply;
     private bool _isSpeaking;
     private bool _replyPlaybackLoopActive;
@@ -532,11 +526,6 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
             player = new MediaPlayer();
             await ConfigurePlaybackOutputDeviceAsync(player, settings);
 
-            if (captureService != null)
-            {
-                captureService.SignalDetected += OnCaptureSignalDetected;
-            }
-
             if (recognizer != null)
             {
                 recognizer.HypothesisGenerated += OnSpeechHypothesisGenerated;
@@ -579,7 +568,6 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
             {
                 if (captureService != null)
                 {
-                    captureService.SignalDetected -= OnCaptureSignalDetected;
                     try { await captureService.StopAsync(); } catch { }
                     try { await captureService.DisposeAsync(); } catch { }
                 }
@@ -732,9 +720,6 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
             runtimeToken = _runtimeCts.Token;
             generation = ++_recognitionSessionGeneration;
             _recognitionSessionHadCaptureSignal = false;
-            _recognitionSignalBurstCount = 0;
-            _lastCaptureSignalUtc = default;
-            _recognitionHealthCheckArmed = false;
         }
 
         _logger.Info("Starting speech recognition session");
@@ -811,8 +796,11 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
 
             if (transitionedToListening)
             {
+                var readinessSource = captureService == null
+                    ? "recognizer warm-up completed"
+                    : "capture frames observed and recognizer warm-up completed";
                 _logger.Info(
-                    $"Speech pipeline ready; capture frames observed and recognizer warm-up completed ({InitialRecognitionReadyDelay.TotalMilliseconds:0}ms)");
+                    $"Speech pipeline ready; {readinessSource} ({InitialRecognitionReadyDelay.TotalMilliseconds:0}ms)");
             }
         }
         catch (OperationCanceledException)
@@ -899,10 +887,7 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
             }
 
             _recognitionActive = false;
-            _recognitionHealthCheckArmed = false;
             _recognitionSessionHadCaptureSignal = false;
-            _recognitionSignalBurstCount = 0;
-            _lastCaptureSignalUtc = default;
             _lastHypothesisText = null;
             _lastHypothesisUtc = default;
         }
@@ -1016,9 +1001,6 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
             text = args.Hypothesis?.Text?.Trim();
             sessionKey = GetCurrentVoiceSessionKey();
             _recognitionSessionHadActivity = true;
-            _recognitionHealthCheckArmed = false;
-            _recognitionSignalBurstCount = 0;
-            _lastCaptureSignalUtc = default;
             _lastHypothesisText = text;
             _lastHypothesisUtc = DateTime.UtcNow;
             if (_status.State != VoiceRuntimeState.RecordingUtterance)
@@ -1070,10 +1052,7 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
             _lastTranscript = text;
             _lastTranscriptUtc = DateTime.UtcNow;
             _recognitionSessionHadActivity = true;
-            _recognitionHealthCheckArmed = false;
             _recognitionSessionHadCaptureSignal = false;
-            _recognitionSignalBurstCount = 0;
-            _lastCaptureSignalUtc = default;
             _lastHypothesisText = null;
             _lastHypothesisUtc = default;
             cancellationToken = _runtimeCts.Token;
@@ -1262,42 +1241,48 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
                 return;
             }
 
-            RaiseConversationTurn(VoiceConversationDirection.Incoming, text, args.SessionKey);
-
-            lock (_gate)
-            {
-                _pendingAssistantReplies.Enqueue((text, args.SessionKey));
-                _logger.Info($"Voice reply queued: pending={_pendingAssistantReplies.Count}");
-
-                if (!_replyPlaybackLoopActive)
-                {
-                    _replyPlaybackLoopActive = true;
-                    _isSpeaking = true;
-                    _status = BuildRunningStatus(
-                        VoiceActivationMode.TalkMode,
-                        _status.SessionKey,
-                        VoiceRuntimeState.PlayingResponse,
-                        _status.LastError);
-                    shouldStartPlaybackLoop = true;
-                }
-                else
-                {
-                    _status = BuildRunningStatus(
-                        VoiceActivationMode.TalkMode,
-                        _status.SessionKey,
-                        VoiceRuntimeState.PlayingResponse,
-                        _status.LastError);
-                }
-            }
-
-            if (shouldStartPlaybackLoop)
-            {
-                _ = ProcessQueuedAssistantRepliesAsync();
-            }
+            QueueAssistantReplyForPlayback(text, args.SessionKey, out shouldStartPlaybackLoop);
         }
         catch (Exception ex)
         {
             _logger.Warn($"Voice chat message handler failed: {ex.Message}");
+        }
+    }
+
+    private void QueueAssistantReplyForPlayback(string text, string? sessionKey, out bool shouldStartPlaybackLoop)
+    {
+        shouldStartPlaybackLoop = false;
+        RaiseConversationTurn(VoiceConversationDirection.Incoming, text, sessionKey);
+
+        lock (_gate)
+        {
+            _pendingAssistantReplies.Enqueue((text, sessionKey));
+            _logger.Info($"Voice reply queued: pending={_pendingAssistantReplies.Count}");
+
+            if (!_replyPlaybackLoopActive)
+            {
+                _replyPlaybackLoopActive = true;
+                _isSpeaking = true;
+                _status = BuildRunningStatus(
+                    VoiceActivationMode.TalkMode,
+                    _status.SessionKey,
+                    VoiceRuntimeState.PlayingResponse,
+                    _status.LastError);
+                shouldStartPlaybackLoop = true;
+            }
+            else
+            {
+                _status = BuildRunningStatus(
+                    VoiceActivationMode.TalkMode,
+                    _status.SessionKey,
+                    VoiceRuntimeState.PlayingResponse,
+                    _status.LastError);
+            }
+        }
+
+        if (shouldStartPlaybackLoop)
+        {
+            _ = ProcessQueuedAssistantRepliesAsync();
         }
     }
 
@@ -1550,8 +1535,7 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
             return false;
         }
 
-        return sessionHadCaptureSignal ||
-               status == SpeechRecognitionResultStatus.UserCanceled;
+        return status == SpeechRecognitionResultStatus.UserCanceled;
     }
 
     internal static string DescribeRecognitionCompletionRebuildDecision(
@@ -1590,8 +1574,8 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
         return status switch
         {
             SpeechRecognitionResultStatus.UserCanceled => "user-canceled-without-activity",
-            SpeechRecognitionResultStatus.TimeoutExceeded => "timeout-without-capture-signal",
-            _ => $"status={status}"
+            SpeechRecognitionResultStatus.TimeoutExceeded => "disabled-official-session-restart-only (status=TimeoutExceeded)",
+            _ => $"disabled-official-session-restart-only (status={status})"
         };
     }
 
@@ -1642,6 +1626,28 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
         }
 
         return latestHypothesisText.Trim();
+    }
+
+    internal static bool ShouldClearTranscriptDraftAfterCompletion(
+        bool awaitingReply,
+        bool isSpeaking,
+        bool usedFallbackTranscript)
+    {
+        return !awaitingReply &&
+               !isSpeaking &&
+               !usedFallbackTranscript;
+    }
+
+    internal static bool ShouldRepromptAfterIncompleteRecognition(
+        bool sessionHadActivity,
+        bool awaitingReply,
+        bool isSpeaking,
+        bool usedFallbackTranscript)
+    {
+        return sessionHadActivity &&
+               !awaitingReply &&
+               !isSpeaking &&
+               !usedFallbackTranscript;
     }
 
     private static string CreateReplyPreview(string text)
@@ -1738,6 +1744,9 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
             var restartDecisionReason = string.Empty;
             var rebuildDecisionReason = string.Empty;
             string? fallbackText = null;
+            string? sessionKey = null;
+            var shouldClearDraft = false;
+            var shouldReprompt = false;
 
             lock (_gate)
             {
@@ -1754,19 +1763,13 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
                     _lastHypothesisText,
                     _lastHypothesisUtc,
                     DateTime.UtcNow);
+                sessionKey = GetCurrentVoiceSessionKey();
                 _recognitionSessionHadActivity = false;
                 _recognitionSessionHadCaptureSignal = false;
-                _recognitionSignalBurstCount = 0;
-                _lastCaptureSignalUtc = default;
                 restartInProgress = _recognitionRestartInProgress;
                 if (restartInProgress)
                 {
                     _recognitionRestartInProgress = false;
-                    _recognitionHealthCheckArmed = false;
-                }
-                else
-                {
-                    _recognitionHealthCheckArmed = false;
                 }
                 token = _runtimeCts.Token;
                 shouldRestart = ShouldRestartRecognitionAfterCompletion(
@@ -1795,6 +1798,15 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
                     restartInProgress,
                     _awaitingReply,
                     _isSpeaking);
+                shouldClearDraft = ShouldClearTranscriptDraftAfterCompletion(
+                    _awaitingReply,
+                    _isSpeaking,
+                    !string.IsNullOrWhiteSpace(fallbackText));
+                shouldReprompt = ShouldRepromptAfterIncompleteRecognition(
+                    sessionHadActivity,
+                    _awaitingReply,
+                    _isSpeaking,
+                    !string.IsNullOrWhiteSpace(fallbackText));
             }
 
             _logger.Warn(
@@ -1808,6 +1820,18 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
                 _logger.Warn(
                     $"Voice recognition completed without a final result; promoting recent hypothesis as fallback transcript: {fallbackText}");
                 await HandleRecognizedTextAsync(fallbackText);
+                return;
+            }
+
+            if (shouldClearDraft)
+            {
+                RaiseTranscriptDraft(string.Empty, sessionKey, clear: true);
+            }
+
+            if (shouldReprompt)
+            {
+                _logger.Warn("Voice recognition session ended after speech activity but without a usable transcript; prompting user to repeat.");
+                QueueAssistantReplyForPlayback(LowConfidenceRepeatPrompt, sessionKey, out _);
                 return;
             }
 
@@ -1897,8 +1921,6 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
             _recognitionActive = false;
             _recognitionSessionHadActivity = false;
             _recognitionSessionHadCaptureSignal = false;
-            _recognitionSignalBurstCount = 0;
-            _lastCaptureSignalUtc = default;
             _recognitionRestartInProgress = false;
             _lastHypothesisText = null;
             _lastHypothesisUtc = default;
@@ -1925,7 +1947,6 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
 
         if (captureService != null)
         {
-            captureService.SignalDetected -= OnCaptureSignalDetected;
             try { await captureService.StopAsync(); } catch { }
             try { await captureService.DisposeAsync(); } catch { }
         }
@@ -2137,72 +2158,6 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
         }
     }
 
-    internal static bool ShouldTreatCaptureSignalAsSpeech(float peakLevel)
-    {
-        return peakLevel >= RecognitionSignalPeakThreshold;
-    }
-
-    internal static bool ShouldArmRecognitionRecoveryAfterCaptureSignal(
-        bool recognitionSessionHadActivity,
-        bool recognitionHealthCheckArmed,
-        int recognitionSignalBurstCount)
-    {
-        return !recognitionSessionHadActivity &&
-               !recognitionHealthCheckArmed &&
-               recognitionSignalBurstCount >= RecognitionSignalBurstThreshold;
-    }
-
-    internal static bool ShouldDelayRecognitionRecycleForOngoingSpeech(DateTime lastCaptureSignalUtc, DateTime utcNow)
-    {
-        return lastCaptureSignalUtc != default &&
-               utcNow - lastCaptureSignalUtc < RecognitionPostSpeechSilenceBeforeRecycle;
-    }
-
-    private void OnCaptureSignalDetected(object? sender, VoiceCaptureSignalEventArgs args)
-    {
-        var shouldStartRecoveryWatchdog = false;
-        var generation = 0;
-        CancellationToken cancellationToken = default;
-
-        lock (_gate)
-        {
-            if (_runtimeCts == null ||
-                !_status.Running ||
-                _status.Mode != VoiceActivationMode.TalkMode ||
-                !_recognitionActive ||
-                _awaitingReply ||
-                _isSpeaking)
-            {
-                return;
-            }
-
-            if (!ShouldTreatCaptureSignalAsSpeech(args.PeakLevel))
-            {
-                return;
-            }
-
-            _recognitionSessionHadCaptureSignal = true;
-            _recognitionSignalBurstCount++;
-            _lastCaptureSignalUtc = DateTime.UtcNow;
-
-            if (ShouldArmRecognitionRecoveryAfterCaptureSignal(
-                    _recognitionSessionHadActivity,
-                    _recognitionHealthCheckArmed,
-                    _recognitionSignalBurstCount))
-            {
-                _recognitionHealthCheckArmed = true;
-                generation = _recognitionSessionGeneration;
-                cancellationToken = _runtimeCts.Token;
-                shouldStartRecoveryWatchdog = true;
-            }
-        }
-
-        if (shouldStartRecoveryWatchdog)
-        {
-            _ = MonitorRecognitionSessionHealthAsync(generation, cancellationToken);
-        }
-    }
-
     private async Task RebuildSpeechRecognizerAsync(string reason, CancellationToken cancellationToken)
     {
         SpeechRecognizer? oldRecognizer;
@@ -2224,9 +2179,6 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
             _recognitionActive = false;
             _recognitionSessionHadActivity = false;
             _recognitionSessionHadCaptureSignal = false;
-            _recognitionSignalBurstCount = 0;
-            _lastCaptureSignalUtc = default;
-            _recognitionHealthCheckArmed = false;
         }
 
         if (oldRecognizer != null)
@@ -2291,8 +2243,6 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
             captureService = _voiceCaptureService;
             settings = Clone(_settings.Voice);
             _recognitionSessionHadCaptureSignal = false;
-            _recognitionSignalBurstCount = 0;
-            _lastCaptureSignalUtc = default;
         }
 
         if (captureService == null)
@@ -2303,106 +2253,6 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
         cancellationToken.ThrowIfCancellationRequested();
         await captureService.StartAsync(settings, cancellationToken);
         _logger.Info($"Voice capture graph rebuilt ({reason})");
-    }
-
-    private async Task MonitorRecognitionSessionHealthAsync(int generation, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await Task.Delay(RecognitionSpeechMismatchDelay, cancellationToken);
-
-            bool shouldRecycle;
-            bool sawCaptureSignal;
-            int signalBurstCount;
-            DateTime lastCaptureSignalUtc;
-
-            while (true)
-            {
-                shouldRecycle = false;
-                sawCaptureSignal = false;
-                signalBurstCount = 0;
-                lastCaptureSignalUtc = default;
-
-                lock (_gate)
-                {
-                    sawCaptureSignal = _recognitionSessionHadCaptureSignal;
-                    signalBurstCount = _recognitionSignalBurstCount;
-                    lastCaptureSignalUtc = _lastCaptureSignalUtc;
-                    shouldRecycle =
-                        _recognitionHealthCheckArmed &&
-                        sawCaptureSignal &&
-                        _recognitionActive &&
-                        _runtimeCts != null &&
-                        !_runtimeCts.IsCancellationRequested &&
-                        _status.Running &&
-                        _status.Mode == VoiceActivationMode.TalkMode &&
-                        !_awaitingReply &&
-                        !_isSpeaking &&
-                        generation == _recognitionSessionGeneration;
-                }
-
-                if (!shouldRecycle)
-                {
-                    return;
-                }
-
-                if (!ShouldDelayRecognitionRecycleForOngoingSpeech(lastCaptureSignalUtc, DateTime.UtcNow))
-                {
-                    break;
-                }
-
-                var remainingDelay = RecognitionPostSpeechSilenceBeforeRecycle - (DateTime.UtcNow - lastCaptureSignalUtc);
-                if (remainingDelay < TimeSpan.FromMilliseconds(50))
-                {
-                    remainingDelay = TimeSpan.FromMilliseconds(50);
-                }
-
-                await Task.Delay(remainingDelay, cancellationToken);
-            }
-
-            lock (_gate)
-            {
-                if (!(_recognitionHealthCheckArmed &&
-                      _recognitionActive &&
-                      _runtimeCts != null &&
-                      !_runtimeCts.IsCancellationRequested &&
-                      _status.Running &&
-                      _status.Mode == VoiceActivationMode.TalkMode &&
-                      !_awaitingReply &&
-                      !_isSpeaking &&
-                      generation == _recognitionSessionGeneration))
-                {
-                    return;
-                }
-
-                _recognitionHealthCheckArmed = false;
-                _recognitionRestartInProgress = true;
-                _status = BuildRunningStatus(
-                    VoiceActivationMode.TalkMode,
-                    _status.SessionKey,
-                    VoiceRuntimeState.Arming,
-                    "Speech recognizer stalled; restarting listening.");
-            }
-
-            _logger.Warn(
-                $"Speech recognizer heard sustained capture audio but produced no recognition activity within {RecognitionSpeechMismatchDelay.TotalSeconds:0}s and after post-speech silence; recycling session (captureSignal={sawCaptureSignal}, signalBursts={signalBurstCount})");
-            await StopRecognitionSessionAsync();
-            await ResumeRecognitionSessionAsync(
-                cancellationToken,
-                "capture signal without recognition activity",
-                rebuildRecognizer: sawCaptureSignal);
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (Exception ex)
-        {
-            lock (_gate)
-            {
-                _recognitionRestartInProgress = false;
-            }
-            _logger.Warn($"Speech recognition health check failed: {ex.Message}");
-        }
     }
 
     private VoiceStatusInfo BuildStoppedStatus(string? sessionKey, string? reason)

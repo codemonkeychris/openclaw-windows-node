@@ -181,12 +181,12 @@ public class VoiceServiceTransportTests
     [InlineData(SpeechRecognitionResultStatus.UserCanceled, false, false, false, false, false, true)]
     [InlineData(SpeechRecognitionResultStatus.TimeoutExceeded, false, false, false, false, false, false)]
     [InlineData(SpeechRecognitionResultStatus.Success, false, false, false, false, false, false)]
-    [InlineData(SpeechRecognitionResultStatus.Success, false, true, false, false, false, true)]
+    [InlineData(SpeechRecognitionResultStatus.Success, false, true, false, false, false, false)]
     [InlineData(SpeechRecognitionResultStatus.UserCanceled, true, false, false, false, false, false)]
     [InlineData(SpeechRecognitionResultStatus.UserCanceled, false, false, true, false, false, false)]
     [InlineData(SpeechRecognitionResultStatus.UserCanceled, false, false, false, true, false, false)]
     [InlineData(SpeechRecognitionResultStatus.UserCanceled, false, false, false, false, true, false)]
-    public void ShouldRebuildRecognitionAfterCompletion_OnlyRebuildsForDeafCanceledSessions(
+    public void ShouldRebuildRecognitionAfterCompletion_RebuildsOnlyForUserCanceledWithoutActivity(
         SpeechRecognitionResultStatus status,
         bool sessionHadActivity,
         bool sessionHadCaptureSignal,
@@ -209,8 +209,8 @@ public class VoiceServiceTransportTests
     [Theory]
     [InlineData(SpeechRecognitionResultStatus.TimeoutExceeded, false, true, false, false, false, "capture-signal-without-recognition")]
     [InlineData(SpeechRecognitionResultStatus.UserCanceled, false, false, false, false, false, "user-canceled-without-activity")]
-    [InlineData(SpeechRecognitionResultStatus.TimeoutExceeded, false, false, false, false, false, "timeout-without-capture-signal")]
-    [InlineData(SpeechRecognitionResultStatus.Success, false, false, false, false, false, "status=Success")]
+    [InlineData(SpeechRecognitionResultStatus.TimeoutExceeded, false, false, false, false, false, "disabled-official-session-restart-only (status=TimeoutExceeded)")]
+    [InlineData(SpeechRecognitionResultStatus.Success, false, false, false, false, false, "disabled-official-session-restart-only (status=Success)")]
     [InlineData(SpeechRecognitionResultStatus.TimeoutExceeded, true, true, false, false, false, "session-had-activity")]
     [InlineData(SpeechRecognitionResultStatus.TimeoutExceeded, false, true, true, false, false, "controlled-restart-in-progress")]
     [InlineData(SpeechRecognitionResultStatus.TimeoutExceeded, false, true, false, true, false, "awaiting-reply")]
@@ -231,62 +231,6 @@ public class VoiceServiceTransportTests
         var result = (string)method.Invoke(
             null,
             [status, sessionHadActivity, sessionHadCaptureSignal, restartInProgress, awaitingReply, isSpeaking])!;
-
-        Assert.Equal(expected, result);
-    }
-
-    [Theory]
-    [InlineData(0.029f, false)]
-    [InlineData(0.03f, true)]
-    [InlineData(0.08f, true)]
-    public void ShouldTreatCaptureSignalAsSpeech_RequiresSpeechLikePeak(float peakLevel, bool expected)
-    {
-        var method = typeof(VoiceService).GetMethod(
-            "ShouldTreatCaptureSignalAsSpeech",
-            BindingFlags.NonPublic | BindingFlags.Static)!;
-
-        var result = (bool)method.Invoke(null, [peakLevel])!;
-
-        Assert.Equal(expected, result);
-    }
-
-    [Theory]
-    [InlineData(false, false, 1, false)]
-    [InlineData(false, false, 3, false)]
-    [InlineData(false, false, 4, true)]
-    [InlineData(true, false, 4, false)]
-    [InlineData(false, true, 4, false)]
-    public void ShouldArmRecognitionRecoveryAfterCaptureSignal_RequiresBurstWithoutRecognitionActivity(
-        bool recognitionSessionHadActivity,
-        bool recognitionHealthCheckArmed,
-        int recognitionSignalBurstCount,
-        bool expected)
-    {
-        var method = typeof(VoiceService).GetMethod(
-            "ShouldArmRecognitionRecoveryAfterCaptureSignal",
-            BindingFlags.NonPublic | BindingFlags.Static)!;
-
-        var result = (bool)method.Invoke(
-            null,
-            [recognitionSessionHadActivity, recognitionHealthCheckArmed, recognitionSignalBurstCount])!;
-
-        Assert.Equal(expected, result);
-    }
-
-    [Theory]
-    [InlineData(0, true)]
-    [InlineData(500, true)]
-    [InlineData(749, true)]
-    [InlineData(750, false)]
-    [InlineData(1200, false)]
-    public void ShouldDelayRecognitionRecycleForOngoingSpeech_RequiresShortRecentSignal(int elapsedMs, bool expected)
-    {
-        var method = typeof(VoiceService).GetMethod(
-            "ShouldDelayRecognitionRecycleForOngoingSpeech",
-            BindingFlags.NonPublic | BindingFlags.Static)!;
-        var now = new DateTime(2026, 3, 25, 21, 36, 35, DateTimeKind.Utc);
-
-        var result = (bool)method.Invoke(null, [now.AddMilliseconds(-elapsedMs), now])!;
 
         Assert.Equal(expected, result);
     }
@@ -373,6 +317,52 @@ public class VoiceServiceTransportTests
         var result = (string?)method.Invoke(
             null,
             [sessionHadActivity, hypothesis, now.AddSeconds(-hypothesisAgeSeconds), now]);
+
+        Assert.Equal(expected, result);
+    }
+
+    [Theory]
+    [InlineData(false, false, false, true)]
+    [InlineData(true, false, false, false)]
+    [InlineData(false, true, false, false)]
+    [InlineData(false, false, true, false)]
+    public void ShouldClearTranscriptDraftAfterCompletion_ClearsOnlyWhenNoReplyOrFallbackInFlight(
+        bool awaitingReply,
+        bool isSpeaking,
+        bool usedFallbackTranscript,
+        bool expected)
+    {
+        var method = typeof(VoiceService).GetMethod(
+            "ShouldClearTranscriptDraftAfterCompletion",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var result = (bool)method.Invoke(
+            null,
+            [awaitingReply, isSpeaking, usedFallbackTranscript])!;
+
+        Assert.Equal(expected, result);
+    }
+
+    [Theory]
+    [InlineData(true, false, false, false, true)]
+    [InlineData(false, false, false, false, false)]
+    [InlineData(true, true, false, false, false)]
+    [InlineData(true, false, true, false, false)]
+    [InlineData(true, false, false, true, false)]
+    public void ShouldRepromptAfterIncompleteRecognition_OnlyPromptsWhenSpeechWasHeardButNothingUsableSurvived(
+        bool sessionHadActivity,
+        bool awaitingReply,
+        bool isSpeaking,
+        bool usedFallbackTranscript,
+        bool expected)
+    {
+        var method = typeof(VoiceService).GetMethod(
+            "ShouldRepromptAfterIncompleteRecognition",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var result = (bool)method.Invoke(
+            null,
+            [sessionHadActivity, awaitingReply, isSpeaking, usedFallbackTranscript])!;
 
         Assert.Equal(expected, result);
     }

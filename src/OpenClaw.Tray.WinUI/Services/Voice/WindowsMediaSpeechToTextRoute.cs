@@ -8,6 +8,9 @@ namespace OpenClawTray.Services.Voice;
 
 internal sealed class WindowsMediaSpeechToTextRoute : IVoiceSpeechToTextRoute
 {
+    private static readonly TimeSpan InitialSilenceTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan BabbleTimeout = TimeSpan.FromSeconds(4);
+
     private readonly IOpenClawLogger _logger;
 
     public WindowsMediaSpeechToTextRoute(IOpenClawLogger logger)
@@ -34,8 +37,8 @@ internal sealed class WindowsMediaSpeechToTextRoute : IVoiceSpeechToTextRoute
     {
         var recognizer = new SpeechRecognizer();
         recognizer.Timeouts.EndSilenceTimeout = TimeSpan.FromMilliseconds(settings.TalkMode.EndSilenceMs);
-        recognizer.Timeouts.InitialSilenceTimeout = TimeSpan.FromSeconds(10);
-        recognizer.Timeouts.BabbleTimeout = TimeSpan.FromSeconds(4);
+        recognizer.Timeouts.InitialSilenceTimeout = InitialSilenceTimeout;
+        recognizer.Timeouts.BabbleTimeout = BabbleTimeout;
         recognizer.Constraints.Add(new SpeechRecognitionTopicConstraint(SpeechRecognitionScenario.Dictation, "always-on-dictation"));
 
         var compilation = await recognizer.CompileConstraintsAsync();
@@ -45,7 +48,8 @@ internal sealed class WindowsMediaSpeechToTextRoute : IVoiceSpeechToTextRoute
             throw new InvalidOperationException($"Speech recognizer unavailable: {compilation.Status}");
         }
 
-        _logger.Info($"Speech recognizer compiled successfully ({compilation.Status})");
+        _logger.Info(
+            $"Speech recognizer compiled successfully ({compilation.Status}); endSilenceMs={recognizer.Timeouts.EndSilenceTimeout.TotalMilliseconds:0}; initialSilenceMs={recognizer.Timeouts.InitialSilenceTimeout.TotalMilliseconds:0}; babbleMs={recognizer.Timeouts.BabbleTimeout.TotalMilliseconds:0}");
         return recognizer;
     }
 }

@@ -15,6 +15,7 @@ public sealed partial class VoiceSettingsPanel : UserControl
     private SettingsManager? _settings;
     private IVoiceConfigurationApi? _voiceConfigurationApi;
     private VoiceProviderConfigurationStore _voiceProviderConfigurationDraft = new();
+    private string _activeSttProviderId = VoiceProviderIds.Windows;
     private string _activeTtsProviderId = VoiceProviderIds.Windows;
     private bool _updatingVoiceProviderFields;
     private List<VoiceProviderOption> _speechToTextOptions = new();
@@ -120,6 +121,9 @@ public sealed partial class VoiceSettingsPanel : UserControl
         VoiceTextToSpeechProviderComboBox.SelectedItem =
             _textToSpeechOptions.FirstOrDefault(p => p.Id == _settings!.Voice.TextToSpeechProviderId)
             ?? _textToSpeechOptions.FirstOrDefault();
+
+        _ = EnsureSelectableProviderSelection(VoiceSpeechToTextProviderComboBox, _speechToTextOptions, ref _activeSttProviderId);
+        _ = EnsureSelectableProviderSelection(VoiceTextToSpeechProviderComboBox, _textToSpeechOptions, ref _activeTtsProviderId);
     }
 
     private async Task LoadVoiceDevicesAsync()
@@ -345,6 +349,18 @@ public sealed partial class VoiceSettingsPanel : UserControl
 
     private void OnVoiceProviderChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (ReferenceEquals(sender, VoiceSpeechToTextProviderComboBox) &&
+            !EnsureSelectableProviderSelection(VoiceSpeechToTextProviderComboBox, _speechToTextOptions, ref _activeSttProviderId))
+        {
+            return;
+        }
+
+        if (ReferenceEquals(sender, VoiceTextToSpeechProviderComboBox) &&
+            !EnsureSelectableProviderSelection(VoiceTextToSpeechProviderComboBox, _textToSpeechOptions, ref _activeTtsProviderId))
+        {
+            return;
+        }
+
         CaptureSelectedVoiceProviderSettings();
         UpdateVoiceProviderSettingsEditor();
         UpdateVoiceSettingsInfo();
@@ -407,6 +423,8 @@ public sealed partial class VoiceSettingsPanel : UserControl
             Name = source.Name,
             Runtime = source.Runtime,
             Enabled = source.Enabled,
+            VisibleInSettings = source.VisibleInSettings,
+            Selectable = source.Selectable,
             Description = source.Description,
             Settings = source.Settings
                 .Select(setting => new VoiceProviderSettingDefinition
@@ -463,5 +481,37 @@ public sealed partial class VoiceSettingsPanel : UserControl
                     OutputContentType = source.TextToSpeechWebSocket.OutputContentType
                 }
         };
+    }
+
+    private static bool EnsureSelectableProviderSelection(
+        ComboBox comboBox,
+        IReadOnlyList<VoiceProviderOption> options,
+        ref string activeProviderId)
+    {
+        var previousProviderId = activeProviderId;
+
+        if (comboBox.SelectedItem is VoiceProviderOption selected && selected.Selectable)
+        {
+            activeProviderId = selected.Id;
+            return true;
+        }
+
+        var fallback = options.FirstOrDefault(option =>
+                option.Selectable &&
+                string.Equals(option.Id, previousProviderId, StringComparison.OrdinalIgnoreCase))
+            ?? options.FirstOrDefault(option => option.Selectable);
+
+        if (fallback == null)
+        {
+            return false;
+        }
+
+        if (!ReferenceEquals(comboBox.SelectedItem, fallback))
+        {
+            comboBox.SelectedItem = fallback;
+        }
+
+        activeProviderId = fallback.Id;
+        return false;
     }
 }

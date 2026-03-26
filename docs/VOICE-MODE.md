@@ -876,13 +876,55 @@ Notes:
 - supported keys should at least include voice, model, and the documented voice-shaping parameters
 - provider-specific validation should happen through the provider contract layer where possible
 
-### Story: Support non-local (or non-Windows, local) STT providers
+### Story: Foundry Local STT provider
 
-Allow the user to select a non-local STT provider like OpenAI Whisper, or a local non-Windows recognizer, instead of being locked to the Windows built-in path.
+Implement the AudioGraph-fed streaming STT adapter for Foundry Local.
 
-- Windows built-in local STT is working pretty well, however users should have the choice to utilise:
-  - a non-local STT provider
-  - a local non-Windows STT provider
+Notes:
+
+- provider metadata now lives in the provider catalog, but it should stay disabled in settings until the runtime adapter exists
+- this route should use the shared streaming STT path rather than the Windows.Media recognizer path
+- endpoint and model selection should come from the provider catalog settings contract
+
+### Story: OpenAI Whisper STT provider
+
+Implement the AudioGraph-fed streaming STT adapter for OpenAI Whisper transcription.
+
+Notes:
+
+- this should be catalog-driven and disabled in settings until the adapter is production-ready
+- the initial implementation only needs the basic transcription path, not translation or diarization
+- API key and model configuration should come from the provider catalog
+
+### Story: ElevenLabs Speech to Text provider
+
+Implement the AudioGraph-fed streaming STT adapter for ElevenLabs speech-to-text.
+
+Notes:
+
+- keep it catalog-driven and disabled in settings until the runtime path is implemented
+- match the same route abstraction used by the other non-Windows STT providers
+- any provider-specific partial/final transcript semantics should be normalized in the adapter layer
+
+### Story: Azure AI Speech STT provider
+
+Implement the AudioGraph-fed streaming STT adapter for Azure AI Speech.
+
+Notes:
+
+- use the official Azure AI Speech naming in settings and docs rather than an internal "Foundry Azure STT" label
+- keep the provider catalog entry disabled until the adapter is functional end to end
+- endpoint and credential handling should come from the provider settings contract
+
+### Story: sherpa-onnx embedded STT provider
+
+Implement the local embedded sherpa-onnx STT route for user-supplied model bundles.
+
+Notes:
+
+- keep this visible but greyed out in settings until the embedded runtime is implemented
+- the user should be able to choose their own downloaded model bundle and language-appropriate package
+- model lifecycle, validation, and error reporting should be handled in the embedded adapter rather than in the Windows.Media route
 
 
 ### Story: Full-duplex / barge-in Talk Mode

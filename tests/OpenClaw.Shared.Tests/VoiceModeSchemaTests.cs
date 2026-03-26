@@ -87,12 +87,26 @@ public class VoiceSchemaDefaultsTests
     {
         Assert.Equal("windows", VoiceProviderIds.Windows);
         Assert.Equal("foundry-local", VoiceProviderIds.FoundryLocal);
+        Assert.Equal("openai-whisper", VoiceProviderIds.OpenAiWhisper);
+        Assert.Equal("elevenlabs-stt", VoiceProviderIds.ElevenLabsSpeechToText);
+        Assert.Equal("azure-ai-speech", VoiceProviderIds.AzureAiSpeech);
         Assert.Equal("sherpa-onnx", VoiceProviderIds.SherpaOnnx);
         Assert.Equal("minimax", VoiceProviderIds.MiniMax);
         Assert.Equal("elevenlabs", VoiceProviderIds.ElevenLabs);
         Assert.Equal("endpoint", VoiceProviderSettingKeys.Endpoint);
         Assert.Equal("modelPath", VoiceProviderSettingKeys.ModelPath);
         Assert.Equal("voiceSettingsJson", VoiceProviderSettingKeys.VoiceSettingsJson);
+    }
+
+    [Fact]
+    public void VoiceProviderOption_Defaults_ToVisibleAndSelectable()
+    {
+        var option = new VoiceProviderOption { Name = "Provider" };
+
+        Assert.True(option.VisibleInSettings);
+        Assert.True(option.Selectable);
+        Assert.Equal("Provider", option.DisplayName);
+        Assert.Equal(1.0, option.DisplayOpacity);
     }
 
     [Fact]

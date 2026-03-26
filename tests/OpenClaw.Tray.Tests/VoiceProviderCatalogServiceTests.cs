@@ -35,13 +35,16 @@ public class VoiceProviderCatalogServiceTests
     }
 
     [Fact]
-    public void LoadCatalog_IncludesBuiltInSpeechAndTtsProviders()
+    public void LoadCatalog_IncludesOnlySelectableAndVisibleSpeechProviders()
     {
         var catalog = VoiceProviderCatalogService.LoadCatalog();
 
         Assert.Contains(catalog.SpeechToTextProviders, p => p.Id == VoiceProviderIds.Windows);
-        Assert.Contains(catalog.SpeechToTextProviders, p => p.Id == VoiceProviderIds.FoundryLocal);
         Assert.Contains(catalog.SpeechToTextProviders, p => p.Id == VoiceProviderIds.SherpaOnnx);
+        Assert.DoesNotContain(catalog.SpeechToTextProviders, p => p.Id == VoiceProviderIds.FoundryLocal);
+        Assert.DoesNotContain(catalog.SpeechToTextProviders, p => p.Id == VoiceProviderIds.OpenAiWhisper);
+        Assert.DoesNotContain(catalog.SpeechToTextProviders, p => p.Id == VoiceProviderIds.ElevenLabsSpeechToText);
+        Assert.DoesNotContain(catalog.SpeechToTextProviders, p => p.Id == VoiceProviderIds.AzureAiSpeech);
         Assert.Contains(catalog.TextToSpeechProviders, p => p.Id == VoiceProviderIds.Windows);
         Assert.Contains(catalog.TextToSpeechProviders, p => p.Id == VoiceProviderIds.MiniMax);
         Assert.Contains(catalog.TextToSpeechProviders, p => p.Id == VoiceProviderIds.ElevenLabs);
@@ -52,6 +55,9 @@ public class VoiceProviderCatalogServiceTests
     {
         Assert.True(VoiceProviderCatalogService.SupportsSpeechToTextRuntime(VoiceProviderIds.Windows));
         Assert.False(VoiceProviderCatalogService.SupportsSpeechToTextRuntime(VoiceProviderIds.FoundryLocal));
+        Assert.False(VoiceProviderCatalogService.SupportsSpeechToTextRuntime(VoiceProviderIds.OpenAiWhisper));
+        Assert.False(VoiceProviderCatalogService.SupportsSpeechToTextRuntime(VoiceProviderIds.ElevenLabsSpeechToText));
+        Assert.False(VoiceProviderCatalogService.SupportsSpeechToTextRuntime(VoiceProviderIds.AzureAiSpeech));
         Assert.False(VoiceProviderCatalogService.SupportsSpeechToTextRuntime(VoiceProviderIds.SherpaOnnx));
     }
 
@@ -68,13 +74,11 @@ public class VoiceProviderCatalogServiceTests
     {
         var catalog = VoiceProviderCatalogService.LoadCatalog();
 
-        var foundryLocal = Assert.Single(catalog.SpeechToTextProviders, p => p.Id == VoiceProviderIds.FoundryLocal);
-        Assert.Equal(VoiceProviderRuntimeIds.Streaming, foundryLocal.Runtime);
-        Assert.Equal("http://localhost:5273", foundryLocal.Settings.Single(s => s.Key == VoiceProviderSettingKeys.Endpoint).DefaultValue);
-        Assert.Equal("whisper-tiny", foundryLocal.Settings.Single(s => s.Key == VoiceProviderSettingKeys.Model).DefaultValue);
-
         var sherpaOnnx = Assert.Single(catalog.SpeechToTextProviders, p => p.Id == VoiceProviderIds.SherpaOnnx);
         Assert.Equal(VoiceProviderRuntimeIds.Embedded, sherpaOnnx.Runtime);
+        Assert.False(sherpaOnnx.Enabled);
+        Assert.True(sherpaOnnx.VisibleInSettings);
+        Assert.False(sherpaOnnx.Selectable);
         Assert.Equal(string.Empty, sherpaOnnx.Settings.Single(s => s.Key == VoiceProviderSettingKeys.ModelPath).DefaultValue);
 
         var minimax = Assert.Single(catalog.TextToSpeechProviders, p => p.Id == VoiceProviderIds.MiniMax);

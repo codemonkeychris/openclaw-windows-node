@@ -11,7 +11,9 @@
       "id": "foundry-local",
       "name": "Foundry Local",
       "runtime": "streaming",
-      "enabled": true,
+      "enabled": false,
+      "visibleInSettings": false,
+      "selectable": false,
       "description": "AudioGraph-fed streaming STT route for Foundry Local or compatible streaming adapters.",
       "settings": [
         {
@@ -33,10 +35,84 @@
       ]
     },
     {
+      "id": "openai-whisper",
+      "name": "OpenAI Whisper",
+      "runtime": "streaming",
+      "enabled": false,
+      "visibleInSettings": false,
+      "selectable": false,
+      "description": "AudioGraph-fed cloud STT route for the OpenAI Whisper transcription API.",
+      "settings": [
+        {
+          "key": "apiKey",
+          "label": "API key",
+          "secret": true
+        },
+        {
+          "key": "model",
+          "label": "Model",
+          "required": false,
+          "defaultValue": "whisper-1",
+          "placeholder": "whisper-1",
+          "description": "Transcription model identifier for the OpenAI speech-to-text adapter."
+        }
+      ]
+    },
+    {
+      "id": "elevenlabs-stt",
+      "name": "ElevenLabs Speech to Text",
+      "runtime": "streaming",
+      "enabled": false,
+      "visibleInSettings": false,
+      "selectable": false,
+      "description": "AudioGraph-fed cloud STT route for the ElevenLabs speech-to-text API.",
+      "settings": [
+        {
+          "key": "apiKey",
+          "label": "API key",
+          "secret": true
+        },
+        {
+          "key": "model",
+          "label": "Model",
+          "required": false,
+          "defaultValue": "scribe_v1",
+          "placeholder": "scribe_v1",
+          "description": "Transcription model identifier for the ElevenLabs speech-to-text adapter."
+        }
+      ]
+    },
+    {
+      "id": "azure-ai-speech",
+      "name": "Azure AI Speech",
+      "runtime": "streaming",
+      "enabled": false,
+      "visibleInSettings": false,
+      "selectable": false,
+      "description": "AudioGraph-fed cloud STT route for Azure AI Speech real-time transcription.",
+      "settings": [
+        {
+          "key": "apiKey",
+          "label": "API key",
+          "secret": true
+        },
+        {
+          "key": "endpoint",
+          "label": "Endpoint",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "https://your-speech-resource.cognitiveservices.azure.com",
+          "description": "Azure AI Speech endpoint for the streaming STT adapter."
+        }
+      ]
+    },
+    {
       "id": "sherpa-onnx",
       "name": "sherpa-onnx",
       "runtime": "embedded",
-      "enabled": true,
+      "enabled": false,
+      "visibleInSettings": true,
+      "selectable": false,
       "description": "Local embedded STT route for user-supplied sherpa-onnx model bundles.",
       "settings": [
         {

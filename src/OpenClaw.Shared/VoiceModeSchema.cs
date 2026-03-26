@@ -155,6 +155,9 @@ public static class VoiceProviderIds
 {
     public const string Windows = "windows";
     public const string FoundryLocal = "foundry-local";
+    public const string OpenAiWhisper = "openai-whisper";
+    public const string ElevenLabsSpeechToText = "elevenlabs-stt";
+    public const string AzureAiSpeech = "azure-ai-speech";
     public const string SherpaOnnx = "sherpa-onnx";
     public const string MiniMax = "minimax";
     public const string ElevenLabs = "elevenlabs";
@@ -263,10 +266,18 @@ public sealed class VoiceProviderOption
     public string Name { get; set; } = "";
     public string Runtime { get; set; } = VoiceProviderRuntimeIds.Windows;
     public bool Enabled { get; set; } = true;
+    public bool VisibleInSettings { get; set; } = true;
+    public bool Selectable { get; set; } = true;
     public string? Description { get; set; }
     public List<VoiceProviderSettingDefinition> Settings { get; set; } = [];
     public VoiceTextToSpeechHttpContract? TextToSpeechHttp { get; set; }
     public VoiceTextToSpeechWebSocketContract? TextToSpeechWebSocket { get; set; }
+
+    [JsonIgnore]
+    public string DisplayName => Selectable ? Name : $"{Name} (coming soon)";
+
+    [JsonIgnore]
+    public double DisplayOpacity => Selectable ? 1.0 : 0.55;
 }
 
 public sealed class VoiceProviderCatalog

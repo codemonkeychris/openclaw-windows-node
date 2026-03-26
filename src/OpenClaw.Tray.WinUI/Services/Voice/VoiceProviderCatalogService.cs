@@ -123,7 +123,7 @@ public static class VoiceProviderCatalogService
         return providers
             .Where(p => !string.IsNullOrWhiteSpace(p.Id))
             .Select(Clone)
-            .Where(p => p.Enabled)
+            .Where(p => p.Enabled || p.VisibleInSettings)
             .OrderByDescending(p => string.Equals(p.Id, VoiceProviderIds.Windows, StringComparison.OrdinalIgnoreCase))
             .ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -159,6 +159,8 @@ public static class VoiceProviderCatalogService
             Name = source.Name,
             Runtime = source.Runtime,
             Enabled = source.Enabled,
+            VisibleInSettings = source.VisibleInSettings,
+            Selectable = source.Selectable,
             Description = source.Description,
             Settings = source.Settings.Select(Clone).ToList(),
             TextToSpeechHttp = Clone(source.TextToSpeechHttp),

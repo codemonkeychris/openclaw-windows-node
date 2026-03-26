@@ -95,22 +95,26 @@ public sealed class VoiceCloudTextToSpeechClient
         using var socket = new ClientWebSocket();
         ApplyAuthenticationHeader(socket.Options, contract, templateValues);
 
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(30));
+        var ct = cts.Token;
+
         var stopwatch = Stopwatch.StartNew();
-        await socket.ConnectAsync(new Uri(endpoint), cancellationToken);
-        var connectedMessage = await ReceiveJsonMessageAsync(socket, cancellationToken);
+        await socket.ConnectAsync(new Uri(endpoint), ct);
+        var connectedMessage = await ReceiveJsonMessageAsync(socket, ct);
         ValidateWebSocketEvent(provider.Name, contract.ConnectSuccessEventName, connectedMessage, contract);
 
         var startMessage = ApplyJsonTemplate(contract.StartMessageTemplate, templateValues);
-        await SendTextMessageAsync(socket, startMessage, cancellationToken);
-        var startedMessage = await ReceiveJsonMessageAsync(socket, cancellationToken);
+        await SendTextMessageAsync(socket, startMessage, ct);
+        var startedMessage = await ReceiveJsonMessageAsync(socket, ct);
         ValidateWebSocketEvent(provider.Name, contract.StartSuccessEventName, startedMessage, contract);
 
         var continueMessage = ApplyJsonTemplate(contract.ContinueMessageTemplate, templateValues);
-        await SendTextMessageAsync(socket, continueMessage, cancellationToken);
+        await SendTextMessageAsync(socket, continueMessage, ct);
 
         if (!string.IsNullOrWhiteSpace(contract.FinishMessageTemplate))
         {
-            await SendTextMessageAsync(socket, ApplyJsonTemplate(contract.FinishMessageTemplate, templateValues), cancellationToken);
+            await SendTextMessageAsync(socket, ApplyJsonTemplate(contract.FinishMessageTemplate, templateValues), ct);
         }
 
         var audioBytes = new List<byte>();
@@ -118,7 +122,7 @@ public sealed class VoiceCloudTextToSpeechClient
 
         while (true)
         {
-            var message = await ReceiveJsonMessageAsync(socket, cancellationToken);
+            var message = await ReceiveJsonMessageAsync(socket, ct);
             EnsureWebSocketNotFailed(provider.Name, contract, message);
 
             if (TryGetJsonString(message, contract.ResponseAudioJsonPath, out var audioChunk) &&
@@ -140,7 +144,7 @@ public sealed class VoiceCloudTextToSpeechClient
 
         try
         {
-            await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", cancellationToken);
+            await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", ct);
         }
         catch
         {

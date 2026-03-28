@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text.Json;
 using System.Threading;
@@ -525,6 +526,7 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
             synthesizer = new SpeechSynthesizer();
             player = new MediaPlayer();
             await ConfigurePlaybackOutputDeviceAsync(player, settings);
+            await WarmSpeechPlaybackPipelineAsync(player, synthesizer, selectedTextToSpeech, runtimeCts.Token);
 
             if (recognizer != null)
             {
@@ -1440,6 +1442,35 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
         await PlayStreamAsync(player, stream, stream.ContentType, cancellationToken);
     }
 
+    private async Task WarmSpeechPlaybackPipelineAsync(
+        MediaPlayer player,
+        SpeechSynthesizer? synthesizer,
+        VoiceProviderOption provider,
+        CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            using var silentStream = CreateSilentWaveStream();
+            await PreloadStreamAsync(player, silentStream, "audio/wav", cancellationToken);
+
+            if (!UsesCloudTextToSpeechRuntime(provider) && synthesizer != null)
+            {
+                using var warmupStream = await synthesizer.SynthesizeTextToStreamAsync(" ");
+            }
+
+            _logger.Info($"Voice playback warm-up completed: total={stopwatch.ElapsedMilliseconds}ms");
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Voice playback warm-up failed: {ex.Message}");
+        }
+    }
+
     private static bool UsesCloudTextToSpeechRuntime(VoiceProviderOption provider)
     {
         return provider.TextToSpeechHttp != null || provider.TextToSpeechWebSocket != null;
@@ -1659,6 +1690,89 @@ public sealed class VoiceService : IVoiceRuntime, IVoiceConfigurationApi, IVoice
         }
 
         return $"{trimmed[..117]}...";
+    }
+
+    private static InMemoryRandomAccessStream CreateSilentWaveStream()
+    {
+        const int sampleRate = 16000;
+        const short bitsPerSample = 16;
+        const short channels = 1;
+        const int durationMs = 120;
+
+        var bytesPerSample = bitsPerSample / 8;
+        var sampleCount = sampleRate * durationMs / 1000;
+        var dataSize = sampleCount * channels * bytesPerSample;
+        var byteRate = sampleRate * channels * bytesPerSample;
+        var blockAlign = (short)(channels * bytesPerSample);
+
+        var buffer = new byte[44 + dataSize];
+        using var writer = new BinaryWriter(new MemoryStream(buffer, writable: true));
+
+        writer.Write(System.Text.Encoding.ASCII.GetBytes("RIFF"));
+        writer.Write(36 + dataSize);
+        writer.Write(System.Text.Encoding.ASCII.GetBytes("WAVE"));
+        writer.Write(System.Text.Encoding.ASCII.GetBytes("fmt "));
+        writer.Write(16);
+        writer.Write((short)1);
+        writer.Write(channels);
+        writer.Write(sampleRate);
+        writer.Write(byteRate);
+        writer.Write(blockAlign);
+        writer.Write(bitsPerSample);
+        writer.Write(System.Text.Encoding.ASCII.GetBytes("data"));
+        writer.Write(dataSize);
+
+        var stream = new InMemoryRandomAccessStream();
+        using (var output = stream.AsStreamForWrite())
+        {
+            output.Write(buffer, 0, buffer.Length);
+            output.Flush();
+        }
+
+        stream.Seek(0);
+        return stream;
+    }
+
+    private static async Task PreloadStreamAsync(
+        MediaPlayer player,
+        IRandomAccessStream stream,
+        string contentType,
+        CancellationToken cancellationToken)
+    {
+        stream.Seek(0);
+        var mediaOpened = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        TypedEventHandler<MediaPlayer, object>? openedHandler = null;
+        TypedEventHandler<MediaPlayer, MediaPlayerFailedEventArgs>? failedHandler = null;
+
+        openedHandler = (sender, _) => mediaOpened.TrySetResult(true);
+        failedHandler = (sender, args) =>
+        {
+            var errorMessage = string.IsNullOrWhiteSpace(args.ErrorMessage)
+                ? "Media preload failed."
+                : args.ErrorMessage;
+            mediaOpened.TrySetException(new InvalidOperationException(errorMessage));
+        };
+
+        player.MediaOpened += openedHandler;
+        player.MediaFailed += failedHandler;
+        using var registration = cancellationToken.Register(() =>
+        {
+            try { player.Source = null; } catch { }
+            mediaOpened.TrySetCanceled(cancellationToken);
+        });
+
+        try
+        {
+            player.Source = MediaSource.CreateFromStream(stream, contentType);
+            await mediaOpened.Task;
+        }
+        finally
+        {
+            player.MediaOpened -= openedHandler;
+            player.MediaFailed -= failedHandler;
+            player.Source = null;
+        }
     }
 
     private static async Task PlayStreamAsync(

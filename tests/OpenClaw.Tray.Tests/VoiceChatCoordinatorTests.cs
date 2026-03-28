@@ -135,6 +135,32 @@ public class VoiceChatCoordinatorTests
         Assert.Equal(1, window.TurnCallCount);
     }
 
+    [Fact]
+    public async Task DraftAndTurns_AreBroadcastToAllAttachedWindows()
+    {
+        var runtime = new FakeVoiceRuntime();
+        using var coordinator = new VoiceChatCoordinator(runtime, new ImmediateDispatcher());
+        var firstWindow = new FakeVoiceChatWindow();
+        var secondWindow = new FakeVoiceChatWindow();
+
+        coordinator.AttachWindow(firstWindow);
+        coordinator.AttachWindow(secondWindow);
+
+        runtime.RaiseDraft("shared draft", "main", clear: false);
+        runtime.RaiseConversationTurn(new VoiceConversationTurnEventArgs
+        {
+            Direction = VoiceConversationDirection.Incoming,
+            Message = "shared reply",
+            SessionKey = "main"
+        });
+        await Task.Yield();
+
+        Assert.Equal("shared draft", firstWindow.LastDraftText);
+        Assert.Equal("shared draft", secondWindow.LastDraftText);
+        Assert.Equal("shared reply", firstWindow.LastTurnMessage);
+        Assert.Equal("shared reply", secondWindow.LastTurnMessage);
+    }
+
     private sealed class ImmediateDispatcher : IUiDispatcher
     {
         public bool TryEnqueue(Action callback)

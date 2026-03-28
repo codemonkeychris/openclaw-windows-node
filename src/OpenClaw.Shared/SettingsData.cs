@@ -29,6 +29,7 @@ public class SettingsData
     public bool PreferStructuredCategories { get; set; } = true;
     public List<UserNotificationRule>? UserRules { get; set; }
     public VoiceSettings Voice { get; set; } = new();
+    public VoiceRepeaterWindowSettings VoiceRepeaterWindow { get; set; } = new();
     public VoiceProviderConfigurationStore VoiceProviderConfiguration { get; set; } = new();
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public VoiceProviderCredentials? VoiceProviderCredentials { get; set; }
@@ -64,4 +65,14 @@ public class SettingsData
             .Replace("\"State\":\"ListeningForWakeWord\"", "\"State\":\"ListeningForVoiceWake\"", StringComparison.Ordinal)
             .Replace("\"State\": \"ListeningForWakeWord\"", "\"State\": \"ListeningForVoiceWake\"", StringComparison.Ordinal);
     }
+}
+
+public sealed class VoiceRepeaterWindowSettings
+{
+    public bool AutoScroll { get; set; } = true;
+    public double TextSize { get; set; } = 13;
+    public int? Width { get; set; }
+    public int? Height { get; set; }
+    public int? X { get; set; }
+    public int? Y { get; set; }
 }

@@ -345,3 +345,9 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 Output/
+
+# Repo-local tool caches and workspace metadata
+.claude/
+.dotnet-cli/
+.playwright-cli/
+output/playwright/

@@ -54,19 +54,20 @@ The contracts and persisted settings now use `VoiceWake` and `TalkMode` as well.
 - local speech recognition turns that audio into transcript text on the active STT route
 - interim hypotheses are surfaced live, but only final `Medium` or `High` confidence recognizer results are submitted
 - if speech activity ends without any usable final transcript surviving, Talk Mode now clears the draft and gives a short local repeat prompt instead of silently doing nothing
-- the tray chat window, when open, mirrors the live transcript draft locally
+- the compact voice repeater window, when open, shows the live transcript draft plus local sent/received turns in a single scrolling surface
+- the tray chat window, when open, mirrors the live transcript draft into the compose box only
 - the finalized transcript is always sent to OpenClaw via direct `chat.send` on the main session
 - OpenClaw returns the assistant reply as normal chat output
 - the node performs local or remote TTS playback of that reply
 - assistant replies are queued locally and spoken sequentially, with a short (500 ms currently) pause between queued replies so overlapping responses are not lost
 - if a reply arrives after the normal 45-second wait timeout, the tray still accepts and speaks that late reply for a short bounded grace window so slow upstream responses are not silently lost
-- the tray chat window can optionally strip injected `<relevant-memories>...</relevant-memories>` blocks from the rendered display without changing the underlying upstream message
+- the tray chat window can optionally strip injected `<relevant-memories>...</relevant-memories>` blocks from mirrored draft text before that draft is injected into the compose box
 
 To avoid obvious duplicate sends from the Windows recognizer, exact duplicate final transcripts are suppressed within a short 750 ms window.
 
 That means the first Windows target is transcript transport, not raw audio upload. Streaming audio frames in or out of OpenClaw remains a future protocol extension, and therefore not part of this design.
 
-The current Windows implementation uses a voice-local operator connection inside the tray app while node mode is active. That sidecar connection exists to carry assistant chat events for `TalkMode`, and to provide a fallback direct `chat.send` path when the tray chat window is not open.
+The current Windows implementation uses a voice-local operator connection inside the tray app while node mode is active. That sidecar connection carries assistant chat events for `TalkMode`, while the recognized transcript is always sent through the tray app's direct `chat.send` path.
 
 ## Voice APIs
 
@@ -127,7 +128,7 @@ The tray app also exposes in-process interfaces so its own windows do not need t
 - `IVoiceRuntime`
   - transcript draft and conversation events for chat integration
 
-This is the intended base for future surfaces such as the compact voice strip.
+This now powers multiple tray-local voice surfaces, including the compact voice repeater window.
 
 ### Can the Settings Form Use This API?
 
@@ -195,7 +196,20 @@ That produced two UX problems:
 
 The tray app keeps a tray-local interim transcript buffer for the current utterance, independent of whether the chat window is open.
 
-The embedded [WebChatWindow.xaml.cs](../src/OpenClaw.Tray.WinUI/Windows/WebChatWindow.xaml.cs) owns the tray-local chat integration layer:
+The tray now has two separate local voice surfaces:
+
+- [WebChatWindow.xaml.cs](../src/OpenClaw.Tray.WinUI/Windows/WebChatWindow.xaml.cs)
+  - mirrors the live transcript draft into the real WebChat compose box when WebChat is open
+  - optionally strips `<relevant-memories>...</relevant-memories>` from that mirrored draft text before injection
+  - does not own transport
+  - does not try to fake typed-chat parity for sent voice turns
+- [VoiceRepeaterWindow.xaml.cs](../src/OpenClaw.Tray.WinUI/Windows/VoiceRepeaterWindow.xaml.cs)
+  - is the compact tray-local voice surface
+  - shows live transcript, outgoing sent text, and incoming replies in one scrollable transcript strip
+  - exposes compact pause/resume, skip, mic re-arm/reset, and local repeater settings controls
+  - can open the older Voice Status window for deeper troubleshooting/status detail
+
+The embedded WebChat surface therefore only owns draft mirroring:
 
 - interim STT hypotheses from Windows speech recognition are injected into the tray chat compose box while the user is speaking
 - if the chat window opens during an utterance, the current buffered transcript is copied into the compose box immediately
@@ -205,8 +219,6 @@ The embedded [WebChatWindow.xaml.cs](../src/OpenClaw.Tray.WinUI/Windows/WebChatW
 
 This is intentionally a tray-local integration decision, not a protocol-level rewrite of the stored upstream transcript.
 
-It also fits with the planned voice mode *repeater form*, which will act as an optional small display and control surface whilst voice mode is in operation.
-
 ### Tradeoffs
 
 - preserves a single visible conversation for the user
@@ -214,6 +226,7 @@ It also fits with the planned voice mode *repeater form*, which will act as an o
 - uses only one send path for voice turns, which is simpler to reason about and debug
 - requires us to change the existing project, but not too significantly
 - keeps a light DOM integration inside the embedded WebView chat surface for draft mirroring only
+- gives voice mode a separate compact surface that does not depend on WebChat DOM behavior for basic transcript/reply visibility
 - only affects the tray app chat window; other clients still render upstream content according to their own rules
 
 ## Provider Selection
@@ -592,11 +605,13 @@ The current Windows implementation is still centred on `VoiceService`, with a fe
 - `VoiceService`
   owns Talk Mode runtime state, recognizer/TTS integration, reply queuing, timeouts, gateway reply handling, and the transition layer between `AudioGraph` capture and the current recognizer-owned STT path
 - `VoiceChatCoordinator`
-  mirrors interim transcript drafts and conversation turns into the tray UI without making the chat window part of the transport path
+  mirrors interim transcript drafts and conversation turns into attached tray windows without making any window part of the transport path
 - `OpenClawGatewayClient`
   carries direct `chat.send`, final chat events, and the `sessions.preview` fallback path for bare final markers
 - `WebChatWindow`
-  mirrors live transcript drafts locally and optionally strips injected `<relevant-memories>` blocks from rendered chat text
+  mirrors live transcript drafts into the WebChat compose box and can strip injected `<relevant-memories>` blocks from mirrored draft text before injection
+- `VoiceRepeaterWindow`
+  is the compact local transcript/reply/control surface for Talk Mode
 
 ### Current End-to-End Talk Mode
 
@@ -611,18 +626,23 @@ flowchart LR
     C --> F["HypothesisGenerated<br/>interim text"]
     F --> G["VoiceService<br/>draft event"]
     G --> H["VoiceChatCoordinator"]
-    H --> I["WebChatWindow<br/>local compose-box mirror only"]
+    H --> I["WebChatWindow<br/>compose-box mirror only"]
+    H --> I2["VoiceRepeaterWindow<br/>compact local draft surface"]
 
     C --> J["ResultGenerated<br/>final Medium/High text"]
     J --> K["VoiceService<br/>duplicate guard + late hypothesis promotion"]
     K --> L["Stop recognition session"]
     L --> M["OpenClawGatewayClient.SendChatMessageAsync<br/>direct chat.send(main, transcript)"]
     M --> N["OpenClaw / session pipeline"]
+    K --> H2["VoiceChatCoordinator<br/>outgoing turn event"]
+    H2 --> I2
     N --> O["Chat final event"]
     O --> P{"assistant text present?"}
     P -- "yes" --> Q["assistant text"]
     P -- "no" --> R["sessions.preview fallback<br/>with stale-preview retry guard"]
     R --> Q
+    Q --> H3["VoiceChatCoordinator<br/>incoming turn event"]
+    H3 --> I2
 
     Q --> S["VoiceService reply queue"]
     S --> T{"TTS provider"}
@@ -642,7 +662,7 @@ flowchart LR
 | 1 | `VoiceCaptureService` | selected/default microphone device | continuous frame and signal events from `AudioGraph` |
 | 2 | `SpeechRecognizer` | Windows default speech-input path | interim/final transcript text |
 | 3 | `VoiceService` | capture signal + final transcript text | health/restart decisions, de-duplicated transcript, runtime state changes |
-| 4 | `VoiceChatCoordinator` | interim/final draft events | mirrored tray chat compose text |
+| 4 | `VoiceChatCoordinator` | draft and conversation-turn events | mirrored draft for WebChat plus compact local transcript/reply updates |
 | 5 | `OpenClawGatewayClient` | transcript text + session key | `chat.send` request + assistant reply events |
 | 6 | `OpenClawGatewayClient` preview fallback | bare final chat marker | assistant preview text, guarded against stale replay |
 | 7 | `VoiceService` reply queue | assistant reply text | ordered reply playback work |
@@ -831,8 +851,8 @@ Status values used below:
 |---|---|---|
 | Talk Mode continuous loop (`listen -> chat.send(main) -> wait -> speak`) | `Supported` | Windows Talk Mode uses direct `chat.send` on the active main session and loops back to listening after reply playback. |
 | Talk Mode sends after a short silence window | `Supported` | The current runtime finalizes on recognition pause and uses configurable Talk Mode silence settings. |
-| Talk Mode visible phase transitions (`Listening -> Thinking -> Speaking`) | `Partial` | Runtime states and tray icon changes exist, but there is no always-visible overlay yet. |
-| Talk Mode always-on overlay with click-to-stop / click-X controls | `NotSupported (planned)` | Windows currently has a tray icon, status window, and draft mirroring, but no overlay surface. |
+| Talk Mode visible phase transitions (`Listening -> Thinking -> Speaking`) | `Partial` | Runtime states, tray icon changes, and the compact voice repeater window exist, but there is no always-visible overlay yet. |
+| Talk Mode always-on overlay with click-to-stop / click-X controls | `NotSupported (planned)` | Windows currently has a tray icon, a manually-opened compact repeater window, and WebChat draft mirroring, but no always-on overlay surface. |
 | Talk Mode writes replies into WebChat the same way typed chat does | `Partial` | Replies appear in WebChat through normal session updates, but Talk Mode uses direct send rather than a same-as-typing transport path. |
 | Talk Mode interrupt-on-speech / barge-in | `NotSupported (planned)` | Windows is still half-duplex during reply playback. |
 | Talk Mode voice directives in replies | `NotSupported (planned)` | Windows does not yet parse or apply the JSON voice directive line described in the Talk Mode docs. |

@@ -12,7 +12,7 @@ public sealed class VoiceChatCoordinator : IDisposable
     private readonly IUiDispatcher _dispatcher;
     private readonly object _gate = new();
 
-    private IVoiceChatWindow? _webChatWindow;
+    private readonly List<IVoiceChatWindow> _windows = [];
     private string _voiceTranscriptDraftText = string.Empty;
     private readonly List<VoiceConversationTurnEventArgs> _bufferedConversationTurns = [];
     private bool _disposed;
@@ -36,12 +36,12 @@ public sealed class VoiceChatCoordinator : IDisposable
 
         lock (_gate)
         {
-            if (ReferenceEquals(_webChatWindow, window))
+            if (_windows.Contains(window))
             {
                 return;
             }
 
-            _webChatWindow = window;
+            _windows.Add(window);
         }
 
         _ = window.UpdateVoiceTranscriptDraftAsync(
@@ -64,17 +64,18 @@ public sealed class VoiceChatCoordinator : IDisposable
     {
         lock (_gate)
         {
-            if (_webChatWindow == null)
+            if (_windows.Count == 0)
             {
                 return;
             }
 
-            if (window != null && !ReferenceEquals(_webChatWindow, window))
+            if (window == null)
             {
+                _windows.Clear();
                 return;
             }
 
-            _webChatWindow = null;
+            _windows.Remove(window);
         }
     }
 
@@ -95,7 +96,7 @@ public sealed class VoiceChatCoordinator : IDisposable
     {
         _dispatcher.TryEnqueue(() =>
         {
-            IVoiceChatWindow? window;
+            List<IVoiceChatWindow> windows;
             lock (_gate)
             {
                 _bufferedConversationTurns.Add(CloneTurn(args));
@@ -104,12 +105,15 @@ public sealed class VoiceChatCoordinator : IDisposable
                     _bufferedConversationTurns.RemoveAt(0);
                 }
 
-                window = _webChatWindow;
+                windows = [.. _windows];
             }
 
-            if (window != null && !window.IsClosed)
+            foreach (var window in windows)
             {
-                _ = window.AppendVoiceConversationTurnAsync(args);
+                if (!window.IsClosed)
+                {
+                    _ = window.AppendVoiceConversationTurnAsync(args);
+                }
             }
 
             ConversationTurnAvailable?.Invoke(this, args);
@@ -122,18 +126,19 @@ public sealed class VoiceChatCoordinator : IDisposable
         {
             _voiceTranscriptDraftText = args.Clear ? string.Empty : (args.Text ?? string.Empty);
 
-            IVoiceChatWindow? window;
+            List<IVoiceChatWindow> windows;
             lock (_gate)
             {
-                window = _webChatWindow;
+                windows = [.. _windows];
             }
 
-            if (window == null || window.IsClosed)
+            foreach (var window in windows)
             {
-                return;
+                if (!window.IsClosed)
+                {
+                    _ = window.UpdateVoiceTranscriptDraftAsync(_voiceTranscriptDraftText, args.Clear);
+                }
             }
-
-            _ = window.UpdateVoiceTranscriptDraftAsync(_voiceTranscriptDraftText, args.Clear);
         });
     }
 

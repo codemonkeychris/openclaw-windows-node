@@ -72,7 +72,7 @@ public sealed partial class SettingsWindow : WindowEx
         NodeModeToggle.IsOn = _settings.EnableNodeMode;
     }
 
-    private async Task SaveSettingsAsync()
+    private async Task<bool> SaveSettingsAsync()
     {
         _settings.GatewayUrl = GatewayUrlTextBox.Text.Trim();
         _settings.Token = TokenTextBox.Text.Trim();
@@ -95,10 +95,20 @@ public sealed partial class SettingsWindow : WindowEx
         _settings.NotifyInfo = NotifyInfoCb.IsChecked ?? true;
         _settings.EnableNodeMode = NodeModeToggle.IsOn;
 
-        await VoiceSettingsPanel.ApplyAsync(_settings);
+        try
+        {
+            await VoiceSettingsPanel.ApplyAsync(_settings);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"[Settings] Failed to apply voice settings: {ex.Message}");
+            StatusLabel.Text = $"❌ Failed to apply voice settings: {ex.Message}";
+            return false;
+        }
 
         _settings.Save();
         AutoStartManager.SetAutoStart(_settings.AutoStart);
+        return true;
     }
 
     private async void OnTestConnection(object sender, RoutedEventArgs e)
@@ -200,7 +210,10 @@ public sealed partial class SettingsWindow : WindowEx
         var oldGateway = _settings.GatewayUrl;
         var oldAutoStart = _settings.AutoStart;
         var oldNodeMode = _settings.EnableNodeMode;
-        await SaveSettingsAsync();
+        if (!await SaveSettingsAsync())
+        {
+            return;
+        }
 
         if (!string.Equals(oldGateway, _settings.GatewayUrl, StringComparison.Ordinal))
         {

@@ -118,9 +118,9 @@ public static class VoiceProviderCatalogService
         };
     }
 
-    private static List<VoiceProviderOption> NormalizeProviders(List<VoiceProviderOption> providers)
+    private static List<VoiceProviderOption> NormalizeProviders(List<VoiceProviderOption>? providers)
     {
-        return providers
+        return (providers ?? [])
             .Where(p => !string.IsNullOrWhiteSpace(p.Id))
             .Select(Clone)
             .Where(p => p.Enabled || p.VisibleInSettings)

@@ -66,6 +66,7 @@ public partial class App : Application
 
     // Windows (created on demand)
     private SettingsWindow? _settingsWindow;
+    private VoiceRepeaterWindow? _voiceRepeaterWindow;
     private VoiceModeWindow? _voiceModeWindow;
     private WebChatWindow? _webChatWindow;
     private StatusDetailWindow? _statusDetailWindow;
@@ -308,6 +309,11 @@ public partial class App : Application
         if (startupDeepLink != null)
         {
             HandleDeepLink(startupDeepLink);
+        }
+
+        if (ShouldShowVoiceRepeaterAtStartup())
+        {
+            _dispatcherQueue?.TryEnqueue(ShowVoiceModeSettings);
         }
 
         Logger.Info("Application started (WinUI 3)");
@@ -780,6 +786,14 @@ public partial class App : Application
         }
 
         return _settings.Voice.Enabled && _settings.Voice.Mode != VoiceActivationMode.Off;
+    }
+
+    private bool ShouldShowVoiceRepeaterAtStartup()
+    {
+        return _settings?.EnableNodeMode == true &&
+               _settings.Voice.Enabled &&
+               _settings.Voice.Mode != VoiceActivationMode.Off &&
+               _settings.Voice.ShowRepeaterAtStartup;
     }
 
     private string GetVoiceQuickToggleLabel()
@@ -1697,10 +1711,12 @@ public partial class App : Application
         return voiceStatus.State switch
         {
             VoiceRuntimeState.PlayingResponse => VoiceTrayIconState.Speaking,
+            VoiceRuntimeState.ListeningForVoiceWake => VoiceTrayIconState.Listening,
+            VoiceRuntimeState.ListeningContinuously => VoiceTrayIconState.Listening,
             VoiceRuntimeState.RecordingUtterance => VoiceTrayIconState.Listening,
             VoiceRuntimeState.Paused => VoiceTrayIconState.Off,
             _ when voiceStatus.Mode == VoiceActivationMode.Off => VoiceTrayIconState.Off,
-            _ => VoiceTrayIconState.Armed
+            _ => VoiceTrayIconState.Off
         };
     }
 
@@ -1731,15 +1747,57 @@ public partial class App : Application
         if (_settings == null || _voiceService == null)
             return;
 
+        if (_voiceRepeaterWindow == null || _voiceRepeaterWindow.IsClosed)
+        {
+            _voiceRepeaterWindow = new VoiceRepeaterWindow(_settings, _voiceService);
+            _voiceRepeaterWindow.OpenVoiceStatusRequested += OnOpenVoiceStatusRequested;
+            _voiceRepeaterWindow.Closed += (s, e) =>
+            {
+                _voiceChatCoordinator?.DetachWindow(_voiceRepeaterWindow);
+                _voiceRepeaterWindow.OpenVoiceStatusRequested -= OnOpenVoiceStatusRequested;
+                _voiceRepeaterWindow = null;
+            };
+            _voiceChatCoordinator?.AttachWindow(_voiceRepeaterWindow);
+        }
+
+        _voiceRepeaterWindow.RefreshStatus();
+        _voiceRepeaterWindow.Activate();
+    }
+
+    private void ShowVoiceStatusWindow()
+    {
+        if (_settings == null || _voiceService == null)
+        {
+            return;
+        }
+
         if (_voiceModeWindow == null || _voiceModeWindow.IsClosed)
         {
             _voiceModeWindow = new VoiceModeWindow(_settings, _voiceService, _voiceService);
-            _voiceModeWindow.OpenSettingsRequested += (s, e) => ShowSettings();
-            _voiceModeWindow.Closed += (s, e) => _voiceModeWindow = null;
+            _voiceModeWindow.OpenSettingsRequested += OnVoiceModeOpenSettingsRequested;
+            _voiceModeWindow.Closed += (s, e) =>
+            {
+                if (_voiceModeWindow != null)
+                {
+                    _voiceModeWindow.OpenSettingsRequested -= OnVoiceModeOpenSettingsRequested;
+                }
+
+                _voiceModeWindow = null;
+            };
         }
 
         _voiceModeWindow.RefreshStatus();
         _voiceModeWindow.Activate();
+    }
+
+    private void OnOpenVoiceStatusRequested(object? sender, EventArgs e)
+    {
+        ShowVoiceStatusWindow();
+    }
+
+    private void OnVoiceModeOpenSettingsRequested(object? sender, EventArgs e)
+    {
+        ShowSettings();
     }
 
     private async void OnSettingsSaved(object? sender, EventArgs e)
@@ -1819,17 +1877,8 @@ public partial class App : Application
             _globalHotkey?.Unregister();
         }
 
-        if (_webChatWindow != null && ! _webChatWindow.IsClosed)
-        {
-            try
-            {
-                await _webChatWindow.SetStripInjectedMemoriesEnabledAsync(_settings.Voice.StripInjectedMemoriesInChat);
-            }
-            catch (Exception ex)
-            {
-                Logger.Warn($"Failed to refresh tray chat cleanup setting: {ex.Message}");
-            }
-        }
+        _voiceRepeaterWindow?.RefreshStatus();
+        _voiceModeWindow?.RefreshStatus();
 
         // Update auto-start
         AutoStartManager.SetAutoStart(_settings.AutoStart);
@@ -1841,8 +1890,7 @@ public partial class App : Application
         {
             _webChatWindow = new WebChatWindow(
                 _settings!.GatewayUrl,
-                _settings.Token,
-                _settings.Voice.StripInjectedMemoriesInChat);
+                _settings.Token);
             _webChatWindow.Closed += (s, e) =>
             {
                 _voiceChatCoordinator?.DetachWindow(_webChatWindow);
@@ -2105,6 +2153,7 @@ public partial class App : Application
         try
         {
             var status = await _voiceService.ToggleQuickPauseAsync();
+            _voiceRepeaterWindow?.RefreshStatus();
             _voiceModeWindow?.RefreshStatus();
             ShowVoiceQuickToggleToast(status);
         }
@@ -2384,6 +2433,15 @@ public partial class App : Application
     private void ExitApplication()
     {
         Logger.Info("Application exiting");
+
+        TryCloseWindow(_voiceRepeaterWindow);
+        TryCloseWindow(_voiceModeWindow);
+        TryCloseWindow(_webChatWindow);
+        TryCloseWindow(_settingsWindow);
+        TryCloseWindow(_statusDetailWindow);
+        TryCloseWindow(_notificationHistoryWindow);
+        TryCloseWindow(_activityStreamWindow);
+        TryCloseWindow(_quickSendDialog);
         
         // Cancel background tasks
         _deepLinkCts?.Cancel();
@@ -2416,6 +2474,22 @@ public partial class App : Application
         _voiceService?.Dispose();
         
         Exit();
+    }
+
+    private static void TryCloseWindow(Window? window)
+    {
+        if (window == null)
+        {
+            return;
+        }
+
+        try
+        {
+            window.Close();
+        }
+        catch
+        {
+        }
     }
 
     #endregion

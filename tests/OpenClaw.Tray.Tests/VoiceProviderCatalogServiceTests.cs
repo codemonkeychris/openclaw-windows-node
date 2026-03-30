@@ -62,7 +62,7 @@ public class VoiceProviderCatalogServiceTests
     }
 
     [Fact]
-    public void SupportsTextToSpeechRuntime_ReturnsTrueForMiniMaxOnlyWhenImplemented()
+    public void SupportsTextToSpeechRuntime_ReturnsTrueForImplementedProviders()
     {
         Assert.True(VoiceProviderCatalogService.SupportsTextToSpeechRuntime(VoiceProviderIds.Windows));
         Assert.True(VoiceProviderCatalogService.SupportsTextToSpeechRuntime(VoiceProviderIds.MiniMax));

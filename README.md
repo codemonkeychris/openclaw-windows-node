@@ -250,7 +250,7 @@ OpenClaw registers the `openclaw://` URL scheme for automation and integration:
 Deep links work even when Molty is already running - they're forwarded via IPC.
 
 ### Voice Mode
-*built by NichUK and his colleagues @codex and @copilot*
+*contributed by NichUK and his colleagues @codex and @copilot*
 
 Currently supports Talk Mode - Always on talk to your Claw! Wakeword and PTT modes coming soon
 - Uses internal Windows STT (cloud providers coming soon)

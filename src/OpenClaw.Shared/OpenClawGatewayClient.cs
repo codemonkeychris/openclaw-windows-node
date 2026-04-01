@@ -53,6 +53,7 @@ public class OpenClawGatewayClient : WebSocketClientBase
     private string _connectAuthToken;
     private SignatureTokenMode _signatureTokenMode = SignatureTokenMode.V3AuthToken;
     private long? _challengeTimestampMs;
+    private string? _challengeNonce;
     private bool _usageStatusUnsupported;
     private bool _usageCostUnsupported;
     private bool _sessionPreviewUnsupported;
@@ -788,6 +789,7 @@ public class OpenClawGatewayClient : WebSocketClientBase
             if (_signatureTokenMode != previousMode)
             {
                 _logger.Warn($"Gateway rejected device signature with mode {previousMode}; retrying with mode {_signatureTokenMode}");
+                _ = SendConnectMessageAsync(_challengeNonce);
                 return;
             }
 
@@ -1125,7 +1127,8 @@ public class OpenClawGatewayClient : WebSocketClientBase
         }
 
         _challengeTimestampMs = ts;
-        
+        _challengeNonce = nonce;
+
         _logger.Info($"Received challenge, nonce: {nonce}");
         _ = SendConnectMessageAsync(nonce);
     }

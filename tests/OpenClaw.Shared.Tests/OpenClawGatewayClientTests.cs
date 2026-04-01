@@ -212,6 +212,51 @@ public class OpenClawGatewayClientTests
             return (GatewayUsageInfo)(field?.GetValue(_client) ?? new GatewayUsageInfo());
         }
 
+        public string GetSignatureTokenMode()
+        {
+            var field = typeof(OpenClawGatewayClient).GetField(
+                "_signatureTokenMode",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            return field!.GetValue(_client)!.ToString()!;
+        }
+
+        public string? GetChallengeNonce()
+        {
+            var field = typeof(OpenClawGatewayClient).GetField(
+                "_challengeNonce",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            return field!.GetValue(_client) as string;
+        }
+
+        public int GetPendingConnectRequestCount()
+        {
+            var field = typeof(OpenClawGatewayClient).GetField(
+                "_pendingRequestMethods",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var dict = (System.Collections.Generic.Dictionary<string, string>)field!.GetValue(_client)!;
+            return dict.Values.Count(v => v == "connect");
+        }
+
+        public void SetChallengeNonce(string? nonce)
+        {
+            SetPrivateField("_challengeNonce", nonce!);
+        }
+
+        public string TrackNewConnectRequest()
+        {
+            var requestId = System.Guid.NewGuid().ToString();
+            TrackConnectRequestForTest(requestId);
+            return requestId;
+        }
+
+        public void TrackConnectRequestForTest(string requestId)
+        {
+            var method = typeof(OpenClawGatewayClient).GetMethod(
+                "TrackPendingRequest",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            method!.Invoke(_client, new object[] { requestId, "connect" });
+        }
+
         private void SetPrivateField(string fieldName, object value)
         {
             var field = typeof(OpenClawGatewayClient).GetField(
@@ -804,5 +849,101 @@ public class OpenClawGatewayClientTests
 
         Assert.Single(channels);
         Assert.Equal("degraded", channels[0].Status);
+    }
+
+    [Fact]
+    public void HandleConnectChallenge_StoresChallengeNonce()
+    {
+        var helper = new GatewayClientTestHelper();
+
+        helper.ProcessRawMessage("""
+        {
+            "type": "event",
+            "event": "connect.challenge",
+            "payload": { "nonce": "test-nonce-abc", "ts": 1700000000000 }
+        }
+        """);
+
+        Assert.Equal("test-nonce-abc", helper.GetChallengeNonce());
+    }
+
+    [Fact]
+    public void DeviceSignatureInvalid_AdvancesSignatureMode()
+    {
+        var helper = new GatewayClientTestHelper();
+
+        // Arrange: simulate a prior challenge so _challengeNonce is set
+        helper.SetChallengeNonce("test-nonce-xyz");
+        helper.TrackConnectRequestForTest("req-connect-1");
+
+        Assert.Equal("V3AuthToken", helper.GetSignatureTokenMode());
+
+        // Act: receive device signature invalid error
+        helper.ProcessRawMessage("""
+        {
+            "type": "res",
+            "id": "req-connect-1",
+            "ok": false,
+            "error": "device signature invalid"
+        }
+        """);
+
+        // Assert: mode advanced to next fallback
+        Assert.Equal("V3EmptyToken", helper.GetSignatureTokenMode());
+    }
+
+    [Fact]
+    public void DeviceSignatureInvalid_RetriesToSendConnectMessage()
+    {
+        var helper = new GatewayClientTestHelper();
+
+        // Arrange: simulate a prior challenge so _challengeNonce is set
+        helper.SetChallengeNonce("test-nonce-xyz");
+        helper.TrackConnectRequestForTest("req-connect-1");
+
+        // Act: receive device signature invalid error
+        helper.ProcessRawMessage("""
+        {
+            "type": "res",
+            "id": "req-connect-1",
+            "ok": false,
+            "error": "device signature invalid"
+        }
+        """);
+
+        // Assert: a new connect request was started (SendConnectMessageAsync was called)
+        Assert.True(helper.GetPendingConnectRequestCount() > 0,
+            "Expected a new connect request to be pending after signature mode fallback");
+    }
+
+    [Fact]
+    public void DeviceSignatureInvalid_AdvancesThroughAllModes()
+    {
+        var helper = new GatewayClientTestHelper();
+        helper.SetChallengeNonce("nonce");
+
+        // V3AuthToken -> V3EmptyToken
+        helper.TrackConnectRequestForTest("req-1");
+        helper.ProcessRawMessage("""{"type":"res","id":"req-1","ok":false,"error":"device signature invalid"}""");
+        Assert.Equal("V3EmptyToken", helper.GetSignatureTokenMode());
+
+        // Clear any pending requests from the retry, then simulate the next rejection
+        // V3EmptyToken -> V2AuthToken
+        var pendingId = helper.TrackNewConnectRequest();
+        helper.ProcessRawMessage($$"""{"type":"res","id":"{{pendingId}}","ok":false,"error":"device signature invalid"}""");
+        Assert.Equal("V2AuthToken", helper.GetSignatureTokenMode());
+
+        // V2AuthToken -> V2EmptyToken
+        pendingId = helper.TrackNewConnectRequest();
+        helper.ProcessRawMessage($$"""{"type":"res","id":"{{pendingId}}","ok":false,"error":"device signature invalid"}""");
+        Assert.Equal("V2EmptyToken", helper.GetSignatureTokenMode());
+
+        // V2EmptyToken -> V2EmptyToken (all modes exhausted, no further change)
+        var pendingCountBeforeFinalAttempt = helper.GetPendingConnectRequestCount();
+        pendingId = helper.TrackNewConnectRequest();
+        helper.ProcessRawMessage($$"""{"type":"res","id":"{{pendingId}}","ok":false,"error":"device signature invalid"}""");
+        Assert.Equal("V2EmptyToken", helper.GetSignatureTokenMode());
+        // No new connect request fired when all modes are exhausted
+        Assert.Equal(pendingCountBeforeFinalAttempt, helper.GetPendingConnectRequestCount());
     }
 }

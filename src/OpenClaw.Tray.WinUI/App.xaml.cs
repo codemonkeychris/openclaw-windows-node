@@ -270,6 +270,7 @@ public partial class App : Application
         ToastNotificationManagerCompat.OnActivated += OnToastActivated;
 
         _sshTunnelService = new SshTunnelService(new AppLogger());
+        _sshTunnelService.TunnelExited += OnSshTunnelExited;
 
         // First-run check
         if (string.IsNullOrWhiteSpace(_settings.Token))
@@ -2260,6 +2261,35 @@ public partial class App : Application
         }
 
         return true;
+    }
+
+    private async void OnSshTunnelExited(object? sender, EventArgs e)
+    {
+        if (_isExiting || _settings?.UseSshTunnel != true) return;
+
+        // Attempt to restart the SSH tunnel with bounded exponential backoff.
+        // The gateway client's built-in reconnect loop will pick up automatically
+        // once the tunnel port is available again.
+        int[] retryDelays = [1000, 2000, 5000, 10000, 30000];
+        for (int i = 0; i < retryDelays.Length; i++)
+        {
+            await Task.Delay(retryDelays[i]);
+            if (_isExiting || _settings?.UseSshTunnel != true) return;
+            try
+            {
+                if (EnsureSshTunnelConfigured())
+                {
+                    Logger.Info("SSH tunnel successfully restarted after unexpected exit");
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"SSH tunnel restart attempt {i + 1} failed: {ex.Message}");
+            }
+        }
+
+        Logger.Error("SSH tunnel could not be restarted after all retry attempts");
     }
 
     #endregion

@@ -21,6 +21,11 @@ public sealed class SshTunnelService : IDisposable
         _logger = logger;
     }
 
+    /// <summary>
+    /// Raised when the SSH tunnel process exits unexpectedly (i.e., not as a result of <see cref="Stop"/>).
+    /// </summary>
+    public event EventHandler? TunnelExited;
+
     public bool IsRunning => _process is { HasExited: false };
 
     public void EnsureStarted(SettingsManager settings)
@@ -130,6 +135,10 @@ public sealed class SshTunnelService : IDisposable
             else
             {
                 _logger.Warn($"SSH tunnel exited unexpectedly (code {exitCode})");
+                _process = null;
+                _lastSpec = null;
+                try { process.Dispose(); } catch (Exception disposeEx) { _logger.Warn($"SSH tunnel process dispose failed: {disposeEx.Message}"); }
+                TunnelExited?.Invoke(this, EventArgs.Empty);
             }
         };
 

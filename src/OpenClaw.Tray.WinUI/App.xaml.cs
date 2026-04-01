@@ -1081,6 +1081,7 @@ public partial class App : Application
         UnsubscribeGatewayEvents();
 
         _gatewayClient = new OpenClawGatewayClient(_settings.GatewayUrl, _settings.Token, new AppLogger());
+        _gatewayClient.SetUserRules(_settings.UserRules.Count > 0 ? _settings.UserRules : null);
         _gatewayClient.StatusChanged += OnConnectionStatusChanged;
         _gatewayClient.ActivityChanged += OnActivityChanged;
         _gatewayClient.NotificationReceived += OnNotificationReceived;

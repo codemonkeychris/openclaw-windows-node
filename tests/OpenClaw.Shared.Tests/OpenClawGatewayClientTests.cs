@@ -805,4 +805,192 @@ public class OpenClawGatewayClientTests
         Assert.Single(channels);
         Assert.Equal("degraded", channels[0].Status);
     }
+
+    [Fact]
+    public void ClassifyTool_UnknownTool_DefaultsToToolKind()
+    {
+        var helper = new GatewayClientTestHelper();
+        // Tools not explicitly mapped fall back to the Tool activity kind
+        Assert.Equal(ActivityKind.Tool, helper.ClassifyTool("job"));
+        Assert.Equal(ActivityKind.Tool, helper.ClassifyTool("grep"));
+        Assert.Equal(ActivityKind.Tool, helper.ClassifyTool("search"));
+        Assert.Equal(ActivityKind.Tool, helper.ClassifyTool("completely_unknown_tool_xyz"));
+    }
+
+    [Fact]
+    public void GetSessionList_EmptyBeforeAnyPayload_ReturnsEmptyArray()
+    {
+        var helper = new GatewayClientTestHelper();
+        var sessions = helper.GetSessionList();
+        Assert.Empty(sessions);
+    }
+
+    [Fact]
+    public void ProcessRawMessage_InvalidJson_IsIgnoredGracefully()
+    {
+        var helper = new GatewayClientTestHelper();
+        // Should not throw
+        helper.ProcessRawMessage("not valid json {{{");
+    }
+
+    [Fact]
+    public void ParseUsageStatus_WithMultipleProviders_ListsAllInSummary()
+    {
+        var helper = new GatewayClientTestHelper();
+        var usage = helper.ParseUsageStatusPayload("""
+            {
+              "updatedAt": 1739760000000,
+              "providers": [
+                {
+                  "provider": "openai",
+                  "displayName": "OpenAI",
+                  "windows": [
+                    { "label": "daily", "usedPercent": 10.0 }
+                  ]
+                },
+                {
+                  "provider": "anthropic",
+                  "displayName": "Anthropic",
+                  "windows": [
+                    { "label": "daily", "usedPercent": 40.0 }
+                  ]
+                }
+              ]
+            }
+            """);
+
+        Assert.NotNull(usage.ProviderSummary);
+        Assert.Contains("OpenAI", usage.ProviderSummary!);
+        Assert.Contains("Anthropic", usage.ProviderSummary!);
+    }
+
+    [Fact]
+    public void ParseUsageStatus_WithNoProviders_SetsSummaryOrEmpty()
+    {
+        var helper = new GatewayClientTestHelper();
+        var usage = helper.ParseUsageStatusPayload("""
+            {
+              "updatedAt": 1739760000000,
+              "providers": []
+            }
+            """);
+
+        // ProviderSummary may be null or empty when there are no providers
+        Assert.True(usage.ProviderSummary == null || usage.ProviderSummary.Length == 0);
+    }
+
+    [Fact]
+    public void ParseUsageCost_WithZeroTotals_UsageDisplayTextShowsNoData()
+    {
+        var helper = new GatewayClientTestHelper();
+        var usage = helper.ParseUsageCostPayload("""
+            {
+              "updatedAt": 1739760000000,
+              "days": 30,
+              "totals": {
+                "totalTokens": 0,
+                "totalCost": 0.0
+              }
+            }
+            """);
+
+        Assert.Equal(0, usage.TotalTokens);
+        Assert.Equal(0.0, usage.CostUsd, 3);
+        Assert.Equal("No usage data", usage.DisplayText);
+    }
+
+    [Fact]
+    public void ParseNodeList_WithEmptyNodesArray_ReturnsEmptyArray()
+    {
+        var helper = new GatewayClientTestHelper();
+        var nodes = helper.ParseNodeListPayload("""{"nodes":[]}""");
+        Assert.Empty(nodes);
+    }
+
+    [Fact]
+    public void ParseChannelHealth_WithLinkedAndAuthAge_PopulatesIsLinkedAndAuthAge()
+    {
+        var helper = new GatewayClientTestHelper();
+        var json = """
+            {
+              "telegram": {
+                "status": "ready",
+                "linked": true,
+                "authAge": "3d ago"
+              }
+            }
+            """;
+
+        var (channels, fired) = helper.ParseChannelHealthPayload(json);
+
+        Assert.True(fired);
+        Assert.Single(channels);
+        var ch = channels[0];
+        Assert.Equal("telegram", ch.Name);
+        Assert.Equal("ready", ch.Status);
+        Assert.True(ch.IsLinked);
+        Assert.Equal("3d ago", ch.AuthAge);
+    }
+
+    [Fact]
+    public void ParseChannelHealth_WithErrorField_PopulatesError()
+    {
+        var helper = new GatewayClientTestHelper();
+        var json = """
+            {
+              "slack": {
+                "status": "error",
+                "error": "OAuth token expired"
+              }
+            }
+            """;
+
+        var (channels, _) = helper.ParseChannelHealthPayload(json);
+
+        Assert.Single(channels);
+        Assert.Equal("error", channels[0].Status);
+        Assert.Equal("OAuth token expired", channels[0].Error);
+    }
+
+    [Fact]
+    public void ParseSessionsPreviewPayload_EmptyPreviews_ReturnsEmptyList()
+    {
+        var helper = new GatewayClientTestHelper();
+        var result = helper.ParseSessionsPreviewPayload("""
+            {
+              "ts": 1739760000000,
+              "previews": []
+            }
+            """);
+
+        Assert.Empty(result.Previews);
+    }
+
+    [Fact]
+    public void ParseNodeList_OnlineVsOfflineStatus_DerivedFromStatusField()
+    {
+        var helper = new GatewayClientTestHelper();
+        var nodes = helper.ParseNodeListPayload("""
+            {
+              "nodes": [
+                {
+                  "nodeId": "online-node",
+                  "displayName": "PC",
+                  "status": "connected"
+                },
+                {
+                  "nodeId": "offline-node",
+                  "displayName": "Laptop",
+                  "status": "disconnected"
+                }
+              ]
+            }
+            """);
+
+        Assert.Equal(2, nodes.Length);
+        var onlineNode = nodes.First(n => n.NodeId == "online-node");
+        var offlineNode = nodes.First(n => n.NodeId == "offline-node");
+        Assert.True(onlineNode.IsOnline);
+        Assert.False(offlineNode.IsOnline);
+    }
 }

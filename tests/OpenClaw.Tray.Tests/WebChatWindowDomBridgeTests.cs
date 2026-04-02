@@ -5,32 +5,27 @@ namespace OpenClaw.Tray.Tests;
 public class WebChatWindowDomBridgeTests
 {
     [Fact]
-    public void BuildDraftScript_ClearsWhenDraftIsBlank()
+    public void BuildSetDraftScript_ClearsWhenDraftIsBlank()
     {
-        var script = WebChatWindow.BuildDraftScript(string.Empty);
+        var script = WebChatVoiceDomBridge.BuildSetDraftScript(string.Empty);
 
         Assert.Equal("window.__openClawTrayVoice?.clearDraft?.();", script);
     }
 
     [Fact]
-    public void BuildTurnsScript_SerializesOutgoingTurns()
+    public void BuildSetDraftScript_SerializesDraftText()
     {
-        var turns = new[]
-        {
-            new WebChatWindow.VoiceConversationTurnMirror("outgoing", "hello from voice")
-        };
+        var script = WebChatVoiceDomBridge.BuildSetDraftScript("hello from voice");
 
-        var script = WebChatWindow.BuildTurnsScript(turns);
-
-        Assert.Contains("setTurns", script);
-        Assert.Contains("\"direction\":\"outgoing\"", script);
-        Assert.Contains("\"text\":\"hello from voice\"", script);
+        Assert.Contains("setDraft", script);
+        Assert.Contains("\"hello from voice\"", script);
     }
 
     [Fact]
-    public void VoiceIntegrationScript_AnchorsTurnsBesideComposer()
+    public void DocumentCreatedScript_ClearsLegacyTurnsHost()
     {
-        Assert.Contains("getTurnsAnchor", WebChatWindow.TrayVoiceIntegrationScript);
-        Assert.Contains("insertBefore(host, anchor)", WebChatWindow.TrayVoiceIntegrationScript);
+        Assert.Contains("openclaw-tray-voice-turns", WebChatVoiceDomBridge.DocumentCreatedScript);
+        Assert.Contains("clearLegacyTurnsHost", WebChatVoiceDomBridge.DocumentCreatedScript);
+        Assert.Equal("window.__openClawTrayVoice?.setTurns?.([]);", WebChatVoiceDomBridge.ClearLegacyTurnsScript);
     }
 }

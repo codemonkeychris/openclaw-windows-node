@@ -39,8 +39,8 @@ public class SettingsRoundTripTests
             {
                 Enabled = true,
                 Mode = VoiceActivationMode.VoiceWake,
+                ShowRepeaterAtStartup = false,
                 ShowConversationToasts = true,
-                StripInjectedMemoriesInChat = false,
                 SpeechToTextProviderId = "windows",
                 TextToSpeechProviderId = "elevenlabs",
                 InputDeviceId = "mic-1",
@@ -128,8 +128,8 @@ public class SettingsRoundTripTests
         Assert.NotNull(restored.Voice);
         Assert.True(restored.Voice.Enabled);
         Assert.Equal(VoiceActivationMode.VoiceWake, restored.Voice.Mode);
+        Assert.False(restored.Voice.ShowRepeaterAtStartup);
         Assert.True(restored.Voice.ShowConversationToasts);
-        Assert.False(restored.Voice.StripInjectedMemoriesInChat);
         Assert.Equal("windows", restored.Voice.SpeechToTextProviderId);
         Assert.Equal("elevenlabs", restored.Voice.TextToSpeechProviderId);
         Assert.Equal("mic-1", restored.Voice.InputDeviceId);
@@ -200,8 +200,8 @@ public class SettingsRoundTripTests
         Assert.NotNull(settings.Voice);
         Assert.False(settings.Voice.Enabled);
         Assert.Equal(VoiceActivationMode.Off, settings.Voice.Mode);
+        Assert.True(settings.Voice.ShowRepeaterAtStartup);
         Assert.False(settings.Voice.ShowConversationToasts);
-        Assert.True(settings.Voice.StripInjectedMemoriesInChat);
         Assert.Equal(VoiceProviderIds.Windows, settings.Voice.SpeechToTextProviderId);
         Assert.Equal(VoiceProviderIds.Windows, settings.Voice.TextToSpeechProviderId);
         Assert.NotNull(settings.VoiceProviderConfiguration);
@@ -275,8 +275,8 @@ public class SettingsRoundTripTests
         Assert.NotNull(settings.Voice);
         Assert.False(settings.Voice.Enabled);
         Assert.Equal(VoiceActivationMode.Off, settings.Voice.Mode);
+        Assert.True(settings.Voice.ShowRepeaterAtStartup);
         Assert.False(settings.Voice.ShowConversationToasts);
-        Assert.True(settings.Voice.StripInjectedMemoriesInChat);
         Assert.Equal(VoiceProviderIds.Windows, settings.Voice.SpeechToTextProviderId);
         Assert.Equal(VoiceProviderIds.Windows, settings.Voice.TextToSpeechProviderId);
         Assert.Null(settings.UserRules);

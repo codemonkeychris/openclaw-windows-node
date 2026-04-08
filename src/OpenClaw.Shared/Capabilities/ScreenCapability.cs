@@ -14,15 +14,16 @@ public class ScreenCapability : NodeCapabilityBase
     private static readonly string[] _commands = new[]
     {
         "screen.capture",
-        "screen.list"
-        // Future: "screen.record"
+        "screen.list",
+        "screen.record",
     };
-    
+
     public override IReadOnlyList<string> Commands => _commands;
-    
+
     // Events for UI/platform-specific implementation
     public event Func<ScreenCaptureArgs, Task<ScreenCaptureResult>>? CaptureRequested;
     public event Func<Task<ScreenInfo[]>>? ListRequested;
+    public event Func<ScreenRecordArgs, Task<ScreenRecordResult>>? RecordRequested;
     
     public ScreenCapability(IOpenClawLogger logger) : base(logger)
     {
@@ -33,7 +34,8 @@ public class ScreenCapability : NodeCapabilityBase
         return request.Command switch
         {
             "screen.capture" => await HandleCaptureAsync(request),
-            "screen.list" => await HandleListAsync(request),
+            "screen.list"    => await HandleListAsync(request),
+            "screen.record"  => await HandleRecordAsync(request),
             _ => Error($"Unknown command: {request.Command}")
         };
     }
@@ -114,6 +116,64 @@ public class ScreenCapability : NodeCapabilityBase
             return Error($"List failed: {ex.Message}");
         }
     }
+
+    private async Task<NodeInvokeResponse> HandleRecordAsync(NodeInvokeRequest request)
+    {
+        var durationMs  = GetIntArg(request.Args, "durationMs", 5000);
+        var fps         = GetIntArg(request.Args, "fps", 10);
+        var screenIndex = GetIntArg(request.Args, "screenIndex", GetIntArg(request.Args, "monitor", 0));
+
+        Logger.Info($"screen.record: durationMs={durationMs} fps={fps} screenIndex={screenIndex}");
+
+        if (RecordRequested == null)
+            return Error("Screen recording not available");
+
+        try
+        {
+            var result = await RecordRequested(new ScreenRecordArgs
+            {
+                DurationMs  = durationMs,
+                Fps         = fps,
+                ScreenIndex = screenIndex,
+            });
+
+            return Success(new
+            {
+                format      = result.Format,
+                base64      = result.Base64,
+                durationMs  = result.DurationMs,
+                fps         = result.Fps,
+                screenIndex = result.ScreenIndex,
+                width       = result.Width,
+                height      = result.Height,
+                hasAudio    = result.HasAudio,
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("screen.record failed", ex);
+            return Error($"Record failed: {ex.Message}");
+        }
+    }
+}
+
+public class ScreenRecordArgs
+{
+    public int DurationMs { get; set; } = 5000;
+    public int Fps { get; set; } = 10;
+    public int ScreenIndex { get; set; }
+}
+
+public class ScreenRecordResult
+{
+    public string Base64 { get; set; } = "";
+    public string Format { get; set; } = "mp4";
+    public int DurationMs { get; set; }
+    public float Fps { get; set; }
+    public int ScreenIndex { get; set; }
+    public int Width { get; set; }
+    public int Height { get; set; }
+    public bool HasAudio { get; set; }
 }
 
 public class ScreenCaptureArgs

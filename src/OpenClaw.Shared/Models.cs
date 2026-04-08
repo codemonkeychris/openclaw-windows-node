@@ -182,17 +182,16 @@ public class SessionInfo
         get
         {
             var prefix = IsMain ? "Main" : "Sub";
-            var parts = new List<string> { prefix };
-
-            if (!string.IsNullOrEmpty(Channel))
-                parts.Add(Channel);
-
-            if (!string.IsNullOrEmpty(CurrentActivity))
-                parts.Add(CurrentActivity);
-            else if (!string.IsNullOrEmpty(Status) && Status != "unknown" && Status != "active")
-                parts.Add(Status);
-
-            return string.Join(" · ", parts);
+            string? mid = !string.IsNullOrEmpty(Channel) ? Channel : null;
+            string? end = !string.IsNullOrEmpty(CurrentActivity) ? CurrentActivity
+                : (!string.IsNullOrEmpty(Status) && Status != "unknown" && Status != "active" ? Status : null);
+            return (mid, end) switch
+            {
+                (null, null) => prefix,
+                (not null, null) => $"{prefix} · {mid}",
+                (null, not null) => $"{prefix} · {end}",
+                _ => $"{prefix} · {mid} · {end}",
+            };
         }
     }
 

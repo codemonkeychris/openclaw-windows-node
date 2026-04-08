@@ -1358,14 +1358,14 @@ public class OpenClawGatewayClient : WebSocketClientBase
 
     private SessionInfo[] GetSessionListInternal()
     {
-        var list = new List<SessionInfo>(_sessions.Values);
-        list.Sort((a, b) =>
+        var result = new SessionInfo[_sessions.Count];
+        _sessions.Values.CopyTo(result, 0);
+        Array.Sort(result, static (a, b) =>
         {
-            // Main session first, then by last seen
             if (a.IsMain != b.IsMain) return a.IsMain ? -1 : 1;
             return b.LastSeen.CompareTo(a.LastSeen);
         });
-        return list.ToArray();
+        return result;
     }
 
     // --- Parsing helpers ---

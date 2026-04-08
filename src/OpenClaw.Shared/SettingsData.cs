@@ -44,8 +44,10 @@ public class SettingsData
 
     public string ToJson() => JsonSerializer.Serialize(this, s_options);
 
-    public static SettingsData? FromJson(string json)
+    public static SettingsData? FromJson(string? json)
     {
+        if (string.IsNullOrEmpty(json))
+            return null;
         try
         {
             return JsonSerializer.Deserialize<SettingsData>(MigrateLegacyVoiceJson(json));

@@ -149,7 +149,7 @@ public static class VoiceTrayIconHelper
     private static string ResolveAssetsPath()
     {
         var bundledPath = Path.Combine(AppContext.BaseDirectory, "Assets");
-        if (Directory.Exists(bundledPath))
+        if (File.Exists(Path.Combine(bundledPath, "openclaw.ico")))
         {
             return bundledPath;
         }

@@ -20,6 +20,7 @@ public class NodeService : IDisposable
     private WindowsNodeClient? _nodeClient;
     private CanvasWindow? _canvasWindow;
     private ScreenCaptureService? _screenCaptureService;
+    private ScreenRecordingService? _screenRecordingService;
     private CameraCaptureService? _cameraCaptureService;
     private DateTime _lastScreenCaptureNotification = DateTime.MinValue;
     private string? _a2uiHostUrl;
@@ -49,8 +50,9 @@ public class NodeService : IDisposable
         _logger = logger;
         _dispatcherQueue = dispatcherQueue;
         _dataPath = dataPath;
-        _screenCaptureService = new ScreenCaptureService(logger);
-        _cameraCaptureService = new CameraCaptureService(logger);
+        _screenCaptureService   = new ScreenCaptureService(logger);
+        _screenRecordingService = new ScreenRecordingService(logger);
+        _cameraCaptureService   = new CameraCaptureService(logger);
     }
     
     /// <summary>
@@ -125,8 +127,9 @@ public class NodeService : IDisposable
         
         // Screen capability
         _screenCapability = new ScreenCapability(_logger);
-        _screenCapability.ListRequested += OnScreenList;
+        _screenCapability.ListRequested    += OnScreenList;
         _screenCapability.CaptureRequested += OnScreenCapture;
+        _screenCapability.RecordRequested  += OnScreenRecord;
         _nodeClient.RegisterCapability(_screenCapability);
 
         // Camera capability
@@ -432,7 +435,15 @@ public class NodeService : IDisposable
         
         return await _screenCaptureService.CaptureAsync(args);
     }
-    
+
+    private Task<ScreenRecordResult> OnScreenRecord(ScreenRecordArgs args)
+    {
+        if (_screenRecordingService == null)
+            throw new InvalidOperationException("Screen recording service not available");
+
+        return _screenRecordingService.RecordAsync(args);
+    }
+
     #endregion
     
     #region Camera Capability Handlers

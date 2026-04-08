@@ -683,7 +683,8 @@ public class ScreenCapabilityTests
         var cap = new ScreenCapability(NullLogger.Instance);
         Assert.True(cap.CanHandle("screen.capture"));
         Assert.True(cap.CanHandle("screen.list"));
-        Assert.False(cap.CanHandle("screen.record"));
+        Assert.True(cap.CanHandle("screen.record"));
+        Assert.False(cap.CanHandle("screen.unknown"));
         Assert.Equal("screen", cap.Category);
     }
 
@@ -834,6 +835,110 @@ public class ScreenCapabilityTests
         Assert.True(res.Ok);
         Assert.NotNull(receivedArgs);
         Assert.Equal(2, receivedArgs!.MonitorIndex);
+    }
+
+    [Fact]
+    public async Task Record_ReturnsError_WhenNoHandler()
+    {
+        var cap = new ScreenCapability(NullLogger.Instance);
+        var req = new NodeInvokeRequest { Id = "sr1", Command = "screen.record", Args = Parse("""{}""") };
+        var res = await cap.ExecuteAsync(req);
+        Assert.False(res.Ok);
+        Assert.Contains("not available", res.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Record_CallsHandler_WithArgs()
+    {
+        var cap = new ScreenCapability(NullLogger.Instance);
+        ScreenRecordArgs? receivedArgs = null;
+        cap.RecordRequested += (args) =>
+        {
+            receivedArgs = args;
+            return Task.FromResult(new ScreenRecordResult
+            {
+                Format = "mp4", Base64 = "vid", DurationMs = 2000, Fps = 10,
+                ScreenIndex = 1, Width = 1920, Height = 1080
+            });
+        };
+
+        var req = new NodeInvokeRequest
+        {
+            Id = "sr2",
+            Command = "screen.record",
+            Args = Parse("""{"durationMs":2000,"fps":10,"screenIndex":1}""")
+        };
+        var res = await cap.ExecuteAsync(req);
+        Assert.True(res.Ok);
+        Assert.NotNull(receivedArgs);
+        Assert.Equal(2000, receivedArgs!.DurationMs);
+        Assert.Equal(10,   receivedArgs.Fps);
+        Assert.Equal(1,    receivedArgs.ScreenIndex);
+
+        var json = JsonSerializer.Serialize(res.Payload);
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        Assert.Equal("mp4",  root.GetProperty("format").GetString());
+        Assert.Equal("vid",  root.GetProperty("base64").GetString());
+        Assert.Equal(2000,   root.GetProperty("durationMs").GetInt32());
+        Assert.Equal(10,     root.GetProperty("fps").GetInt32());
+        Assert.Equal(1,      root.GetProperty("screenIndex").GetInt32());
+        Assert.Equal(1920,   root.GetProperty("width").GetInt32());
+        Assert.Equal(1080,   root.GetProperty("height").GetInt32());
+        Assert.False(        root.GetProperty("hasAudio").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Record_UsesDefaults_WhenArgsMissing()
+    {
+        var cap = new ScreenCapability(NullLogger.Instance);
+        ScreenRecordArgs? receivedArgs = null;
+        cap.RecordRequested += (args) =>
+        {
+            receivedArgs = args;
+            return Task.FromResult(new ScreenRecordResult());
+        };
+
+        var req = new NodeInvokeRequest { Id = "sr3", Command = "screen.record", Args = Parse("""{}""") };
+        var res = await cap.ExecuteAsync(req);
+        Assert.True(res.Ok);
+        Assert.Equal(5000, receivedArgs!.DurationMs);
+        Assert.Equal(10,   receivedArgs.Fps);
+        Assert.Equal(0,    receivedArgs.ScreenIndex);
+    }
+
+    [Fact]
+    public async Task Record_UsesMonitorAlias_ForScreenIndex()
+    {
+        var cap = new ScreenCapability(NullLogger.Instance);
+        ScreenRecordArgs? receivedArgs = null;
+        cap.RecordRequested += (args) =>
+        {
+            receivedArgs = args;
+            return Task.FromResult(new ScreenRecordResult());
+        };
+
+        var req = new NodeInvokeRequest
+        {
+            Id = "sr4",
+            Command = "screen.record",
+            Args = Parse("""{"monitor":2}""")
+        };
+        var res = await cap.ExecuteAsync(req);
+        Assert.True(res.Ok);
+        Assert.Equal(2, receivedArgs!.ScreenIndex);
+    }
+
+    [Fact]
+    public async Task Record_ReturnsError_WhenHandlerThrows()
+    {
+        var cap = new ScreenCapability(NullLogger.Instance);
+        cap.RecordRequested += (args) => throw new InvalidOperationException("GPU capture failed");
+
+        var req = new NodeInvokeRequest { Id = "sr5", Command = "screen.record", Args = Parse("""{}""") };
+        var res = await cap.ExecuteAsync(req);
+        Assert.False(res.Ok);
+        Assert.Contains("GPU capture failed", res.Error);
     }
 }
 

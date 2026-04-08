@@ -230,18 +230,7 @@ public class SessionInfo
         }
     }
 
-    public string AgeText
-    {
-        get
-        {
-            var stamp = UpdatedAt ?? LastSeen;
-            var delta = DateTime.UtcNow - stamp;
-            if (delta.TotalSeconds < 60) return "just now";
-            if (delta.TotalMinutes < 60) return $"{(int)Math.Round(delta.TotalMinutes)}m ago";
-            if (delta.TotalHours < 48) return $"{(int)Math.Round(delta.TotalHours)}h ago";
-            return $"{(int)Math.Round(delta.TotalDays)}d ago";
-        }
-    }
+    public string AgeText => ModelFormatting.FormatAge(UpdatedAt ?? LastSeen);
 
     public string ContextSummaryShort
     {
@@ -439,7 +428,16 @@ public class GatewayNodeInfo
         }
     }
 
-    private static string FormatAge(DateTime timestampUtc)
+    private static string FormatAge(DateTime timestampUtc) => ModelFormatting.FormatAge(timestampUtc);
+}
+
+/// <summary>Shared display-formatting helpers used by model classes.</summary>
+internal static class ModelFormatting
+{
+    /// <summary>
+    /// Formats a UTC timestamp as a human-readable age string (e.g. "just now", "5m ago", "2h ago", "3d ago").
+    /// </summary>
+    internal static string FormatAge(DateTime timestampUtc)
     {
         var delta = DateTime.UtcNow - timestampUtc;
         if (delta.TotalSeconds < 60) return "just now";
@@ -447,11 +445,7 @@ public class GatewayNodeInfo
         if (delta.TotalHours < 48) return $"{(int)Math.Round(delta.TotalHours)}h ago";
         return $"{(int)Math.Round(delta.TotalDays)}d ago";
     }
-}
 
-/// <summary>Shared display-formatting helpers used by model classes.</summary>
-internal static class ModelFormatting
-{
     /// <summary>
     /// Formats a large integer with K/M suffix for compact display (e.g. 1500 → "1.5K", 2_000_000 → "2.0M").
     /// </summary>

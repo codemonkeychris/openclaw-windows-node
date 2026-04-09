@@ -8,6 +8,7 @@ using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
 using Windows.Graphics.DirectX.Direct3D11;
 using Windows.Graphics.Imaging;
+using Windows.Media.Core;
 using Windows.Media.MediaProperties;
 using Windows.Media.Transcoding;
 using Windows.Storage.Streams;
@@ -30,6 +31,11 @@ internal sealed class ScreenRecordingService : IDisposable
     private const int MinDurationMs = 250;
     private const int MaxDurationMs = 60_000;
     private const int PoolBuffers   = 2;
+
+    // BGRA frame buffer safety cap: ~500 MB across all queued frames.
+    // At 1080p (8 MB/frame) this allows ~62 frames; at 720p (~4 MB) ~125 frames.
+    // Frames beyond this limit are dropped to prevent OOM on long/high-fps recordings.
+    private const long MaxFrameBufferBytes = 500L * 1024 * 1024;
 
     public ScreenRecordingService(IOpenClawLogger logger)
     {
@@ -56,6 +62,7 @@ internal sealed class ScreenRecordingService : IDisposable
         var latestFrame = (Direct3D11CaptureFrame?)null;
         using var ready = new SemaphoreSlim(0, 1);
         var frames = new List<byte[]>();
+        var frameBytes = (long)width * height * 4; // BGRA bytes per frame
 
         try
         {
@@ -96,6 +103,12 @@ internal sealed class ScreenRecordingService : IDisposable
 
                 using (frame)
                 {
+                    if (frames.Count * frameBytes >= MaxFrameBufferBytes)
+                    {
+                        _logger.Warn($"[ScreenRecording] Frame buffer cap reached ({MaxFrameBufferBytes / 1024 / 1024} MB), stopping early.");
+                        break;
+                    }
+
                     try
                     {
                         var bmp = await SoftwareBitmap.CreateCopyFromSurfaceAsync(frame.Surface);
@@ -120,11 +133,13 @@ internal sealed class ScreenRecordingService : IDisposable
         _logger.Info($"[ScreenRecording] Captured {frames.Count} frames, encoding...");
 
         var base64 = await EncodeToMp4Async(frames, width, height, fps);
+        var filePath = SaveToTempFile(base64);
 
         return new ScreenRecordResult
         {
             Format      = "mp4",
             Base64      = base64,
+            FilePath    = filePath,
             DurationMs  = durationMs,
             Fps         = fps,
             ScreenIndex = screenIndex,
@@ -182,11 +197,13 @@ internal sealed class ScreenRecordingService : IDisposable
 
         _logger.Info($"[ScreenRecording] session {recordingId}: {frames.Count} frames, encoding...");
         var base64 = await EncodeToMp4Async(frames, width, height, fps);
+        var filePath = SaveToTempFile(base64);
 
         return new ScreenRecordResult
         {
             Format      = "mp4",
             Base64      = base64,
+            FilePath    = filePath,
             DurationMs  = durationMs,
             Fps         = fps,
             ScreenIndex = screenIndex,
@@ -205,82 +222,116 @@ internal sealed class ScreenRecordingService : IDisposable
         }
     }
 
+    // ── Temp file ─────────────────────────────────────────────────────────────
+
+    private string SaveToTempFile(string base64)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "openclaw");
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, $"openclaw-screen-record-{Guid.NewGuid()}.mp4");
+        File.WriteAllBytes(path, Convert.FromBase64String(base64));
+        _logger.Info($"[ScreenRecording] Saved to {path}");
+        return path;
+    }
+
     // ── Encoding ──────────────────────────────────────────────────────────────
 
     private static async Task<string> EncodeToMp4Async(
         List<byte[]> frames, int width, int height, int fps)
     {
-        var output = new InMemoryRandomAccessStream();
+        if (frames.Count == 0)
+            throw new InvalidOperationException("No frames to encode");
 
-        var profile = MediaEncodingProfile.CreateMp4(VideoEncodingQuality.HD720p);
-        profile.Video.Width  = (uint)width;
-        profile.Video.Height = (uint)height;
-        profile.Video.FrameRate.Numerator   = (uint)fps;
-        profile.Video.FrameRate.Denominator = 1;
-        profile.Audio = null;
+        var encWidth  = (uint)(width  & ~1);
+        var encHeight = (uint)(height & ~1);
+        var fi = new[] { 0 };
 
-        var input = BuildRawVideoStream(frames, width, height);
-
-        PrepareTranscodeResult? xcode = null;
-        try
+        MediaStreamSource MakeMss()
         {
-            xcode = await new MediaTranscoder { HardwareAccelerationEnabled = true }
-                .PrepareStreamTranscodeAsync(input, output, profile);
-        }
-        catch
-        {
-            xcode = await new MediaTranscoder { HardwareAccelerationEnabled = false }
-                .PrepareStreamTranscodeAsync(input, output, profile);
-        }
-
-        if (!xcode.CanTranscode)
-            throw new InvalidOperationException($"Transcode failed: {xcode.FailureReason}");
-
-        await xcode.TranscodeAsync();
-
-        output.Seek(0);
-        var reader = new DataReader(output);
-        await reader.LoadAsync((uint)output.Size);
-        var bytes = new byte[output.Size];
-        reader.ReadBytes(bytes);
-        return Convert.ToBase64String(bytes);
-    }
-
-    private static InMemoryRandomAccessStream BuildRawVideoStream(
-        List<byte[]> frames, int width, int height)
-    {
-        var stream = new InMemoryRandomAccessStream();
-        var writer = new DataWriter(stream);
-        foreach (var frame in frames)
-            writer.WriteBytes(BgraToNv12(frame, width, height));
-        writer.StoreAsync().AsTask().Wait();
-        stream.Seek(0);
-        return stream;
-    }
-
-    /// <summary>BT.601 limited-range BGRA→NV12 conversion.</summary>
-    private static byte[] BgraToNv12(byte[] bgra, int width, int height)
-    {
-        var nv12   = new byte[width * height * 3 / 2];
-        int yBase  = 0;
-        int uvBase = width * height;
-
-        for (int y = 0; y < height; y++)
-        for (int x = 0; x < width; x++)
-        {
-            int i = (y * width + x) * 4;
-            byte b = bgra[i], g = bgra[i + 1], r = bgra[i + 2];
-
-            nv12[yBase++] = (byte)(16 + (66 * r + 129 * g + 25 * b) / 256);
-
-            if ((y & 1) == 0 && (x & 1) == 0)
+            fi[0] = 0;
+            var inputProps = VideoEncodingProperties.CreateUncompressed(
+                MediaEncodingSubtypes.Nv12, encWidth, encHeight);
+            inputProps.FrameRate.Numerator   = (uint)fps;
+            inputProps.FrameRate.Denominator = 1;
+            var mss = new MediaStreamSource(new VideoStreamDescriptor(inputProps));
+            mss.BufferTime = TimeSpan.Zero;
+            mss.SampleRequested += (_, e) =>
             {
-                int uv = uvBase + (y / 2 * width) + (x & ~1);
-                nv12[uv]     = (byte)(128 + (-38 * r -  74 * g + 112 * b) / 256);
-                nv12[uv + 1] = (byte)(128 + (112 * r -  94 * g -  18 * b) / 256);
-            }
+                if (fi[0] >= frames.Count) { e.Request.Sample = null; return; }
+                var nv12 = BgraToNv12(frames[fi[0]], width, height, (int)encWidth, (int)encHeight);
+                var ts   = TimeSpan.FromTicks((long)(fi[0] * 10_000_000.0 / fps));
+                var dur  = TimeSpan.FromTicks((long)(10_000_000.0 / fps));
+                var dw   = new DataWriter();
+                dw.WriteBytes(nv12);
+                var sample = MediaStreamSample.CreateFromBuffer(dw.DetachBuffer(), ts);
+                sample.Duration = dur;
+                e.Request.Sample = sample;
+                fi[0]++;
+            };
+            return mss;
         }
 
+        MediaEncodingProfile MakeProfile()
+        {
+            var profile = MediaEncodingProfile.CreateMp4(VideoEncodingQuality.Auto);
+            profile.Video.Width                 = encWidth;
+            profile.Video.Height                = encHeight;
+            profile.Video.Bitrate               = 4_000_000;
+            profile.Video.FrameRate.Numerator   = (uint)fps;
+            profile.Video.FrameRate.Denominator = 1;
+            profile.Audio = null;
+            return profile;
+        }
+
+        foreach (var hwEnabled in new[] { true, false })
+        {
+            using var output = new InMemoryRandomAccessStream();
+            var transcoder = new MediaTranscoder { HardwareAccelerationEnabled = hwEnabled };
+            PrepareTranscodeResult result;
+            try
+            {
+                result = await transcoder
+                    .PrepareMediaStreamSourceTranscodeAsync(MakeMss(), output, MakeProfile());
+            }
+            catch (System.Runtime.InteropServices.COMException) when (hwEnabled)
+            {
+                continue;
+            }
+            if (!result.CanTranscode) continue;
+            await result.TranscodeAsync();
+            var size = (uint)output.Size;
+            if (size == 0) continue;
+            var dr = new DataReader(output.GetInputStreamAt(0));
+            await dr.LoadAsync(size);
+            var bytes = new byte[size];
+            dr.ReadBytes(bytes);
+            return Convert.ToBase64String(bytes);
+        }
+
+        throw new InvalidOperationException("No encoder available (hardware or software)");
+    }
+
+    private static byte[] BgraToNv12(byte[] bgra, int srcWidth, int srcHeight,
+        int encWidth, int encHeight)
+    {
+        var nv12 = new byte[encWidth * encHeight * 3 / 2];
+        for (int y = 0; y < encHeight; y++)
+        for (int x = 0; x < encWidth; x++)
+        {
+            int i = (y * srcWidth + x) * 4;
+            int b = bgra[i], g = bgra[i + 1], r = bgra[i + 2];
+            nv12[y * encWidth + x] = (byte)(((66 * r + 129 * g + 25 * b + 128) >> 8) + 16);
+        }
+        int uvBase = encWidth * encHeight;
+        for (int y = 0; y < encHeight; y += 2)
+        for (int x = 0; x < encWidth; x += 2)
+        {
+            int i    = (y * srcWidth + x) * 4;
+            int b    = bgra[i], g = bgra[i + 1], r = bgra[i + 2];
+            int uvIdx = uvBase + (y / 2) * encWidth + x;
+            nv12[uvIdx]     = (byte)(((-38 * r -  74 * g + 112 * b + 128) >> 8) + 128);
+            nv12[uvIdx + 1] = (byte)(((112 * r -  94 * g -  18 * b + 128) >> 8) + 128);
+        }
         return nv12;
     }
 
@@ -324,10 +375,10 @@ internal sealed class ScreenRecordingService : IDisposable
             var factory = (IGraphicsCaptureItemInterop)Marshal.GetObjectForIUnknown(factoryPtr);
             Marshal.Release(factoryPtr);
 
-            var itemIid = typeof(GraphicsCaptureItem).GUID;
+            var itemIid = new Guid("AF86E2E0-B12D-4C6A-9C5A-D7AA65101E90"); // IInspectable
             factory.CreateForMonitor(monitors[screenIndex], in itemIid, out var itemPtr);
 
-            var item = MarshalInterface<GraphicsCaptureItem>.FromAbi(itemPtr);
+            var item = MarshalInspectable<GraphicsCaptureItem>.FromAbi(itemPtr);
             Marshal.Release(itemPtr);
             return item;
         }
@@ -444,6 +495,7 @@ internal sealed class ScreenRecordingService : IDisposable
         {
             var intervalMs  = 1000 / Fps;
             var nextCapture = DateTime.UtcNow;
+            var frameBytes  = (long)Width * Height * 4;
 
             while (!ct.IsCancellationRequested)
             {
@@ -461,6 +513,15 @@ internal sealed class ScreenRecordingService : IDisposable
 
                 using (frame)
                 {
+                    int frameCount;
+                    lock (_framesLock) frameCount = _frames.Count;
+                    if (frameCount * frameBytes >= MaxFrameBufferBytes)
+                    {
+                        _logger.Warn($"[ScreenRecording] Session {Id}: frame buffer cap reached ({MaxFrameBufferBytes / 1024 / 1024} MB), stopping capture.");
+                        _cts.Cancel();
+                        break;
+                    }
+
                     try
                     {
                         var bmp   = await SoftwareBitmap.CreateCopyFromSurfaceAsync(frame.Surface);

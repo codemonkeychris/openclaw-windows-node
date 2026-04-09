@@ -147,6 +147,7 @@ public class ScreenCapability : NodeCapabilityBase
             {
                 format      = result.Format,
                 base64      = result.Base64,
+                filePath    = result.FilePath,
                 durationMs  = result.DurationMs,
                 fps         = result.Fps,
                 screenIndex = result.ScreenIndex,
@@ -158,7 +159,7 @@ public class ScreenCapability : NodeCapabilityBase
         catch (Exception ex)
         {
             Logger.Error("screen.record failed", ex);
-            return Error($"Record failed: {ex.Message}");
+            return Error($"Record failed: {ex.GetType().Name}: {ex.Message} | {ex.StackTrace?.Split('\n').FirstOrDefault()?.Trim()}");
         }
     }
 
@@ -207,6 +208,7 @@ public class ScreenCapability : NodeCapabilityBase
             {
                 format      = result.Format,
                 base64      = result.Base64,
+                filePath    = result.FilePath,
                 durationMs  = result.DurationMs,
                 fps         = result.Fps,
                 screenIndex = result.ScreenIndex,
@@ -223,6 +225,12 @@ public class ScreenCapability : NodeCapabilityBase
     }
 }
 
+/// <summary>
+/// Parameters for a fixed-duration screen recording.
+/// Memory usage: width × height × 4 bytes × (durationMs/1000 × fps) frames.
+/// Recommended limits: durationMs ≤ 10 000, fps ≤ 10 for 1080p to stay under 500 MB.
+/// The service enforces a hard 500 MB frame-buffer cap and stops capture early if exceeded.
+/// </summary>
 public class ScreenRecordArgs
 {
     public int DurationMs { get; set; } = 5000;
@@ -230,6 +238,10 @@ public class ScreenRecordArgs
     public int ScreenIndex { get; set; }
 }
 
+/// <summary>
+/// Parameters for an open-ended screen recording session (screen.record.start / screen.record.stop).
+/// The same 500 MB frame-buffer cap applies; capture stops automatically if the limit is hit.
+/// </summary>
 public class ScreenRecordStartArgs
 {
     public int Fps { get; set; } = 10;
@@ -240,8 +252,9 @@ public class ScreenRecordResult
 {
     public string Base64 { get; set; } = "";
     public string Format { get; set; } = "mp4";
+    public string? FilePath { get; set; }
     public int DurationMs { get; set; }
-    public float Fps { get; set; }
+    public int Fps { get; set; }
     public int ScreenIndex { get; set; }
     public int Width { get; set; }
     public int Height { get; set; }

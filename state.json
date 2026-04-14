@@ -1,7 +1,7 @@
 {
-  "lr": "2026-04-14T01:04Z",
-  "rid": "24375217933",
-  "prs": ["170_frozendict_branch"],
+  "lr": "2026-04-14T12:48Z",
+  "rid": "24399395500",
+  "prs": ["perf-reduce-allocs-display-session-2026-04-14"],
   "comments_made": {
     "99": "2026-03-26",
     "149": "2026-04-06",
@@ -9,5 +9,5 @@
     "159": "2026-04-13",
     "164": "2026-04-12"
   },
-  "notes": "Tasks 2+5 selected. Task 2: no new issues without Repo Assist comment; shanselman left detailed new feedback on PR #159 (D3D device ownership, SoftwareBitmap disposal, session cleanup on disconnect, temp file retention) - maintainer is engaged, no need for Repo Assist to pile in. Task 5: converted ChannelMap, IntentMap, CategoryTitles in NotificationCategorizer from Dictionary to FrozenDictionary - consistent with pattern in GatewayClient/App.xaml.cs; PR submitted on branch repo-assist/improve-frozen-dicts-notif-categorizer; 586 Shared + 122 Tray pass. PR #170 was created by shanselman himself to fix NuGet cache issue (addresses issue #166). Issue #164 closed by shanselman 2026-04-13. PRs #165/#167/#168 confirmed merged. PR #159 needs more work (shanselman feedback). PR #120 still open, no new activity."
+  "notes": "Tasks 8+2 selected. Task 8: eliminated List<T> allocations in SessionInfo.DisplayText (replaced with direct string interpolation, max 3 segments) and GetSessionListInternal (CopyTo+Array.Sort instead of new List+ToArray); 586 Shared + 122 Tray pass; PR submitted on branch repo-assist/perf-reduce-allocs-display-session-2026-04-14. Task 2: no new issues to comment on - issue #99 has no new human comments after 2026-03-26 Repo Assist comment; PR #120 just got detailed shanselman/Copilot architectural feedback (2026-04-14) - no need to pile in. PR #170 still open (shanselman-created NuGet cache fix). PR #159 (AlexAlves87 screen recording) awaiting further iteration per shanselman feedback."
 }

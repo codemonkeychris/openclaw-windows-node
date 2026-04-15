@@ -1,10 +1,12 @@
 {
-  "lr": "2026-04-15T01:05Z",
-  "rid": "24430916031",
+  "lr": "2026-04-15T12:40Z",
+  "rid": "24454971486",
   "prs": [
     "perf-reduce-allocs-display-session-2026-04-14",
     "perf-buildsummary-no-list-2026-04-15",
-    "test-channel-health-derivation-2026-04-15"
+    "test-channel-health-derivation-2026-04-15",
+    "perf-models-frozen-alloc-2026-04-15",
+    "perf-rich-display-text-2026-04-15"
   ],
   "comments_made": {
     "99": "2026-03-26",
@@ -13,5 +15,5 @@
     "159": "2026-04-13",
     "164": "2026-04-12"
   },
-  "notes": "Tasks 8+10 selected. Task 8: eliminated List<string> allocation in BuildProviderSummary (two nullable string vars + switch expression); +9 unit tests; PR #173 (perf-buildsummary-no-list-2026-04-15). Task 10: added 13 ParseChannelHealth status-derivation and property-parsing tests; PR #174 (test-channel-health-derivation-2026-04-15). 595 Shared + 122 Tray pass for Task 8; 599 Shared + 122 Tray pass for Task 10. PR #172 (perf-reduce-allocs-display-session-2026-04-14) still open. PR #159 screen recording awaiting AlexAlves87 iteration. PR #120 Voice Mode awaiting NichUK iteration after shanselman architectural feedback."
+  "notes": "Tasks 8+10 selected. Task 8: replaced HashSet with FrozenSet for ChannelHealth status sets, Status.ToLowerInvariant() with FrozenDictionary s_statusLabels, and List<string> with string?[4] accumulator in GatewayUsageInfo.DisplayText; +8 tests; PR #175 (perf-models-frozen-alloc-2026-04-15). Task 10: eliminated List<string> in SessionInfo.RichDisplayText with string?[9] accumulator; +4 tests; PR #176 (perf-rich-display-text-2026-04-15). 594 Shared+122 Tray pass for Task 8; 590 Shared+122 Tray pass for Task 10. PRs #172 #173 #174 still open. PR #159 screen recording awaiting AlexAlves87. PR #120 Voice Mode awaiting NichUK."
 }

@@ -1,6 +1,6 @@
 {
-  "lr": "2026-04-18T01:00Z",
-  "rid": "24593131951",
+  "lr": "2026-04-18T12:30Z",
+  "rid": "24604690018",
   "prs": [
     "perf-reduce-allocs-display-session-2026-04-14",
     "perf-buildsummary-no-list-2026-04-15",
@@ -9,7 +9,8 @@
     "perf-rich-display-text-2026-04-15",
     "eng-fix-test-warnings-2026-04-16",
     "improve-gateway-node-detail-text-2026-04-16",
-    "improve-string-slice-dedup-trunc-2026-04-18"
+    "improve-string-slice-dedup-trunc-2026-04-18",
+    "improve-sysrun-syntax-and-policy-tests-2026-04-18"
   ],
   "comments_made": {
     "99": "2026-03-26",
@@ -18,5 +19,5 @@
     "159": "2026-04-16",
     "164": "2026-04-12"
   },
-  "notes": "Task 6+5 selected. Task 6: all 7 Repo Assist PRs (#172-#178) clean (0 behind master, no CI failures). Task 5: created PR #179 - modernize Substring->range syntax in OpenClaw.Shared + remove private TruncateLabel duplicate (use MenuDisplayHelper.TruncateText instead); test helper updated to use public API; 586 Shared + 122 Tray pass. 8 Repo Assist PRs now open (#172-#179). Consider TreatWarningsAsErrors for test project."
+  "notes": "Task 10+2 selected. Task 2: no new issues (only #99 already commented, #127/#179 are tracking). Task 10: created PR #181 - modernize argv[1..] slice + [command!, ..args] collection expression in HandleRunAsync; add 2 security regression tests: SeparateArgsProperty_PolicyEvaluatesFullCommandLine + ShellFilter_PolicySkipsRuleForWrongShell; 588 Shared + 122 Tray pass. 9 Repo Assist PRs now open (#172-#181). Consider TreatWarningsAsErrors for test project after #177 merges."
 }

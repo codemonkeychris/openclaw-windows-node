@@ -249,18 +249,24 @@ public class SystemCapability : NodeCapabilityBase
         var timeoutMs = GetIntArg(request.Args, "timeoutMs", 
             GetIntArg(request.Args, "timeout", 30000));
         
-        // Parse env dict if present
+        // Parse env dict if present, then sanitize to block injection-hook variables.
         Dictionary<string, string>? env = null;
         if (request.Args.ValueKind != System.Text.Json.JsonValueKind.Undefined &&
             request.Args.TryGetProperty("env", out var envEl) &&
             envEl.ValueKind == System.Text.Json.JsonValueKind.Object)
         {
-            env = new Dictionary<string, string>();
+            var raw = new Dictionary<string, string>();
             foreach (var prop in envEl.EnumerateObject())
             {
                 if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
-                    env[prop.Name] = prop.Value.GetString() ?? "";
+                    raw[prop.Name] = prop.Value.GetString() ?? "";
             }
+
+            var sanitized = ExecEnvSanitizer.Sanitize(raw);
+            if (sanitized.Blocked.Count > 0)
+                Logger.Warn($"system.run: blocked dangerous env vars: {string.Join(", ", sanitized.Blocked)}");
+
+            env = sanitized.Allowed.Count > 0 ? sanitized.Allowed : null;
         }
         
         // Build the full command string for policy evaluation and logging.

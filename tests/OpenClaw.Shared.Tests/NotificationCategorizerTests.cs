@@ -142,6 +142,131 @@ public class NotificationCategorizerTests
         Assert.Equal("email", _categorizer.Classify(notification).type);
     }
 
+    // --- Tags structured metadata ---
+
+    [Fact]
+    public void Tags_FirstKnownTag_Categorizes()
+    {
+        var notification = new OpenClawNotification
+        {
+            Message = "test",
+            Tags = ["build"]
+        };
+        Assert.Equal("build", _categorizer.Classify(notification).type);
+    }
+
+    [Theory]
+    [InlineData("health", "health")]
+    [InlineData("urgent", "urgent")]
+    [InlineData("alert", "urgent")]
+    [InlineData("reminder", "reminder")]
+    [InlineData("email", "email")]
+    [InlineData("calendar", "calendar")]
+    [InlineData("build", "build")]
+    [InlineData("stock", "stock")]
+    [InlineData("error", "error")]
+    public void Tags_KnownTag_MapsViaIntentMap(string tag, string expectedType)
+    {
+        var notification = new OpenClawNotification { Message = "test", Tags = [tag] };
+        Assert.Equal(expectedType, _categorizer.Classify(notification).type);
+    }
+
+    [Fact]
+    public void Tags_FirstMatchWins_AcrossMultipleTags()
+    {
+        var notification = new OpenClawNotification
+        {
+            Message = "test",
+            Tags = ["unknown-tag", "build", "email"]
+        };
+        // "unknown-tag" doesn't match; "build" is first known tag
+        Assert.Equal("build", _categorizer.Classify(notification).type);
+    }
+
+    [Fact]
+    public void Tags_AllUnknown_FallsThrough_ToKeywords()
+    {
+        var notification = new OpenClawNotification
+        {
+            Message = "Your blood sugar is high",
+            Tags = ["foo", "bar"]
+        };
+        Assert.Equal("health", _categorizer.Classify(notification).type);
+    }
+
+    [Fact]
+    public void Tags_Intent_TakesPriority_OverTags()
+    {
+        var notification = new OpenClawNotification
+        {
+            Message = "test",
+            Intent = "reminder",
+            Tags = ["build"]
+        };
+        Assert.Equal("reminder", _categorizer.Classify(notification).type);
+    }
+
+    [Fact]
+    public void Tags_Channel_TakesPriority_OverTags()
+    {
+        var notification = new OpenClawNotification
+        {
+            Message = "test",
+            Channel = "email",
+            Tags = ["build"]
+        };
+        Assert.Equal("email", _categorizer.Classify(notification).type);
+    }
+
+    [Fact]
+    public void Tags_TakesPriority_OverUserRules()
+    {
+        var rules = new List<UserNotificationRule>
+        {
+            new() { Pattern = "test", Category = "stock", Enabled = true }
+        };
+        var notification = new OpenClawNotification
+        {
+            Message = "test",
+            Tags = ["build"]
+        };
+        Assert.Equal("build", _categorizer.Classify(notification, rules).type);
+    }
+
+    [Fact]
+    public void Tags_Ignored_WhenPreferStructuredCategories_False()
+    {
+        var notification = new OpenClawNotification
+        {
+            Message = "Hello world",
+            Tags = ["build"]
+        };
+        // Tags are part of structured metadata; skipped when preferStructuredCategories=false
+        Assert.Equal("info", _categorizer.Classify(notification, preferStructuredCategories: false).type);
+    }
+
+    [Fact]
+    public void Tags_EmptyArray_FallsThrough_ToKeywords()
+    {
+        var notification = new OpenClawNotification
+        {
+            Message = "urgent alert",
+            Tags = []
+        };
+        Assert.Equal("urgent", _categorizer.Classify(notification).type);
+    }
+
+    [Fact]
+    public void Tags_NullArray_FallsThrough_ToKeywords()
+    {
+        var notification = new OpenClawNotification
+        {
+            Message = "urgent alert",
+            Tags = null
+        };
+        Assert.Equal("urgent", _categorizer.Classify(notification).type);
+    }
+
     // --- User-defined rules ---
 
     [Fact]
@@ -246,7 +371,7 @@ public class NotificationCategorizerTests
     // --- Pipeline order verification ---
 
     [Fact]
-    public void PipelineOrder_Intent_Channel_UserRules_Keywords()
+    public void PipelineOrder_Intent_Channel_Tags_UserRules_Keywords()
     {
         var rules = new List<UserNotificationRule>
         {
@@ -258,7 +383,8 @@ public class NotificationCategorizerTests
         {
             Message = "test email urgent blood sugar",
             Intent = "calendar",
-            Channel = "email"
+            Channel = "email",
+            Tags = ["reminder"]
         };
         Assert.Equal("calendar", _categorizer.Classify(notification, rules).type);
 
@@ -266,8 +392,12 @@ public class NotificationCategorizerTests
         notification.Intent = null;
         Assert.Equal("email", _categorizer.Classify(notification, rules).type);
 
-        // Remove channel — user rule wins
+        // Remove channel — tags win
         notification.Channel = null;
+        Assert.Equal("reminder", _categorizer.Classify(notification, rules).type);
+
+        // Remove tags — user rule wins
+        notification.Tags = null;
         Assert.Equal("stock", _categorizer.Classify(notification, rules).type);
 
         // Remove user rules — keyword wins

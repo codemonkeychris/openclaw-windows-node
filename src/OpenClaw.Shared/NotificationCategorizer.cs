@@ -8,7 +8,7 @@ namespace OpenClaw.Shared;
 
 /// <summary>
 /// Layered notification categorization pipeline.
-/// Order: structured metadata → user rules → keyword fallback → default.
+/// Order: structured metadata (Intent → Channel → Tags) → user rules → keyword fallback → default.
 /// </summary>
 public class NotificationCategorizer
 {
@@ -58,7 +58,7 @@ public class NotificationCategorizer
     /// <summary>
     /// Classify a notification using the layered pipeline.
     /// When <paramref name="preferStructuredCategories"/> is true (default),
-    /// structured metadata (Intent, Channel) is checked first.
+    /// structured metadata (Intent, Channel, Tags) is checked first.
     /// When false, classification starts from user-defined rules then keyword fallback.
     /// </summary>
     public (string title, string type) Classify(OpenClawNotification notification, IReadOnlyList<UserNotificationRule>? userRules = null, bool preferStructuredCategories = true)
@@ -72,9 +72,19 @@ public class NotificationCategorizer
             // 2. Structured metadata: Channel
             if (!string.IsNullOrEmpty(notification.Channel) && ChannelMap.TryGetValue(notification.Channel, out var channelResult))
                 return channelResult;
+
+            // 3. Structured metadata: Tags — first tag that maps to a known category wins
+            if (notification.Tags is { Length: > 0 })
+            {
+                foreach (var tag in notification.Tags)
+                {
+                    if (!string.IsNullOrEmpty(tag) && IntentMap.TryGetValue(tag, out var tagResult))
+                        return tagResult;
+                }
+            }
         }
 
-        // 3. User-defined rules (pattern match on title + message)
+        // 4. User-defined rules (pattern match on title + message)
         if (userRules is { Count: > 0 })
         {
             var searchText = $"{notification.Title} {notification.Message}";

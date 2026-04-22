@@ -1,7 +1,8 @@
 {
-  "lr": "2026-04-22T01:01Z",
-  "rid": "24754563607",
+  "lr": "2026-04-22T12:00Z",
+  "rid": "24778738033",
   "prs": [
+    "improve-windowsnodeclient-command-dispatch-2026-04-22",
     "improve-notificationcategorizer-tags-2026-04-22",
     "eng-ci-no-restore-2026-04-22",
     "feat-webchat-webview2-bridge-2026-04-21",
@@ -12,7 +13,7 @@
     "improve-sysrun-syntax-and-policy-tests-2026-04-18",
     "improve-string-slice-dedup-trunc-2026-04-18"
   ],
-  "pr_numbers": [196, 195, 192, 194, 193, 190, 189, 181, 180],
+  "pr_numbers": [197, 196, 195, 192, 194, 193, 190, 189, 181, 180],
   "comments_made": {
     "99": "2026-03-26",
     "120": "2026-04-19",
@@ -22,5 +23,5 @@
     "164": "2026-04-12",
     "191": "2026-04-21"
   },
-  "notes": "Tasks 4+10. Task 4: PR #195 - add --no-restore to CI build steps after dotnet restore (test/build/build-extension jobs). Task 10: PR #196 - add Tags routing to NotificationCategorizer; completes Intent->Channel->Tags->user rules->keyword fallback pipeline; +18 tests. Open Repo Assist PRs: #196, #195, #194, #193, #192, #190, #189, #181, #180. Future: once gateway SPA adds window.chrome.webview listener, wire NodeService to post recording-start/stop. Monitor PR #120 (NichUK voice mode new PR). Monitor PR #159 (screen recording, awaiting merge)."
+  "notes": "Tasks 5+3. Task 5: PR #197 - FrozenDictionary command dispatch map in WindowsNodeClient; replaces O(n) FirstOrDefault linear scans with O(1) map; +3 tests. Open Repo Assist PRs: #197, #196, #195, #194, #193, #192, #190, #189, #181, #180. Future: once gateway SPA adds window.chrome.webview listener, wire NodeService to post recording-start/stop. Monitor PR #120 (NichUK voice mode new PR). Monitor PR #159 (screen recording, awaiting merge)."
 }

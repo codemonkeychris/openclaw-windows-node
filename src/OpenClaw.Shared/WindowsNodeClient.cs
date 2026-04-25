@@ -920,6 +920,27 @@ public class WindowsNodeClient : WebSocketClientBase
         await SendRawAsync(JsonSerializer.Serialize(msg));
     }
     
+    /// <summary>
+    /// Send a node-originated A2UI action notification to the gateway. The
+    /// payload follows the v0.8 client→server envelope ({ "action": {...} }).
+    /// Method namespace is <c>canvas.a2ui.action</c> so the gateway can route
+    /// it to the originating agent. Safe to call when not connected — drops.
+    /// </summary>
+    public async Task SendCanvasA2UIActionAsync(object payload)
+    {
+        if (!_isConnected) return;
+
+        var msg = new
+        {
+            type = "req",
+            id = Guid.NewGuid().ToString(),
+            method = "canvas.a2ui.action",
+            @params = payload,
+        };
+
+        await SendRawAsync(JsonSerializer.Serialize(msg, s_ignoreNullOptions));
+    }
+
     private async Task SendPongAsync(string? requestId)
     {
         if (requestId == null) return;

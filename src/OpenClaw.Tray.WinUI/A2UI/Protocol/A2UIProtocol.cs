@@ -1,0 +1,305 @@
+using System;
+using System.Collections.Generic;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
+namespace OpenClawTray.A2UI.Protocol;
+
+/// <summary>
+/// Inbound A2UI v0.8 message envelopes (agent → node). Sealed hierarchy —
+/// extend by adding a new record + a router branch. Unknown envelope kinds
+/// surface as <see cref="UnknownEnvelopeMessage"/> and are logged.
+/// </summary>
+public abstract record A2UIMessage;
+
+/// <summary>
+/// surfaceUpdate: declares (or replaces) the components for a surface. The
+/// surface is implicitly created on first surfaceUpdate — there is no
+/// separate createSurface envelope in v0.8.
+/// </summary>
+public sealed record SurfaceUpdateMessage(
+    string SurfaceId,
+    IReadOnlyList<A2UIComponentDef> Components) : A2UIMessage;
+
+/// <summary>
+/// beginRendering: tells the client which component is the root for the
+/// surface, and applies optional surface-level styles. Sent after the
+/// surfaceUpdate that introduces the components.
+/// </summary>
+public sealed record BeginRenderingMessage(
+    string SurfaceId,
+    string Root,
+    string? CatalogId,
+    JsonObject? Styles) : A2UIMessage;
+
+/// <summary>
+/// dataModelUpdate: writes one or more entries into the surface's data
+/// model. Each entry is a (key, typed value) pair; <c>path</c> scopes the
+/// keys (omitted/"/" replaces the entire data model).
+/// </summary>
+public sealed record DataModelUpdateMessage(
+    string SurfaceId,
+    string? Path,
+    IReadOnlyList<DataModelEntry> Contents) : A2UIMessage;
+
+public sealed record DeleteSurfaceMessage(string SurfaceId) : A2UIMessage;
+
+public sealed record UnknownEnvelopeMessage(string Kind, JsonObject Body) : A2UIMessage;
+
+/// <summary>
+/// One component as carried in <c>surfaceUpdate.components</c>.
+/// <see cref="ComponentName"/> is the discriminator (e.g. "Text", "Column"),
+/// <see cref="Properties"/> is the body that lived under that key.
+/// </summary>
+public sealed record A2UIComponentDef
+{
+    public required string Id { get; init; }
+    public required string ComponentName { get; init; }
+    public required JsonObject Properties { get; init; }
+    public double? Weight { get; init; }
+}
+
+/// <summary>
+/// Single dataModelUpdate.contents entry. Exactly one of Value*/ValueMap is
+/// expected on the wire; we expose them all and let the store apply whichever
+/// is set.
+/// </summary>
+public sealed record DataModelEntry
+{
+    public required string Key { get; init; }
+    public string? ValueString { get; init; }
+    public double? ValueNumber { get; init; }
+    public bool? ValueBoolean { get; init; }
+    /// <summary>An adjacency-list map: each item is itself a DataModelEntry.</summary>
+    public IReadOnlyList<DataModelEntry>? ValueMap { get; init; }
+
+    /// <summary>Convert this entry's value to a JsonNode for storage.</summary>
+    public JsonNode? ToJsonNode()
+    {
+        if (ValueString != null) return JsonValue.Create(ValueString);
+        if (ValueNumber.HasValue) return JsonValue.Create(ValueNumber.Value);
+        if (ValueBoolean.HasValue) return JsonValue.Create(ValueBoolean.Value);
+        if (ValueMap != null)
+        {
+            var obj = new JsonObject();
+            foreach (var entry in ValueMap)
+                obj[entry.Key] = entry.ToJsonNode();
+            return obj;
+        }
+        return null;
+    }
+}
+
+/// <summary>
+/// The A2UI v0.8 "value" tagged union. Almost every leaf property in a
+/// component (text, url, label, etc.) is one of these. Resolves either to a
+/// literal or to a JSON Pointer path into the surface's data model.
+/// </summary>
+public sealed record A2UIValue
+{
+    public string? LiteralString { get; init; }
+    public double? LiteralNumber { get; init; }
+    public bool? LiteralBoolean { get; init; }
+    public IReadOnlyList<string>? LiteralArray { get; init; }
+    public string? Path { get; init; }
+
+    public bool HasLiteral => LiteralString != null || LiteralNumber.HasValue
+                              || LiteralBoolean.HasValue || LiteralArray != null;
+    public bool HasPath => !string.IsNullOrEmpty(Path);
+
+    public static A2UIValue? From(JsonNode? node)
+    {
+        if (node is not JsonObject obj) return null;
+        var v = new A2UIValue
+        {
+            LiteralString = AsString(obj["literalString"]),
+            LiteralNumber = AsNumber(obj["literalNumber"]),
+            LiteralBoolean = AsBool(obj["literalBoolean"]),
+            LiteralArray = AsStringArray(obj["literalArray"]),
+            Path = AsString(obj["path"]),
+        };
+        return v;
+    }
+
+    private static string? AsString(JsonNode? n) =>
+        n is JsonValue jv && jv.TryGetValue<string>(out var s) ? s : null;
+    private static double? AsNumber(JsonNode? n) =>
+        n is JsonValue jv && jv.TryGetValue<double>(out var d) ? d : null;
+    private static bool? AsBool(JsonNode? n) =>
+        n is JsonValue jv && jv.TryGetValue<bool>(out var b) ? b : null;
+    private static IReadOnlyList<string>? AsStringArray(JsonNode? n)
+    {
+        if (n is not JsonArray arr) return null;
+        var list = new List<string>(arr.Count);
+        foreach (var i in arr)
+            if (i is JsonValue jv && jv.TryGetValue<string>(out var s)) list.Add(s);
+        return list;
+    }
+}
+
+/// <summary>
+/// Outbound A2UI action (node → agent). v0.8 client→server envelope shape.
+/// </summary>
+public sealed record A2UIAction
+{
+    public required string Name { get; init; }
+    public required string SurfaceId { get; init; }
+    public string? SourceComponentId { get; init; }
+    public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+    /// <summary>Per-action context entries assembled from <c>action.context</c>.</summary>
+    public JsonObject? Context { get; init; }
+}
+
+/// <summary>
+/// Parses a JSONL stream into <see cref="A2UIMessage"/> records. Tolerant:
+/// malformed lines are skipped, unknown envelope keys yield
+/// <see cref="UnknownEnvelopeMessage"/> rather than throwing.
+/// </summary>
+public static class A2UIMessageParser
+{
+    public static IEnumerable<A2UIMessage> Parse(string jsonl)
+    {
+        if (string.IsNullOrWhiteSpace(jsonl)) yield break;
+
+        var lines = jsonl.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length == 0) continue;
+
+            A2UIMessage? msg = null;
+            try { msg = ParseLine(trimmed); }
+            catch (JsonException) { /* skip malformed */ }
+            catch (FormatException) { /* skip malformed */ }
+            if (msg != null) yield return msg;
+        }
+    }
+
+    public static A2UIMessage? ParseLine(string json)
+    {
+        var node = JsonNode.Parse(json);
+        if (node is not JsonObject root) return null;
+
+        // surfaceUpdate
+        if (root["surfaceUpdate"] is JsonObject su)
+        {
+            var surfaceId = RequireString(su, "surfaceId");
+            var components = new List<A2UIComponentDef>();
+            if (su["components"] is JsonArray comps)
+            {
+                foreach (var item in comps)
+                {
+                    if (item is not JsonObject co) continue;
+                    var def = ParseComponent(co);
+                    if (def != null) components.Add(def);
+                }
+            }
+            return new SurfaceUpdateMessage(surfaceId, components);
+        }
+
+        // beginRendering
+        if (root["beginRendering"] is JsonObject br)
+        {
+            var surfaceId = RequireString(br, "surfaceId");
+            var rootId = RequireString(br, "root");
+            var catalogId = OptionalString(br, "catalogId");
+            var styles = br["styles"] as JsonObject;
+            return new BeginRenderingMessage(surfaceId, rootId, catalogId, styles);
+        }
+
+        // dataModelUpdate
+        if (root["dataModelUpdate"] is JsonObject dmu)
+        {
+            var surfaceId = RequireString(dmu, "surfaceId");
+            var path = OptionalString(dmu, "path");
+            var contents = new List<DataModelEntry>();
+            if (dmu["contents"] is JsonArray arr)
+            {
+                foreach (var item in arr)
+                {
+                    if (item is not JsonObject e) continue;
+                    var entry = ParseEntry(e);
+                    if (entry != null) contents.Add(entry);
+                }
+            }
+            return new DataModelUpdateMessage(surfaceId, path, contents);
+        }
+
+        // deleteSurface
+        if (root["deleteSurface"] is JsonObject ds)
+        {
+            return new DeleteSurfaceMessage(RequireString(ds, "surfaceId"));
+        }
+
+        var kind = string.Empty;
+        foreach (var kv in root) { kind = kv.Key; break; }
+        return new UnknownEnvelopeMessage(kind, root);
+    }
+
+    private static A2UIComponentDef? ParseComponent(JsonObject co)
+    {
+        var id = OptionalString(co, "id");
+        if (id == null) return null;
+
+        // component is a wrapper object whose single key is the component name.
+        if (co["component"] is not JsonObject wrapper) return null;
+        string? name = null;
+        JsonObject? props = null;
+        foreach (var kv in wrapper)
+        {
+            name = kv.Key;
+            props = kv.Value as JsonObject ?? new JsonObject();
+            break;
+        }
+        if (name == null) return null;
+
+        double? weight = null;
+        if (co["weight"] is JsonValue wv && wv.TryGetValue<double>(out var w)) weight = w;
+
+        return new A2UIComponentDef
+        {
+            Id = id,
+            ComponentName = name,
+            Properties = props ?? new JsonObject(),
+            Weight = weight,
+        };
+    }
+
+    private static DataModelEntry? ParseEntry(JsonObject e)
+    {
+        var key = OptionalString(e, "key");
+        if (key == null) return null;
+        var entry = new DataModelEntry
+        {
+            Key = key,
+            ValueString = OptionalString(e, "valueString"),
+            ValueNumber = e["valueNumber"] is JsonValue jvn && jvn.TryGetValue<double>(out var n) ? n : null,
+            ValueBoolean = e["valueBoolean"] is JsonValue jvb && jvb.TryGetValue<bool>(out var b) ? b : null,
+            ValueMap = ParseValueMap(e["valueMap"] as JsonArray),
+        };
+        return entry;
+    }
+
+    private static IReadOnlyList<DataModelEntry>? ParseValueMap(JsonArray? arr)
+    {
+        if (arr == null) return null;
+        var list = new List<DataModelEntry>(arr.Count);
+        foreach (var item in arr)
+        {
+            if (item is not JsonObject e) continue;
+            var nested = ParseEntry(e);
+            if (nested != null) list.Add(nested);
+        }
+        return list;
+    }
+
+    private static string RequireString(JsonObject o, string key)
+    {
+        if (o[key] is JsonValue jv && jv.TryGetValue<string>(out var s) && !string.IsNullOrEmpty(s))
+            return s;
+        throw new FormatException($"missing or invalid '{key}'");
+    }
+
+    private static string? OptionalString(JsonObject o, string key) =>
+        o[key] is JsonValue jv && jv.TryGetValue<string>(out var s) ? s : null;
+}

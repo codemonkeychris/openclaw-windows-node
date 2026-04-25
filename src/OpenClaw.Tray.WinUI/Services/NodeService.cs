@@ -8,6 +8,8 @@ using Microsoft.UI.Dispatching;
 using OpenClaw.Shared;
 using OpenClaw.Shared.Capabilities;
 using OpenClaw.Shared.Mcp;
+using OpenClawTray.A2UI.Actions;
+using OpenClawTray.A2UI.Rendering;
 using OpenClawTray.Helpers;
 using OpenClawTray.Windows;
 using Microsoft.UI.Xaml;
@@ -25,11 +27,13 @@ public class NodeService : IDisposable
     private readonly SettingsManager? _settings;
     private WindowsNodeClient? _nodeClient;
     private CanvasWindow? _canvasWindow;
+    private A2UICanvasWindow? _a2uiCanvasWindow;
+    private MediaResolver? _mediaResolver;
+    private ActionDispatcher? _actionDispatcher;
     private ScreenCaptureService? _screenCaptureService;
     private ScreenRecordingService? _screenRecordingService;
     private CameraCaptureService? _cameraCaptureService;
     private DateTime _lastScreenCaptureNotification = DateTime.MinValue;
-    private string? _a2uiHostUrl;
     
     // Capabilities
     private SystemCapability? _systemCapability;
@@ -132,8 +136,6 @@ public class NodeService : IDisposable
         RegisterCapabilities();
 
         await _nodeClient.ConnectAsync();
-
-        _a2uiHostUrl = BuildA2UIHostUrl(_nodeClient.GatewayUrl);
     }
 
     /// <summary>
@@ -176,6 +178,12 @@ public class NodeService : IDisposable
             _dispatcherQueue.TryEnqueue(() => _canvasWindow.Close());
             _canvasWindow = null;
         }
+
+        if (_a2uiCanvasWindow != null && !_a2uiCanvasWindow.IsClosed)
+        {
+            _dispatcherQueue.TryEnqueue(() => _a2uiCanvasWindow.Close());
+            _a2uiCanvasWindow = null;
+        }
     }
     
     private void RegisterCapabilities()
@@ -206,6 +214,8 @@ public class NodeService : IDisposable
             _canvasCapability.SnapshotRequested += OnCanvasSnapshot;
             _canvasCapability.A2UIPushRequested += OnCanvasA2UIPush;
             _canvasCapability.A2UIResetRequested += OnCanvasA2UIReset;
+            _canvasCapability.A2UIDumpRequested += OnCanvasA2UIDumpAsync;
+            _canvasCapability.CapsRequested += OnCanvasCapsAsync;
             Register(_canvasCapability);
         }
 
@@ -443,19 +453,23 @@ public class NodeService : IDisposable
         {
             try
             {
+                // Web canvas is taking the foreground — close the native A2UI window so
+                // the user only sees the most-recently-targeted surface (last-write-wins).
+                CloseA2UICanvasWindow();
+
                 // Create or reuse canvas window
                 if (_canvasWindow == null || _canvasWindow.IsClosed)
                 {
                     _canvasWindow = new CanvasWindow();
                     _canvasWindow.SetTrustedGatewayOrigin(GatewayUrl, _token);
                 }
-                
+
                 // Configure window
                 _canvasWindow.Title = args.Title;
                 _canvasWindow.SetSize(args.Width, args.Height);
                 _canvasWindow.SetPosition(args.X, args.Y);
                 _canvasWindow.SetAlwaysOnTop(args.AlwaysOnTop);
-                
+
                 // Load content
                 if (!string.IsNullOrEmpty(args.Url))
                 {
@@ -465,11 +479,11 @@ public class NodeService : IDisposable
                 {
                     _canvasWindow.LoadHtml(args.Html);
                 }
-                
+
                 // Show window
                 _canvasWindow.Activate();
                 _canvasWindow.BringToFront(args.AlwaysOnTop);
-                
+
                 _logger.Info($"Canvas presented: {args.Width}x{args.Height}");
             }
             catch (Exception ex)
@@ -477,6 +491,24 @@ public class NodeService : IDisposable
                 _logger.Error("Canvas present failed", ex);
             }
         });
+    }
+
+    private void CloseWebCanvasWindow()
+    {
+        if (_canvasWindow != null && !_canvasWindow.IsClosed)
+        {
+            try { _canvasWindow.Close(); } catch { /* ignore */ }
+        }
+        _canvasWindow = null;
+    }
+
+    private void CloseA2UICanvasWindow()
+    {
+        if (_a2uiCanvasWindow != null && !_a2uiCanvasWindow.IsClosed)
+        {
+            try { _a2uiCanvasWindow.Close(); } catch { /* ignore */ }
+        }
+        _a2uiCanvasWindow = null;
     }
     
     private void OnCanvasHide(object? sender, EventArgs args)
@@ -511,7 +543,8 @@ public class NodeService : IDisposable
                 }
                 else
                 {
-                    _logger.Warn("Canvas navigate ignored: canvas not available");
+                    // Native A2UI canvas can't navigate to URLs — that's a web-canvas concept.
+                    _logger.Warn("Canvas navigate ignored: web canvas not available (native A2UI surface does not support URL navigation)");
                 }
             }
             catch (Exception ex)
@@ -520,11 +553,11 @@ public class NodeService : IDisposable
             }
         });
     }
-    
+
     private async Task<string> OnCanvasEval(string script)
     {
         var tcs = new TaskCompletionSource<string>();
-        
+
         bool enqueued = _dispatcherQueue.TryEnqueue(async () =>
         {
             try
@@ -534,9 +567,17 @@ public class NodeService : IDisposable
                     var result = await _canvasWindow.EvalAsync(script);
                     tcs.SetResult(result);
                 }
+                else if (_a2uiCanvasWindow != null && !_a2uiCanvasWindow.IsClosed)
+                {
+                    // Native A2UI surface has no JS runtime; surface a structured error
+                    // so callers can branch instead of pattern-matching free-text.
+                    tcs.SetException(new InvalidOperationException(
+                        "CANVAS_EVAL_UNAVAILABLE: native A2UI renderer has no JS runtime; use canvas.a2ui.dump for state introspection"));
+                }
                 else
                 {
-                    tcs.SetException(new InvalidOperationException("Canvas not available"));
+                    tcs.SetException(new InvalidOperationException(
+                        "CANVAS_NOT_OPEN: no canvas window is currently open"));
                 }
             }
             catch (Exception ex)
@@ -545,15 +586,15 @@ public class NodeService : IDisposable
             }
         });
         if (!enqueued)
-            tcs.TrySetException(new InvalidOperationException("Dispatcher queue unavailable"));
-        
+            tcs.TrySetException(new InvalidOperationException("CANVAS_DISPATCHER_UNAVAILABLE: dispatcher queue rejected"));
+
         return await tcs.Task;
     }
-    
+
     private async Task<string> OnCanvasSnapshot(CanvasSnapshotArgs args)
     {
         var tcs = new TaskCompletionSource<string>();
-        
+
         bool enqueued = _dispatcherQueue.TryEnqueue(async () =>
         {
             try
@@ -563,9 +604,17 @@ public class NodeService : IDisposable
                     var base64 = await _canvasWindow.CaptureSnapshotAsync(args.Format);
                     tcs.SetResult(base64);
                 }
+                else if (_a2uiCanvasWindow != null && !_a2uiCanvasWindow.IsClosed)
+                {
+                    // Render the native XAML surface to PNG/JPEG via RenderTargetBitmap
+                    // so vision pipelines and regression diffs keep working post-cutover.
+                    var base64 = await _a2uiCanvasWindow.CaptureSnapshotAsync(args.Format);
+                    tcs.SetResult(base64);
+                }
                 else
                 {
-                    tcs.SetException(new InvalidOperationException("Canvas not available"));
+                    tcs.SetException(new InvalidOperationException(
+                        "CANVAS_NOT_OPEN: no canvas window is currently open"));
                 }
             }
             catch (Exception ex)
@@ -574,9 +623,74 @@ public class NodeService : IDisposable
             }
         });
         if (!enqueued)
-            tcs.TrySetException(new InvalidOperationException("Dispatcher queue unavailable"));
-        
+            tcs.TrySetException(new InvalidOperationException("CANVAS_DISPATCHER_UNAVAILABLE: dispatcher queue rejected"));
+
         return await tcs.Task;
+    }
+
+    private Task<string> OnCanvasA2UIDumpAsync()
+    {
+        var tcs = new TaskCompletionSource<string>();
+        bool enqueued = _dispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                if (_a2uiCanvasWindow == null || _a2uiCanvasWindow.IsClosed)
+                {
+                    tcs.SetResult(System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        renderer = "none",
+                        a2uiVersion = "0.8",
+                        surfaceCount = 0,
+                        surfaces = new { },
+                    }));
+                    return;
+                }
+                tcs.SetResult(_a2uiCanvasWindow.GetStateSnapshot());
+            }
+            catch (Exception ex)
+            {
+                tcs.SetException(ex);
+            }
+        });
+        if (!enqueued)
+            tcs.TrySetException(new InvalidOperationException("CANVAS_DISPATCHER_UNAVAILABLE: dispatcher queue rejected"));
+        return tcs.Task;
+    }
+
+    private Task<string> OnCanvasCapsAsync()
+    {
+        var tcs = new TaskCompletionSource<string>();
+        bool enqueued = _dispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                bool nativeOpen = _a2uiCanvasWindow != null && !_a2uiCanvasWindow.IsClosed;
+                bool webOpen = _canvasWindow != null && !_canvasWindow.IsClosed;
+                var caps = new
+                {
+                    renderer = nativeOpen ? "native" : (webOpen ? "web" : "none"),
+                    eval = webOpen,
+                    snapshot = webOpen || nativeOpen,
+                    navigate = webOpen,
+                    a2ui = new
+                    {
+                        version = "0.8",
+                        push = true,
+                        reset = true,
+                        introspect = nativeOpen,
+                    },
+                };
+                tcs.SetResult(System.Text.Json.JsonSerializer.Serialize(caps));
+            }
+            catch (Exception ex)
+            {
+                tcs.SetException(ex);
+            }
+        });
+        if (!enqueued)
+            tcs.TrySetException(new InvalidOperationException("CANVAS_DISPATCHER_UNAVAILABLE: dispatcher queue rejected"));
+        return tcs.Task;
     }
 
     private void EnsureCanvasWindow()
@@ -589,54 +703,61 @@ public class NodeService : IDisposable
         }
     }
 
-    private static string? BuildA2UIHostUrl(string? gatewayUrl)
+    /// <summary>
+    /// Lazily build the action dispatcher + media resolver shared by the
+    /// native A2UI canvas. The dispatcher routes outbound user actions to
+    /// the gateway when connected, falling back to a logger-only sink for
+    /// MCP-only mode (a future MCP notifications channel will replace it).
+    /// </summary>
+    private ActionDispatcher GetOrCreateActionDispatcher()
     {
-        if (!GatewayUrlHelper.TryNormalizeWebSocketUrl(gatewayUrl, out var normalizedGatewayUrl))
-            return null;
-        
-        if (!Uri.TryCreate(normalizedGatewayUrl, UriKind.Absolute, out var uri))
-            return null;
-        
-        var scheme = uri.Scheme.Equals("wss", StringComparison.OrdinalIgnoreCase) ? "https" : "http";
-        var port = uri.Port;
-        var host = uri.Host;
-        return $"{scheme}://{host}:{port}/__openclaw__/a2ui/";
+        if (_actionDispatcher != null) return _actionDispatcher;
+
+        var transports = new IA2UIActionTransport[]
+        {
+            new GatewayActionTransport(() => _nodeClient, _logger),
+            new LoggingActionTransport(_logger),
+        };
+        _actionDispatcher = new ActionDispatcher(transports, _logger);
+        return _actionDispatcher;
     }
-    
+
+    private MediaResolver GetOrCreateMediaResolver()
+    {
+        if (_mediaResolver != null) return _mediaResolver;
+        _mediaResolver = new MediaResolver(_logger);
+        return _mediaResolver;
+    }
+
+    private void EnsureA2UICanvasWindow()
+    {
+        if (_a2uiCanvasWindow != null && !_a2uiCanvasWindow.IsClosed) return;
+
+        // Native A2UI is taking the foreground — close the legacy WebView2 canvas
+        // so its placeholder doesn't mask the rendered surface.
+        CloseWebCanvasWindow();
+
+        var actions = GetOrCreateActionDispatcher();
+        var media = GetOrCreateMediaResolver();
+        _a2uiCanvasWindow = new A2UICanvasWindow(actions, media, _logger);
+        _a2uiCanvasWindow.Activate();
+        _a2uiCanvasWindow.BringToFront(false);
+    }
+
     private void OnCanvasA2UIPush(object? sender, CanvasA2UIArgs args)
     {
-        _dispatcherQueue.TryEnqueue(async () =>
+        _dispatcherQueue.TryEnqueue(() =>
         {
             try
             {
-                EnsureCanvasWindow();
-                if (_canvasWindow == null)
+                EnsureA2UICanvasWindow();
+                if (_a2uiCanvasWindow == null)
                 {
-                    _logger.Error("Canvas A2UI push failed: canvas window not available");
+                    _logger.Error("Canvas A2UI push failed: native canvas window not available");
                     return;
                 }
-                
-                var hostUrl = _a2uiHostUrl ?? BuildA2UIHostUrl(GatewayUrl);
-                if (string.IsNullOrWhiteSpace(hostUrl))
-                {
-                    _logger.Error("Canvas A2UI push failed: A2UI host URL unavailable");
-                    return;
-                }
-                
-                await _canvasWindow.EnsureA2UIHostAsync(hostUrl);
-                
-                var jsonl = args.Jsonl ?? string.Empty;
-                var lines = jsonl.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
-                var sent = 0;
-                foreach (var line in lines)
-                {
-                    var trimmed = line.Trim();
-                    if (string.IsNullOrWhiteSpace(trimmed)) continue;
-                    await _canvasWindow.SendA2UIMessageAsync(trimmed);
-                    sent++;
-                }
-                
-                _logger.Info($"Canvas A2UI push: {sent} message(s)");
+                _a2uiCanvasWindow.Push(args.Jsonl ?? string.Empty);
+                _a2uiCanvasWindow.BringToFront(false);
             }
             catch (Exception ex)
             {
@@ -644,26 +765,19 @@ public class NodeService : IDisposable
             }
         });
     }
-    
+
     private void OnCanvasA2UIReset(object? sender, EventArgs args)
     {
-        _dispatcherQueue.TryEnqueue(async () =>
+        _dispatcherQueue.TryEnqueue(() =>
         {
             try
             {
-                if (_canvasWindow == null || _canvasWindow.IsClosed)
+                if (_a2uiCanvasWindow == null || _a2uiCanvasWindow.IsClosed)
                 {
-                    _logger.Warn("Canvas A2UI reset ignored: canvas not available");
+                    _logger.Debug("Canvas A2UI reset: no native canvas to reset");
                     return;
                 }
-                
-                var hostUrl = _a2uiHostUrl ?? BuildA2UIHostUrl(GatewayUrl);
-                if (!string.IsNullOrWhiteSpace(hostUrl))
-                {
-                    await _canvasWindow.EnsureA2UIHostAsync(hostUrl);
-                }
-                
-                await _canvasWindow.ResetA2UIAsync();
+                _a2uiCanvasWindow.Reset();
                 _logger.Info("Canvas A2UI reset");
             }
             catch (Exception ex)
@@ -820,6 +934,13 @@ public class NodeService : IDisposable
         {
             var window = _canvasWindow;
             _canvasWindow = null;
+            _dispatcherQueue.TryEnqueue(() => { try { window?.Close(); } catch { } });
+        }
+
+        if (_a2uiCanvasWindow != null && !_a2uiCanvasWindow.IsClosed)
+        {
+            var window = _a2uiCanvasWindow;
+            _a2uiCanvasWindow = null;
             _dispatcherQueue.TryEnqueue(() => { try { window?.Close(); } catch { } });
         }
     }

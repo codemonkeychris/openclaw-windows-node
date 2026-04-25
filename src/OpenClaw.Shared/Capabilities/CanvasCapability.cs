@@ -21,7 +21,9 @@ public class CanvasCapability : NodeCapabilityBase
         "canvas.snapshot",
         "canvas.a2ui.push",
         "canvas.a2ui.pushJSONL",
-        "canvas.a2ui.reset"
+        "canvas.a2ui.reset",
+        "canvas.a2ui.dump",
+        "canvas.caps",
     };
     
     public override IReadOnlyList<string> Commands => _commands;
@@ -34,6 +36,10 @@ public class CanvasCapability : NodeCapabilityBase
     public event Func<CanvasSnapshotArgs, Task<string>>? SnapshotRequested;
     public event EventHandler<CanvasA2UIArgs>? A2UIPushRequested;
     public event EventHandler? A2UIResetRequested;
+    /// <summary>Returns a JSON state dump of the native A2UI surface graph.</summary>
+    public event Func<Task<string>>? A2UIDumpRequested;
+    /// <summary>Returns a JSON capability summary describing which canvas operations are supported.</summary>
+    public event Func<Task<string>>? CapsRequested;
     
     public CanvasCapability(IOpenClawLogger logger) : base(logger)
     {
@@ -60,6 +66,8 @@ public class CanvasCapability : NodeCapabilityBase
             "canvas.a2ui.push" => HandleA2UIPush(request),
             "canvas.a2ui.pushJSONL" => HandleA2UIPush(request),
             "canvas.a2ui.reset" => HandleA2UIReset(request),
+            "canvas.a2ui.dump" => await HandleA2UIDumpAsync(),
+            "canvas.caps" => await HandleCapsAsync(),
             _ => Error($"Unknown command: {request.Command}")
         };
     }
@@ -240,6 +248,50 @@ public class CanvasCapability : NodeCapabilityBase
         Logger.Info("canvas.a2ui.reset");
         A2UIResetRequested?.Invoke(this, EventArgs.Empty);
         return Success(new { reset = true });
+    }
+
+    private async Task<NodeInvokeResponse> HandleA2UIDumpAsync()
+    {
+        Logger.Info("canvas.a2ui.dump");
+        if (A2UIDumpRequested == null)
+            return Error("CANVAS_NOT_OPEN: no A2UI canvas is currently active");
+        try
+        {
+            var json = await A2UIDumpRequested();
+            // Pass through as a JSON-typed payload so MCP clients see structured data,
+            // not a quoted string.
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return Success(System.Text.Json.JsonSerializer.Deserialize<object>(doc.RootElement.GetRawText()));
+        }
+        catch (Exception ex)
+        {
+            return Error($"CANVAS_DUMP_FAILED: {ex.Message}");
+        }
+    }
+
+    private async Task<NodeInvokeResponse> HandleCapsAsync()
+    {
+        if (CapsRequested == null)
+        {
+            return Success(new
+            {
+                renderer = "none",
+                eval = false,
+                snapshot = false,
+                navigate = false,
+                a2ui = new { version = "0.8", introspect = false },
+            });
+        }
+        try
+        {
+            var json = await CapsRequested();
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return Success(System.Text.Json.JsonSerializer.Deserialize<object>(doc.RootElement.GetRawText()));
+        }
+        catch (Exception ex)
+        {
+            return Error($"CANVAS_CAPS_FAILED: {ex.Message}");
+        }
     }
 }
 

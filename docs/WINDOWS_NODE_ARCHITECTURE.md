@@ -680,7 +680,7 @@ This is a big effort and **contributions are very welcome!** Here's how to get s
 
 ### Good First Issues
 
-1. **Capability diagnostics copy** — Add a copyable summary that explains declared commands, gateway allowlist status, and dangerous-command opt-ins.
+1. **Capability diagnostics copy** — ✅ Command Center can copy a summary of declared commands, gateway allowlist status, and dangerous-command opt-ins.
 2. **Gateway health summary** — Show version, update state, auth state, and active connection health in one panel.
 3. **Channel status cards** — Surface configured/running/error/probe state for channels.
 

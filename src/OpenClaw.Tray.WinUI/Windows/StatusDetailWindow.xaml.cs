@@ -344,6 +344,11 @@ public sealed partial class StatusDetailWindow : WindowEx
         CopyText(BuildExtensibilitySummary(_state.Channels), "[CommandCenter] Copied extensibility summary");
     }
 
+    private void OnCopyCapabilityDiagnostics(object sender, RoutedEventArgs e)
+    {
+        CopyText(BuildCapabilityDiagnosticsSummary(_state), "[CommandCenter] Copied capability diagnostics");
+    }
+
     private void OnOpenLogsFolder(object sender, RoutedEventArgs e)
     {
         OpenFolder(Path.GetDirectoryName(Logger.LogFilePath), "logs");
@@ -582,6 +587,44 @@ public sealed partial class StatusDetailWindow : WindowEx
         return builder.ToString();
     }
 
+    private static string BuildCapabilityDiagnosticsSummary(GatewayCommandCenterState state)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("OpenClaw capability diagnostics");
+        builder.AppendLine($"Generated: {DateTimeOffset.Now:O}");
+        builder.AppendLine();
+        builder.AppendLine("Windows permission surfaces:");
+        foreach (var permission in state.Permissions.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            builder.AppendLine($"- {permission.Name}: {permission.Status} - {permission.Detail}");
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("Node command allowlist status:");
+        if (state.Nodes.Count == 0)
+        {
+            builder.AppendLine("- No nodes reported by gateway.");
+        }
+
+        foreach (var node in state.Nodes.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase))
+        {
+            var displayName = string.IsNullOrWhiteSpace(node.DisplayName) ? node.NodeId : node.DisplayName;
+            builder.AppendLine($"- {displayName} ({node.Platform ?? "unknown"}, {(node.IsOnline ? "online" : "offline")})");
+            builder.AppendLine($"  declared commands: {FormatCommandList(node.Commands)}");
+            builder.AppendLine($"  safe companion commands: {FormatCommandList(node.SafeDeclaredCommands)}");
+            builder.AppendLine($"  privacy-sensitive opt-ins: {FormatCommandList(node.DangerousDeclaredCommands)}");
+            builder.AppendLine($"  Windows-specific commands: {FormatCommandList(node.WindowsSpecificDeclaredCommands)}");
+            builder.AppendLine($"  filtered by gateway policy: {FormatCommandList(node.BlockedDeclaredCommands)}");
+            builder.AppendLine($"  missing safe allowlist: {FormatCommandList(node.MissingSafeAllowlistCommands)}");
+            builder.AppendLine($"  missing privacy-sensitive allowlist: {FormatCommandList(node.MissingDangerousAllowlistCommands)}");
+            builder.AppendLine($"  missing Mac parity: {FormatCommandList(node.MissingMacParityCommands)}");
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("Rule: safe companion commands can be allowlisted for parity; privacy-sensitive commands such as camera.snap, camera.clip, and screen.record should stay explicit opt-ins.");
+        return builder.ToString();
+    }
+
     private static string BuildProviderSummary(GatewayUsageStatusInfo? usageStatus)
     {
         if (usageStatus?.Providers.Count > 0)
@@ -598,6 +641,16 @@ public sealed partial class StatusDetailWindow : WindowEx
         }
 
         return "";
+    }
+
+    private static string FormatCommandList(IEnumerable<string> commands)
+    {
+        var ordered = commands
+            .Where(command => !string.IsNullOrWhiteSpace(command))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return ordered.Count == 0 ? "none" : string.Join(", ", ordered);
     }
 
     private static List<CostTrendDayViewModel> BuildCostTrend(GatewayCostUsageInfo usageCost)

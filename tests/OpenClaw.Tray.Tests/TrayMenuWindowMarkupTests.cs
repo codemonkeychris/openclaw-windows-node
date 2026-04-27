@@ -164,6 +164,22 @@ public class TrayMenuWindowMarkupTests
         Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterCopyExtensibilitySummaryButton""", xaml);
     }
 
+    [Fact]
+    public void StatusDetailWindow_HasCapabilityDiagnosticsCopyAction()
+    {
+        var xamlPath = Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Windows",
+            "StatusDetailWindow.xaml");
+
+        var xaml = File.ReadAllText(xamlPath);
+
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterCopyCapabilityDiagnosticsButton""", xaml);
+        Assert.Contains(@"Click=""OnCopyCapabilityDiagnostics""", xaml);
+    }
+
     private static string GetRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

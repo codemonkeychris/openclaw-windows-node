@@ -198,8 +198,20 @@
 
             <!-- Permissions Section -->
             <StackPanel x:Name="PermissionsSection" AutomationProperties.AutomationId="CommandCenterPermissionsSection" Spacing="8">
-                <TextBlock Text="PERMISSIONS" Style="{StaticResource CaptionTextBlockStyle}"
-                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontWeight="Bold"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="PERMISSIONS"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                               FontWeight="Bold"/>
+                    <Button Grid.Column="1"
+                            Content="Copy"
+                            Click="OnCopyCapabilityDiagnostics"
+                            AutomationProperties.AutomationId="CommandCenterCopyCapabilityDiagnosticsButton"/>
+                </Grid>
                 <ItemsControl x:Name="PermissionsList" AutomationProperties.AutomationId="CommandCenterPermissionsList">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>

@@ -389,13 +389,14 @@ Risk: low-medium; mostly parsing and UI.
 Deliverables:
 
 - Debug/Mission Control actions:
-  - open log
-  - open config folder
+  - open log: **implemented as Open Logs folder**
+  - open config folder: **implemented**
   - open session store
-  - run health now
+  - run health now: **implemented as Refresh Health**
   - send test heartbeat
   - reset tunnel
   - restart local gateway if topology is WindowsNative and managed
+  - copy privacy-safe support context: **implemented**
 - Rolling diagnostics JSONL with rotation: **implemented for privacy-safe app/connection/gateway/tunnel metadata**
 - Port diagnostics table: **read-only local listener visibility implemented**
 

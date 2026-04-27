@@ -38,6 +38,25 @@ public class TrayMenuWindowMarkupTests
         Assert.Contains(@"Click=""OnOpenCommandCenter""", xaml);
     }
 
+    [Fact]
+    public void StatusDetailWindow_HasSupportDebugActions()
+    {
+        var xamlPath = Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Windows",
+            "StatusDetailWindow.xaml");
+
+        var xaml = File.ReadAllText(xamlPath);
+
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterSupportActionsSection""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterOpenLogsButton""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterOpenConfigButton""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterOpenDiagnosticsButton""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterCopySupportContextButton""", xaml);
+    }
+
     private static string GetRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

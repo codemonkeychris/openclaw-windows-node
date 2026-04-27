@@ -96,6 +96,43 @@
                 </Grid>
             </StackPanel>
 
+            <!-- Support / Debug Actions Section -->
+            <StackPanel x:Name="SupportActionsSection" AutomationProperties.AutomationId="CommandCenterSupportActionsSection" Spacing="8">
+                <TextBlock Text="SUPPORT &amp; DEBUG" Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontWeight="Bold"/>
+                <Grid Padding="12" CornerRadius="8"
+                      Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                      RowSpacing="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8">
+                        <Button Content="Open Logs"
+                                Click="OnOpenLogsFolder"
+                                AutomationProperties.AutomationId="CommandCenterOpenLogsButton"/>
+                        <Button Content="Open Config"
+                                Click="OnOpenConfigFolder"
+                                AutomationProperties.AutomationId="CommandCenterOpenConfigButton"/>
+                        <Button Content="Refresh Health"
+                                Click="OnRefresh"
+                                AutomationProperties.AutomationId="CommandCenterRefreshHealthButton"/>
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+                        <Button Content="Open Diagnostics JSONL"
+                                Click="OnOpenDiagnosticsFolder"
+                                AutomationProperties.AutomationId="CommandCenterOpenDiagnosticsButton"/>
+                        <Button Content="Copy Support Context"
+                                Click="OnCopySupportContext"
+                                AutomationProperties.AutomationId="CommandCenterCopySupportContextButton"/>
+                    </StackPanel>
+                </Grid>
+                <TextBlock Text="These actions only open local folders or copy metadata. They do not include tokens, command arguments, screenshots, recordings, camera data, or payloads."
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+
             <!-- Diagnostics Section -->
             <StackPanel x:Name="WarningsSection" AutomationProperties.AutomationId="CommandCenterDiagnosticsSection" Spacing="8" Visibility="Collapsed">
                 <TextBlock Text="DIAGNOSTICS" Style="{StaticResource CaptionTextBlockStyle}"

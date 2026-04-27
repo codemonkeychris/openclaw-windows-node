@@ -16,6 +16,9 @@ public class SettingsManager
 
     private static readonly string SettingsFilePath = Path.Combine(SettingsDirectory, "settings.json");
 
+    public static string SettingsDirectoryPath => SettingsDirectory;
+    public static string SettingsPath => SettingsFilePath;
+
     // Connection
     public string GatewayUrl { get; set; } = "ws://localhost:18789";
     public string Token { get; set; } = "";

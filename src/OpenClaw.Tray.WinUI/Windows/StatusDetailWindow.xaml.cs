@@ -8,7 +8,9 @@ using System;
 using System.ComponentModel;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Text;
 using Windows.ApplicationModel.DataTransfer;
 using WinUIEx;
 using Windows.UI;
@@ -20,9 +22,11 @@ public sealed partial class StatusDetailWindow : WindowEx
     public bool IsClosed { get; private set; }
 
     public event EventHandler? RefreshRequested;
+    private GatewayCommandCenterState _state;
 
     public StatusDetailWindow(GatewayCommandCenterState state)
     {
+        _state = state;
         InitializeComponent();
         Title = "Command Center — OpenClaw Tray";
         
@@ -39,6 +43,7 @@ public sealed partial class StatusDetailWindow : WindowEx
 
     public void UpdateStatus(GatewayCommandCenterState state)
     {
+        _state = state;
         Logger.Info($"[CommandCenter] UpdateStatus: connection={state.ConnectionStatus}, channels={state.Channels.Count}, sessions={state.Sessions.Count}, nodes={state.Nodes.Count}, warnings={state.Warnings.Count}");
 
         // Status
@@ -243,6 +248,29 @@ public sealed partial class StatusDetailWindow : WindowEx
         Logger.Info("[CommandCenter] Copied diagnostic repair text");
     }
 
+    private void OnOpenLogsFolder(object sender, RoutedEventArgs e)
+    {
+        OpenFolder(Path.GetDirectoryName(Logger.LogFilePath), "logs");
+    }
+
+    private void OnOpenDiagnosticsFolder(object sender, RoutedEventArgs e)
+    {
+        OpenFolder(Path.GetDirectoryName(DiagnosticsJsonlService.FilePath), "diagnostics");
+    }
+
+    private void OnOpenConfigFolder(object sender, RoutedEventArgs e)
+    {
+        OpenFolder(SettingsManager.SettingsDirectoryPath, "config");
+    }
+
+    private void OnCopySupportContext(object sender, RoutedEventArgs e)
+    {
+        var package = new DataPackage();
+        package.SetText(BuildSupportContext(_state));
+        Clipboard.SetContent(package);
+        Logger.Info("[CommandCenter] Copied support context");
+    }
+
     private void OnOpenPermissionSettings(object sender, RoutedEventArgs e)
     {
         if (sender is not Microsoft.UI.Xaml.Controls.Button { Tag: string settingsUri } ||
@@ -264,6 +292,68 @@ public sealed partial class StatusDetailWindow : WindowEx
         {
             Logger.Warn($"[CommandCenter] Failed to open permission settings {settingsUri}: {ex.Message}");
         }
+    }
+
+    private static void OpenFolder(string? folderPath, string label)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath))
+        {
+            Logger.Warn($"[CommandCenter] Cannot open {label} folder because no path is configured");
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(folderPath);
+            Process.Start(new ProcessStartInfo(folderPath) { UseShellExecute = true });
+            Logger.Info($"[CommandCenter] Opened {label} folder: {folderPath}");
+        }
+        catch (IOException ex)
+        {
+            Logger.Warn($"[CommandCenter] Failed to open {label} folder {folderPath}: {ex.Message}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Logger.Warn($"[CommandCenter] Failed to open {label} folder {folderPath}: {ex.Message}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Logger.Warn($"[CommandCenter] Failed to open {label} folder {folderPath}: {ex.Message}");
+        }
+        catch (Win32Exception ex)
+        {
+            Logger.Warn($"[CommandCenter] Failed to open {label} folder {folderPath}: {ex.Message}");
+        }
+    }
+
+    private static string BuildSupportContext(GatewayCommandCenterState state)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("OpenClaw Windows Tray Support Context");
+        builder.AppendLine($"Generated: {DateTimeOffset.Now:O}");
+        builder.AppendLine($"Connection: {state.ConnectionStatus}");
+        builder.AppendLine($"Topology: {state.Topology.DisplayName}");
+        builder.AppendLine($"Transport: {state.Topology.Transport}");
+        builder.AppendLine($"Gateway version: {state.GatewaySelf?.ServerVersion ?? "unknown"}");
+        builder.AppendLine($"Gateway uptime ms: {state.GatewaySelf?.UptimeMs?.ToString() ?? "unknown"}");
+        builder.AppendLine($"Channels: {state.Channels.Count}");
+        builder.AppendLine($"Sessions: {state.Sessions.Count}");
+        builder.AppendLine($"Nodes: {state.Nodes.Count}");
+        builder.AppendLine($"Warnings: {state.Warnings.Count}");
+        foreach (var warning in state.Warnings.Take(10))
+        {
+            builder.AppendLine($"- {warning.Severity}: {warning.Title}");
+        }
+        builder.AppendLine($"Ports: {state.PortDiagnostics.Count}");
+        foreach (var port in state.PortDiagnostics)
+        {
+            builder.AppendLine($"- {port.Purpose}: {port.Port} {port.StatusText}");
+        }
+        builder.AppendLine($"Log file: {Logger.LogFilePath}");
+        builder.AppendLine($"Diagnostics JSONL: {DiagnosticsJsonlService.FilePath ?? "not configured"}");
+        builder.AppendLine($"Settings folder: {SettingsManager.SettingsDirectoryPath}");
+        builder.AppendLine("Excluded: tokens, bootstrap tokens, command arguments, screenshots, recordings, camera data, microphone data, base64 payloads, and message payloads.");
+        return builder.ToString();
     }
 
     private class ChannelViewModel

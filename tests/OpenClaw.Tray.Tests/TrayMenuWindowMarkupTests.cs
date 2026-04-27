@@ -163,6 +163,12 @@ public class TrayMenuWindowMarkupTests
         Assert.Contains("Copy Capability Diagnostics", source);
         Assert.Contains(@"openclaw://node-inventory", source);
         Assert.Contains("Copy Node Inventory", source);
+        Assert.Contains(@"openclaw://channel-summary", source);
+        Assert.Contains("Copy Channel Summary", source);
+        Assert.Contains(@"openclaw://activity-summary", source);
+        Assert.Contains("Copy Activity Summary", source);
+        Assert.Contains(@"openclaw://extensibility-summary", source);
+        Assert.Contains("Copy Extensibility Summary", source);
         Assert.Contains(@"openclaw://restart-ssh-tunnel", source);
         Assert.Contains("Restart SSH Tunnel", source);
     }
@@ -249,6 +255,12 @@ public class TrayMenuWindowMarkupTests
         Assert.Contains("CopyCapabilityDiagnostics?.Invoke", source);
         Assert.Contains(@"case ""node-inventory"":", source);
         Assert.Contains("CopyNodeInventory?.Invoke", source);
+        Assert.Contains(@"case ""channel-summary"":", source);
+        Assert.Contains("CopyChannelSummary?.Invoke", source);
+        Assert.Contains(@"case ""activity-summary"":", source);
+        Assert.Contains("CopyActivitySummary?.Invoke", source);
+        Assert.Contains(@"case ""extensibility-summary"":", source);
+        Assert.Contains("CopyExtensibilitySummary?.Invoke", source);
         Assert.Contains(@"case ""restart-ssh-tunnel"":", source);
         Assert.Contains("RestartSshTunnel?.Invoke", source);
     }

@@ -101,6 +101,9 @@ public class DeepLinkParserTests
     [InlineData("openclaw://port-diagnostics", "port-diagnostics")]
     [InlineData("openclaw://capability-diagnostics", "capability-diagnostics")]
     [InlineData("openclaw://node-inventory", "node-inventory")]
+    [InlineData("openclaw://channel-summary", "channel-summary")]
+    [InlineData("openclaw://activity-summary", "activity-summary")]
+    [InlineData("openclaw://extensibility-summary", "extensibility-summary")]
     [InlineData("openclaw://restart-ssh-tunnel", "restart-ssh-tunnel")]
     public void ParseDeepLink_TrayUtilityEntrypoints(string uri, string expectedPath)
     {
@@ -237,6 +240,9 @@ public class DeepLinkParserTests
     [InlineData("openclaw://port-diagnostics", nameof(DeepLinkActions.CopyPortDiagnostics))]
     [InlineData("openclaw://capability-diagnostics", nameof(DeepLinkActions.CopyCapabilityDiagnostics))]
     [InlineData("openclaw://node-inventory", nameof(DeepLinkActions.CopyNodeInventory))]
+    [InlineData("openclaw://channel-summary", nameof(DeepLinkActions.CopyChannelSummary))]
+    [InlineData("openclaw://activity-summary", nameof(DeepLinkActions.CopyActivitySummary))]
+    [InlineData("openclaw://extensibility-summary", nameof(DeepLinkActions.CopyExtensibilitySummary))]
     [InlineData("openclaw://check-updates", nameof(DeepLinkActions.CheckForUpdates))]
     [InlineData("openclaw://restart-ssh-tunnel", nameof(DeepLinkActions.RestartSshTunnel))]
     public void Handle_InvokesExpectedAction(string uri, string expectedAction)
@@ -258,6 +264,9 @@ public class DeepLinkParserTests
             CopyPortDiagnostics = () => invoked = nameof(DeepLinkActions.CopyPortDiagnostics),
             CopyCapabilityDiagnostics = () => invoked = nameof(DeepLinkActions.CopyCapabilityDiagnostics),
             CopyNodeInventory = () => invoked = nameof(DeepLinkActions.CopyNodeInventory),
+            CopyChannelSummary = () => invoked = nameof(DeepLinkActions.CopyChannelSummary),
+            CopyActivitySummary = () => invoked = nameof(DeepLinkActions.CopyActivitySummary),
+            CopyExtensibilitySummary = () => invoked = nameof(DeepLinkActions.CopyExtensibilitySummary),
             CheckForUpdates = () =>
             {
                 invoked = nameof(DeepLinkActions.CheckForUpdates);

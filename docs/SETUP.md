@@ -95,6 +95,9 @@ OpenClaw Tray responds to `openclaw://` deep links, which can be invoked from a 
 | `openclaw://port-diagnostics` | Copy gateway/browser/tunnel port diagnostics with owner PID stop hints |
 | `openclaw://capability-diagnostics` | Copy permissions, allowlist, and parity diagnostics |
 | `openclaw://node-inventory` | Copy node capabilities, commands, and policy status |
+| `openclaw://channel-summary` | Copy channel health and start/stop availability |
+| `openclaw://activity-summary` | Copy recent tray activity for troubleshooting |
+| `openclaw://extensibility-summary` | Copy channel, skills, and cron dashboard surface guidance |
 | `openclaw://restart-ssh-tunnel` | Restart the tray-managed SSH tunnel when enabled |
 | `openclaw://agent?message=Hello` | Send a message directly to the connected gateway |
 

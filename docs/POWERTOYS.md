@@ -57,6 +57,9 @@ Open Command Palette (`Win+Alt+Space`), type **"OpenClaw"** — you should see t
 | **🔌 Copy Port Diagnostics** | Copies gateway/browser/tunnel port owners and stop hints |
 | **🛡️ Copy Capability Diagnostics** | Copies permission, allowlist, and parity diagnostics |
 | **🖥️ Copy Node Inventory** | Copies node capabilities, commands, and policy status |
+| **📡 Copy Channel Summary** | Copies channel health and start/stop availability |
+| **⚡ Copy Activity Summary** | Copies recent tray activity |
+| **🧩 Copy Extensibility Summary** | Copies channel, skills, and cron surface guidance |
 | **🔁 Restart SSH Tunnel** | Restarts the tray-managed SSH tunnel when enabled |
 
 ## Usage
@@ -129,4 +132,7 @@ Get-AppxPackage -Name '*OpenClaw*' | Remove-AppxPackage
   | Copy Port Diagnostics | `openclaw://port-diagnostics` |
   | Copy Capability Diagnostics | `openclaw://capability-diagnostics` |
   | Copy Node Inventory | `openclaw://node-inventory` |
+  | Copy Channel Summary | `openclaw://channel-summary` |
+  | Copy Activity Summary | `openclaw://activity-summary` |
+  | Copy Extensibility Summary | `openclaw://extensibility-summary` |
   | Restart SSH Tunnel | `openclaw://restart-ssh-tunnel` |

@@ -141,6 +141,23 @@ public static class DeepLinkHandler
                 actions.CopyNodeInventory?.Invoke();
                 break;
 
+            case "channels":
+            case "channel-summary":
+            case "copy-channel-summary":
+                actions.CopyChannelSummary?.Invoke();
+                break;
+
+            case "activity-summary":
+            case "copy-activity-summary":
+                actions.CopyActivitySummary?.Invoke();
+                break;
+
+            case "extensibility":
+            case "extensibility-summary":
+            case "copy-extensibility-summary":
+                actions.CopyExtensibilitySummary?.Invoke();
+                break;
+
             case "ssh-restart":
             case "restart-ssh":
             case "restart-ssh-tunnel":
@@ -227,6 +244,9 @@ public class DeepLinkActions
     public Action? CopyPortDiagnostics { get; set; }
     public Action? CopyCapabilityDiagnostics { get; set; }
     public Action? CopyNodeInventory { get; set; }
+    public Action? CopyChannelSummary { get; set; }
+    public Action? CopyActivitySummary { get; set; }
+    public Action? CopyExtensibilitySummary { get; set; }
     public Action? RestartSshTunnel { get; set; }
     public Action? OpenChat { get; set; }
     public Action? OpenCommandCenter { get; set; }

@@ -2717,6 +2717,51 @@ public partial class App : Application
         }
     }
 
+    private void CopyChannelSummary()
+    {
+        try
+        {
+            var package = new DataPackage();
+            package.SetText(StatusDetailWindow.BuildChannelSummaryText(BuildCommandCenterState().Channels));
+            Clipboard.SetContent(package);
+            Logger.Info("Copied channel summary from deep link");
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"Failed to copy channel summary from deep link: {ex.Message}");
+        }
+    }
+
+    private void CopyActivitySummary()
+    {
+        try
+        {
+            var package = new DataPackage();
+            package.SetText(StatusDetailWindow.BuildActivitySummary(BuildCommandCenterState().RecentActivity));
+            Clipboard.SetContent(package);
+            Logger.Info("Copied activity summary from deep link");
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"Failed to copy activity summary from deep link: {ex.Message}");
+        }
+    }
+
+    private void CopyExtensibilitySummary()
+    {
+        try
+        {
+            var package = new DataPackage();
+            package.SetText(StatusDetailWindow.BuildExtensibilitySummary(BuildCommandCenterState().Channels));
+            Clipboard.SetContent(package);
+            Logger.Info("Copied extensibility summary from deep link");
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"Failed to copy extensibility summary from deep link: {ex.Message}");
+        }
+    }
+
     private void OnGlobalHotkeyPressed(object? sender, EventArgs e)
     {
         // Hotkey events are raised from a dedicated Win32 message-loop thread.
@@ -2940,6 +2985,9 @@ public partial class App : Application
             CopyPortDiagnostics = CopyPortDiagnostics,
             CopyCapabilityDiagnostics = CopyCapabilityDiagnostics,
             CopyNodeInventory = CopyNodeInventory,
+            CopyChannelSummary = CopyChannelSummary,
+            CopyActivitySummary = CopyActivitySummary,
+            CopyExtensibilitySummary = CopyExtensibilitySummary,
             RestartSshTunnel = RestartSshTunnel,
             OpenChat = ShowWebChat,
             OpenCommandCenter = ShowStatusDetail,

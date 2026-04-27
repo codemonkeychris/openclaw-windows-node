@@ -806,7 +806,7 @@ public sealed partial class StatusDetailWindow : WindowEx
         return $"{running}/{channels.Count} running · {startable} startable · {errors} error";
     }
 
-    private static string BuildChannelSummaryText(IReadOnlyCollection<ChannelCommandCenterInfo> channels)
+    internal static string BuildChannelSummaryText(IReadOnlyCollection<ChannelCommandCenterInfo> channels)
     {
         var builder = new StringBuilder();
         builder.AppendLine($"Channels: {BuildChannelSummary(channels)}");
@@ -823,7 +823,7 @@ public sealed partial class StatusDetailWindow : WindowEx
             ? "channels"
             : $"channels/{Uri.EscapeDataString(channelName)}";
 
-    private static string BuildExtensibilitySummary(IReadOnlyCollection<ChannelCommandCenterInfo> channels)
+    internal static string BuildExtensibilitySummary(IReadOnlyCollection<ChannelCommandCenterInfo> channels)
     {
         var builder = new StringBuilder();
         builder.AppendLine("OpenClaw extensibility surfaces");
@@ -985,7 +985,7 @@ public sealed partial class StatusDetailWindow : WindowEx
         return details.Count == 0 ? activity.Category : string.Join(" · ", details);
     }
 
-    private static string BuildActivitySummary(IReadOnlyCollection<CommandCenterActivityInfo> activity)
+    internal static string BuildActivitySummary(IReadOnlyCollection<CommandCenterActivityInfo> activity)
     {
         if (activity.Count == 0)
             return "No recent OpenClaw tray activity.";

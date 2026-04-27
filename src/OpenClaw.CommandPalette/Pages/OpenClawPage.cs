@@ -134,6 +134,21 @@ internal sealed partial class OpenClawPage : ListPage
                 Title = "🖥️ Copy Node Inventory",
                 Subtitle = "Copy connected node capabilities, commands, and policy status"
             },
+            new ListItem(new OpenUrlCommand("openclaw://channel-summary"))
+            {
+                Title = "📡 Copy Channel Summary",
+                Subtitle = "Copy channel health and start/stop availability"
+            },
+            new ListItem(new OpenUrlCommand("openclaw://activity-summary"))
+            {
+                Title = "⚡ Copy Activity Summary",
+                Subtitle = "Copy recent tray activity for troubleshooting"
+            },
+            new ListItem(new OpenUrlCommand("openclaw://extensibility-summary"))
+            {
+                Title = "🧩 Copy Extensibility Summary",
+                Subtitle = "Copy channel, skills, and cron dashboard surface guidance"
+            },
             new ListItem(new OpenUrlCommand("openclaw://restart-ssh-tunnel"))
             {
                 Title = "🔁 Restart SSH Tunnel",

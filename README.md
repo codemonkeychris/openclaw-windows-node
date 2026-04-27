@@ -315,6 +315,9 @@ OpenClaw registers the `openclaw://` URL scheme for automation and integration:
 | `openclaw://port-diagnostics` | Copy gateway/browser/tunnel port diagnostics with owner PID stop hints |
 | `openclaw://capability-diagnostics` | Copy permissions, allowlist, and parity diagnostics |
 | `openclaw://node-inventory` | Copy node capabilities, commands, and policy status |
+| `openclaw://channel-summary` | Copy channel health and start/stop availability |
+| `openclaw://activity-summary` | Copy recent tray activity for troubleshooting |
+| `openclaw://extensibility-summary` | Copy channel, skills, and cron dashboard surface guidance |
 | `openclaw://restart-ssh-tunnel` | Restart the tray-managed SSH tunnel when enabled |
 | `openclaw://send?message=Hello` | Open Quick Send with pre-filled text |
 | `openclaw://agent?message=Hello` | Send message directly to the connected gateway |
@@ -346,6 +349,9 @@ PowerToys Command Palette extension for quick OpenClaw access.
 - **🔌 Copy Port Diagnostics** - Copy gateway/browser/tunnel port owners and stop hints
 - **🛡️ Copy Capability Diagnostics** - Copy permission, allowlist, and parity diagnostics
 - **🖥️ Copy Node Inventory** - Copy node capabilities, commands, and policy status
+- **📡 Copy Channel Summary** - Copy channel health and start/stop availability
+- **⚡ Copy Activity Summary** - Copy recent tray activity
+- **🧩 Copy Extensibility Summary** - Copy channel, skills, and cron surface guidance
 - **🔁 Restart SSH Tunnel** - Restart the tray-managed SSH tunnel when enabled
 
 ### Installation

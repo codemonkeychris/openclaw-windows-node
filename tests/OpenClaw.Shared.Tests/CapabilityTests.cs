@@ -425,6 +425,10 @@ public class SystemCapabilityTests
             var payload = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(res.Payload));
             Assert.True(payload.TryGetProperty("enabled", out var enabled));
             Assert.True(enabled.GetBoolean());
+            Assert.True(payload.TryGetProperty("hash", out var hash));
+            Assert.StartsWith("sha256:", hash.GetString());
+            Assert.True(payload.TryGetProperty("baseHash", out var baseHash));
+            Assert.Equal(hash.GetString(), baseHash.GetString());
             Assert.True(payload.TryGetProperty("rules", out _));
         }
         finally
@@ -464,7 +468,7 @@ public class SystemCapabilityTests
             {
                 Id = "ea4",
                 Command = "system.execApprovals.set",
-                Args = Parse("""{"rules":[{"pattern":"git *","action":"allow","description":"Allow git","enabled":true}],"defaultAction":"deny"}""")
+                Args = Parse($$"""{"baseHash":"{{policy.GetPolicyHash()}}","rules":[{"pattern":"git *","action":"allow","description":"Allow git","enabled":true}],"defaultAction":"deny"}""")
             };
 
             var res = await cap.ExecuteAsync(req);
@@ -474,6 +478,8 @@ public class SystemCapabilityTests
             Assert.True(updated.GetBoolean());
             Assert.True(payload.TryGetProperty("ruleCount", out var ruleCount));
             Assert.Equal(1, ruleCount.GetInt32());
+            Assert.True(payload.TryGetProperty("hash", out var hash));
+            Assert.NotEqual(req.Args.GetProperty("baseHash").GetString(), hash.GetString());
         }
         finally
         {
@@ -504,6 +510,7 @@ public class SystemCapabilityTests
             Assert.True(res.Ok);
             var payload = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(res.Payload));
             Assert.True(payload.TryGetProperty("constraints", out var constraints));
+            Assert.True(constraints.GetProperty("baseHashRequired").GetBoolean());
             Assert.False(constraints.GetProperty("defaultAllowAllowed").GetBoolean());
             Assert.False(constraints.GetProperty("broadAllowRulesAllowed").GetBoolean());
             Assert.False(constraints.GetProperty("dangerousAllowRulesAllowed").GetBoolean());
@@ -529,7 +536,7 @@ public class SystemCapabilityTests
             {
                 Id = "ea-default-allow",
                 Command = "system.execApprovals.set",
-                Args = Parse("""{"rules":[],"defaultAction":"allow"}""")
+                Args = Parse($$"""{"baseHash":"{{policy.GetPolicyHash()}}","rules":[],"defaultAction":"allow"}""")
             };
 
             var res = await cap.ExecuteAsync(req);
@@ -564,7 +571,7 @@ public class SystemCapabilityTests
             {
                 Id = "ea-unsafe-allow",
                 Command = "system.execApprovals.set",
-                Args = Parse($$"""{"rules":[{"pattern":"{{pattern}}","action":"allow","enabled":true}],"defaultAction":"deny"}""")
+                Args = Parse($$"""{"baseHash":"{{policy.GetPolicyHash()}}","rules":[{"pattern":"{{pattern}}","action":"allow","enabled":true}],"defaultAction":"deny"}""")
             };
 
             var res = await cap.ExecuteAsync(req);
@@ -614,6 +621,74 @@ public class SystemCapabilityTests
         Assert.True(res.Ok);
         Assert.NotNull(runner.LastRequest!.Env);
         Assert.True(runner.LastRequest.Env!.ContainsKey("MY_CUSTOM_VAR"));
+    }
+
+    [Fact]
+    public async Task ExecApprovalsSet_RequiresBaseHash()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var cap = new SystemCapability(NullLogger.Instance);
+            var policy = new ExecApprovalPolicy(tempDir, NullLogger.Instance);
+            cap.SetApprovalPolicy(policy);
+
+            var req = new NodeInvokeRequest
+            {
+                Id = "ea-missing-base-hash",
+                Command = "system.execApprovals.set",
+                Args = Parse("""{"rules":[],"defaultAction":"deny"}""")
+            };
+
+            var res = await cap.ExecuteAsync(req);
+
+            Assert.False(res.Ok);
+            Assert.Contains("baseHash", res.Error);
+            Assert.NotEmpty(policy.Rules);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task ExecApprovalsSet_RejectsStaleBaseHash()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var cap = new SystemCapability(NullLogger.Instance);
+            var policy = new ExecApprovalPolicy(tempDir, NullLogger.Instance);
+            cap.SetApprovalPolicy(policy);
+
+            var staleHash = policy.GetPolicyHash();
+            policy.InsertRule(0, new ExecApprovalRule
+            {
+                Pattern = "hostname",
+                Action = ExecApprovalAction.Allow,
+                Description = "Local edit after remote read"
+            });
+
+            var req = new NodeInvokeRequest
+            {
+                Id = "ea-stale-base-hash",
+                Command = "system.execApprovals.set",
+                Args = Parse($$"""{"baseHash":"{{staleHash}}","rules":[],"defaultAction":"deny"}""")
+            };
+
+            var res = await cap.ExecuteAsync(req);
+
+            Assert.False(res.Ok);
+            Assert.Contains("Refresh policy", res.Error);
+            Assert.Contains(policy.Rules, rule => rule.Description == "Local edit after remote read");
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
     }
 
     private class FakeCommandRunner : ICommandRunner

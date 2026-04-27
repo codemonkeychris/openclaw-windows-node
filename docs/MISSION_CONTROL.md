@@ -72,7 +72,7 @@ Important Mac security/privacy pieces:
 - Command display sanitizer for control chars, invisible characters, and non-ASCII spaces to prevent spoofing.
 - Glob allowlist matcher semantics.
 - Host environment sanitizer with large inherited secret/toolchain blocklist, PATH override rejection, and shell-wrapper allowlist.
-- Exec approval edits with base-hash optimistic concurrency.
+- Exec approval edits with base-hash optimistic concurrency: **implemented for `system.execApprovals.get/set`; stale remote writes are rejected**
 - Pairing prompt with name, node ID, platform, app, IP, and approve/reject/later actions.
 
 ### 2.3 Gateway and browser proxy findings
@@ -268,7 +268,7 @@ Keep StatusDetailWindow as the first Command Center, but plan for tabs/sections:
 | Device info/status | Present | Present | Done; keep payload shape tests |
 | System notify | Present | Present | Add overlay/priority parity later |
 | System run/which | Present | Present | Verify push event names and approval reasons |
-| Exec approvals get/set | Present | Present | Add base-hash concurrency parity if missing |
+| Exec approvals get/set | Present | Present | Base-hash optimistic concurrency implemented |
 | Browser proxy | Present, local-only | Missing | Highest concrete command gap |
 
 ### 5.2 Mission Control surfaces
@@ -408,7 +408,7 @@ Deliverables:
 
 - Verify and align canvas/screen/camera/location/system payload defaults and error tokens.
 - Verify push event names for exec.
-- Add missing base-hash concurrency semantics if needed.
+- Add missing base-hash concurrency semantics if needed: **implemented for remote exec approval policy edits**
 - Add `browser.proxy` feasibility prototype or explicit "not implemented" install guidance: **local browser-control bridge implemented**
 
 Risk: varies; `browser.proxy` is medium-high.
@@ -428,7 +428,7 @@ Deliverables:
 - Mac-style onboarding security warning.
 - Topology choice onboarding: **first Settings guide implemented with local, WSL, SSH tunnel, and remote/Tailscale presets**
 - Exec approval dialog with sanitizer and three-button flow: **implemented for local `Prompt` policy decisions with Allow once / Always allow / Deny**
-- Exec approval remote-policy hardening: **implemented guardrails so `system.execApprovals.set` cannot remotely switch to default allow or install broad/dangerous allow rules**
+- Exec approval remote-policy hardening: **implemented guardrails so `system.execApprovals.set` cannot remotely switch to default allow, install broad/dangerous allow rules, or overwrite a newer local policy without a matching `baseHash`**
 - Host env sanitizer parity hardening.
 
 Risk: high for exec/security. Do not rush.

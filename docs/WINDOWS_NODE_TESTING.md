@@ -105,7 +105,7 @@ When the node connects, it advertises these capabilities:
    - `system.run` with PowerShell/cmd support
    - `system.run.prepare` pre-flight command
    - `system.which` command lookup
-   - `system.execApprovals` allowlist flow
+   - `system.execApprovals` allowlist flow with base-hash optimistic concurrency for remote edits
 2. ~~**screen.record**~~ ✅ Implemented
    - Graphics Capture video recording (MP4/base64)
 3. ~~**camera.clip**~~ ✅ Implemented

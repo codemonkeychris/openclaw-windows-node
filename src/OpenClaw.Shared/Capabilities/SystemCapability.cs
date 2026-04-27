@@ -468,6 +468,7 @@ public class SystemCapability : NodeCapabilityBase
         }
         
         var data = _approvalPolicy.GetPolicyData();
+        var policyHash = _approvalPolicy.GetPolicyHash();
         var rules = data.Rules;
         var rulesSummary = new object[rules.Count];
         for (var i = 0; i < rules.Count; i++)
@@ -486,9 +487,12 @@ public class SystemCapability : NodeCapabilityBase
         return Success(new
         {
             enabled = true,
+            hash = policyHash,
+            baseHash = policyHash,
             defaultAction = data.DefaultAction.ToString().ToLowerInvariant(),
             constraints = new
             {
+                baseHashRequired = true,
                 defaultAllowAllowed = false,
                 broadAllowRulesAllowed = false,
                 dangerousAllowRulesAllowed = false
@@ -506,6 +510,19 @@ public class SystemCapability : NodeCapabilityBase
         
         try
         {
+            var currentHash = _approvalPolicy.GetPolicyHash();
+            if (!TryGetBaseHash(request.Args, out var baseHash))
+            {
+                Logger.Warn("execApprovals.set denied: baseHash is required");
+                return Error("baseHash is required for exec approval policy updates. Refresh policy and retry.");
+            }
+
+            if (!HashesMatch(baseHash, currentHash))
+            {
+                Logger.Warn("execApprovals.set denied: stale baseHash");
+                return Error("Exec approval policy changed since it was loaded. Refresh policy and retry.");
+            }
+
             // Parse rules from args
             var rules = new List<ExecApprovalRule>();
             
@@ -579,9 +596,10 @@ public class SystemCapability : NodeCapabilityBase
             }
              
             _approvalPolicy.SetRules(rules, defaultAction);
+            var newHash = _approvalPolicy.GetPolicyHash();
             Logger.Info($"Exec approval policy updated: {rules.Count} rules");
-            
-            return Success(new { updated = true, ruleCount = rules.Count });
+             
+            return Success(new { updated = true, ruleCount = rules.Count, hash = newHash, baseHash = newHash });
         }
         catch (Exception ex)
         {
@@ -613,6 +631,44 @@ public class SystemCapability : NodeCapabilityBase
         }
 
         return null;
+    }
+
+    private static bool TryGetBaseHash(System.Text.Json.JsonElement args, out string baseHash)
+    {
+        baseHash = "";
+        if (args.ValueKind == System.Text.Json.JsonValueKind.Undefined)
+            return false;
+
+        if (args.TryGetProperty("baseHash", out var baseHashEl) &&
+            baseHashEl.ValueKind == System.Text.Json.JsonValueKind.String)
+        {
+            baseHash = baseHashEl.GetString() ?? "";
+            return !string.IsNullOrWhiteSpace(baseHash);
+        }
+
+        if (args.TryGetProperty("base_hash", out var baseHashSnakeEl) &&
+            baseHashSnakeEl.ValueKind == System.Text.Json.JsonValueKind.String)
+        {
+            baseHash = baseHashSnakeEl.GetString() ?? "";
+            return !string.IsNullOrWhiteSpace(baseHash);
+        }
+
+        return false;
+    }
+
+    private static bool HashesMatch(string candidate, string currentHash)
+    {
+        if (string.Equals(candidate, currentHash, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        const string prefix = "sha256:";
+        if (currentHash.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(candidate, currentHash[prefix.Length..], StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
     }
 }
 

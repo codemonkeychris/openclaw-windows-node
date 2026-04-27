@@ -39,6 +39,25 @@ public class TrayMenuWindowMarkupTests
     }
 
     [Fact]
+    public void SettingsWindow_HasTopologyChoiceGuide()
+    {
+        var xamlPath = Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Windows",
+            "SettingsWindow.xaml");
+
+        var xaml = File.ReadAllText(xamlPath);
+
+        Assert.Contains(@"AutomationProperties.AutomationId=""SettingsTopologyGuide""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""SettingsUseLocalGatewayButton""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""SettingsUseWslGatewayButton""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""SettingsUseSshTunnelButton""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""SettingsUseRemoteGatewayButton""", xaml);
+    }
+
+    [Fact]
     public void StatusDetailWindow_HasSupportDebugActions()
     {
         var xamlPath = Path.Combine(

@@ -26,6 +26,45 @@
                     <TextBlock x:Uid="SettingsConnectionHeader" Text="CONNECTION" Style="{StaticResource CaptionTextBlockStyle}" 
                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontWeight="Bold"/>
 
+                    <Border AutomationProperties.AutomationId="SettingsTopologyGuide"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            CornerRadius="8"
+                            Padding="12">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Gateway topology" FontWeight="SemiBold"/>
+                            <TextBlock Text="Choose the setup that matches where your OpenClaw gateway runs. Local and WSL are fastest; SSH tunnel is safest for a remote Mac/Linux box; Tailscale/remote should use wss:// when available."
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"/>
+                            <Grid ColumnSpacing="8" RowSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                </Grid.RowDefinitions>
+                                <Button Grid.Row="0" Grid.Column="0"
+                                        Content="Use Local Gateway"
+                                        Click="OnUseLocalGateway"
+                                        AutomationProperties.AutomationId="SettingsUseLocalGatewayButton"/>
+                                <Button Grid.Row="0" Grid.Column="1"
+                                        Content="Use WSL Gateway"
+                                        Click="OnUseWslGateway"
+                                        AutomationProperties.AutomationId="SettingsUseWslGatewayButton"/>
+                                <Button Grid.Row="1" Grid.Column="0"
+                                        Content="Use SSH Tunnel"
+                                        Click="OnUseSshTunnel"
+                                        AutomationProperties.AutomationId="SettingsUseSshTunnelButton"/>
+                                <Button Grid.Row="1" Grid.Column="1"
+                                        Content="Remote / Tailscale"
+                                        Click="OnUseRemoteGateway"
+                                        AutomationProperties.AutomationId="SettingsUseRemoteGatewayButton"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
                     <ToggleSwitch x:Name="UseSshTunnelToggle" AutomationProperties.AutomationId="UseSshTunnelToggle" Header="Connect through SSH tunnel" Toggled="OnUseSshTunnelToggled"/>
 
                     <StackPanel x:Name="SshTunnelDetailsPanel" Spacing="8" Visibility="Collapsed">

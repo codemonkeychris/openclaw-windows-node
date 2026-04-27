@@ -426,6 +426,7 @@ Deliverables:
   - screen capture/graphics capture guidance
   - First read-only Command Center slice is implemented. It surfaces these settings pages and explanatory rows, but intentionally does not query, request, or exercise device permissions.
 - Mac-style onboarding security warning.
+- Topology choice onboarding: **first Settings guide implemented with local, WSL, SSH tunnel, and remote/Tailscale presets**
 - Exec approval dialog with sanitizer and three-button flow.
 - Host env sanitizer parity hardening.
 

@@ -340,6 +340,44 @@ public sealed partial class SettingsWindow : WindowEx
         }
     }
 
+    private void OnUseLocalGateway(object sender, RoutedEventArgs e)
+    {
+        UseSshTunnelToggle.IsOn = false;
+        GatewayUrlTextBox.Text = "ws://127.0.0.1:18789";
+        _manualGatewayUrl = GatewayUrlTextBox.Text;
+        StatusLabel.Text = "Local gateway selected. Use this when the gateway runs directly on Windows.";
+        Logger.Info("[Settings] Topology preset selected: local gateway");
+    }
+
+    private void OnUseWslGateway(object sender, RoutedEventArgs e)
+    {
+        UseSshTunnelToggle.IsOn = false;
+        GatewayUrlTextBox.Text = "ws://wsl.localhost:18789";
+        _manualGatewayUrl = GatewayUrlTextBox.Text;
+        StatusLabel.Text = "WSL gateway selected. Change the distro host if your gateway uses a named distro.";
+        Logger.Info("[Settings] Topology preset selected: WSL gateway");
+    }
+
+    private void OnUseSshTunnel(object sender, RoutedEventArgs e)
+    {
+        UseSshTunnelToggle.IsOn = true;
+        UpdateSshTunnelUiState();
+        StatusLabel.Text = "SSH tunnel selected. Fill in SSH User and SSH Host, then test the connection.";
+        Logger.Info("[Settings] Topology preset selected: SSH tunnel");
+    }
+
+    private void OnUseRemoteGateway(object sender, RoutedEventArgs e)
+    {
+        UseSshTunnelToggle.IsOn = false;
+        GatewayUrlTextBox.Text = GatewayUrlTextBox.Text.StartsWith("ws://127.0.0.1:", StringComparison.OrdinalIgnoreCase) ||
+                                 GatewayUrlTextBox.Text.StartsWith("ws://wsl.localhost:", StringComparison.OrdinalIgnoreCase)
+            ? "wss://host.tailnet.ts.net"
+            : GatewayUrlTextBox.Text;
+        _manualGatewayUrl = GatewayUrlTextBox.Text;
+        StatusLabel.Text = "Remote gateway selected. Prefer wss:// for Tailscale, LAN, or public gateways.";
+        Logger.Info("[Settings] Topology preset selected: remote gateway");
+    }
+
     private void UpdateSshTunnelUiState()
     {
         var useSshTunnel = UseSshTunnelToggle.IsOn;

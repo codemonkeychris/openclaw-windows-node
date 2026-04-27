@@ -136,6 +136,28 @@ public class TrayMenuWindowMarkupTests
         Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterChannelSummaryText""", xaml);
         Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterCopyChannelSummaryButton""", xaml);
         Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterCopyNodeSummaryButton""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterCopyNodeInventoryButton""", xaml);
+        Assert.Contains(@"Click=""OnCopyNodeInventory""", xaml);
+    }
+
+    [Fact]
+    public void StatusDetailWindow_NodeInventoryIncludesDiagnostics()
+    {
+        var sourcePath = Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Windows",
+            "StatusDetailWindow.xaml.cs");
+
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("BuildNodeInventorySummary", source);
+        Assert.Contains("OpenClaw node inventory", source);
+        Assert.Contains("Safe companion commands", source);
+        Assert.Contains("Privacy-sensitive commands", source);
+        Assert.Contains("Disabled in Settings", source);
+        Assert.Contains("Missing Mac parity", source);
     }
 
     [Fact]

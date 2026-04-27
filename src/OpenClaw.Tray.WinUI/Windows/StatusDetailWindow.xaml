@@ -483,6 +483,10 @@
             <StackPanel x:Name="NodesSection" AutomationProperties.AutomationId="CommandCenterNodesSection" Spacing="8">
                 <TextBlock Text="NODES" Style="{StaticResource CaptionTextBlockStyle}"
                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontWeight="Bold"/>
+                <Button Content="Copy Node Inventory"
+                        HorizontalAlignment="Left"
+                        Click="OnCopyNodeInventory"
+                        AutomationProperties.AutomationId="CommandCenterCopyNodeInventoryButton"/>
                 <ItemsControl x:Name="NodesList" AutomationProperties.AutomationId="CommandCenterNodesList">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>

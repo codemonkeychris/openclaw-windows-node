@@ -280,7 +280,7 @@ Keep StatusDetailWindow as the first Command Center, but plan for tabs/sections:
 | SSH tunnel robust state | Basic | Add tunnel status/error/startedAt; later Mac-equivalent SSH options/reuse |
 | PortGuardian | Missing | Add port diagnostics later |
 | HealthStore derived states | Partial | Add topology-aware health summary |
-| Nodes submenu copy actions | Partial | Improve node detail/copy actions |
+| Nodes submenu copy actions | Implemented | Per-node copy and full node inventory copy include command groups, filtered commands, disabled settings, and parity gaps |
 | Session previews/settings | Partial | Add thinking/verbose submenus and richer previews |
 | Cost 30-day chart | Partial usage display | Add usage/cost section and daily bars |
 | Agent events ring | Partial Activity Stream | Expand to 400-event rich ring |

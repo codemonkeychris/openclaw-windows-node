@@ -331,6 +331,11 @@ public sealed partial class StatusDetailWindow : WindowEx
         CopyText(summary, "[CommandCenter] Copied node summary");
     }
 
+    private void OnCopyNodeInventory(object sender, RoutedEventArgs e)
+    {
+        CopyText(BuildNodeInventorySummary(_state.Nodes), "[CommandCenter] Copied node inventory");
+    }
+
     private void OnOpenActivityStream(object sender, RoutedEventArgs e)
     {
         ActivityStreamRequested?.Invoke(this, EventArgs.Empty);
@@ -817,6 +822,30 @@ public sealed partial class StatusDetailWindow : WindowEx
         if (node.MissingMacParityCommands.Contains("browser.proxy", StringComparer.OrdinalIgnoreCase))
             parts.Add("missing browser.proxy");
         return parts.Count == 0 ? "no command details" : string.Join(" · ", parts);
+    }
+
+    private static string BuildNodeInventorySummary(IReadOnlyCollection<NodeCapabilityHealthInfo> nodes)
+    {
+        if (nodes.Count == 0)
+            return "No nodes reported by gateway.";
+
+        var builder = new StringBuilder();
+        builder.AppendLine("OpenClaw node inventory");
+        builder.AppendLine($"Generated: {DateTimeOffset.Now:O}");
+        builder.AppendLine();
+        foreach (var node in nodes.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase))
+        {
+            builder.AppendLine(BuildNodeSummary(node).TrimEnd());
+            builder.AppendLine($"Safe companion commands: {FormatCommandList(node.SafeDeclaredCommands)}");
+            builder.AppendLine($"Privacy-sensitive commands: {FormatCommandList(node.DangerousDeclaredCommands)}");
+            builder.AppendLine($"Windows-specific commands: {FormatCommandList(node.WindowsSpecificDeclaredCommands)}");
+            builder.AppendLine($"Filtered by gateway policy: {FormatCommandList(node.BlockedDeclaredCommands)}");
+            builder.AppendLine($"Disabled in Settings: {FormatCommandList(node.DisabledBySettingsCommands)}");
+            builder.AppendLine($"Missing Mac parity: {FormatCommandList(node.MissingMacParityCommands)}");
+            builder.AppendLine();
+        }
+
+        return builder.ToString();
     }
 
     private static string BuildNodeSummary(NodeCapabilityHealthInfo node)

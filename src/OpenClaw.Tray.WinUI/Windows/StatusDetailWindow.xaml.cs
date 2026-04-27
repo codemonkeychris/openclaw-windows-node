@@ -27,6 +27,7 @@ public sealed partial class StatusDetailWindow : WindowEx
     public event EventHandler? RefreshRequested;
     public event EventHandler? ActivityStreamRequested;
     public event EventHandler<string>? ChannelToggleRequested;
+    public event EventHandler<string>? DashboardPathRequested;
     private GatewayCommandCenterState _state;
 
     public StatusDetailWindow(GatewayCommandCenterState state)
@@ -227,7 +228,8 @@ public sealed partial class StatusDetailWindow : WindowEx
                 DetailText = BuildChannelDetail(c),
                 StatusBrush = brush,
                 ActionText = c.CanStop ? "Stop" : c.CanStart ? "Start" : "N/A",
-                ActionEnabled = c.CanStart || c.CanStop
+                ActionEnabled = c.CanStart || c.CanStop,
+                DashboardPath = BuildChannelDashboardPath(c.Name)
             };
         }).ToList();
 
@@ -305,6 +307,17 @@ public sealed partial class StatusDetailWindow : WindowEx
         ChannelToggleRequested?.Invoke(this, channelName);
     }
 
+    private void OnOpenDashboardPath(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Microsoft.UI.Xaml.Controls.Button { Tag: string dashboardPath } ||
+            string.IsNullOrWhiteSpace(dashboardPath))
+        {
+            return;
+        }
+
+        DashboardPathRequested?.Invoke(this, dashboardPath);
+    }
+
     private void OnCopyNodeSummary(object sender, RoutedEventArgs e)
     {
         if (sender is not Microsoft.UI.Xaml.Controls.Button { Tag: string summary } ||
@@ -324,6 +337,11 @@ public sealed partial class StatusDetailWindow : WindowEx
     private void OnCopyActivitySummary(object sender, RoutedEventArgs e)
     {
         CopyText(BuildActivitySummary(_state.RecentActivity), "[CommandCenter] Copied activity summary");
+    }
+
+    private void OnCopyExtensibilitySummary(object sender, RoutedEventArgs e)
+    {
+        CopyText(BuildExtensibilitySummary(_state.Channels), "[CommandCenter] Copied extensibility summary");
     }
 
     private void OnOpenLogsFolder(object sender, RoutedEventArgs e)
@@ -448,6 +466,7 @@ public sealed partial class StatusDetailWindow : WindowEx
         public SolidColorBrush StatusBrush { get; set; } = new(Colors.Gray);
         public string ActionText { get; set; } = "";
         public bool ActionEnabled { get; set; }
+        public string DashboardPath { get; set; } = "channels";
     }
 
     private class WarningViewModel
@@ -536,6 +555,28 @@ public sealed partial class StatusDetailWindow : WindowEx
         foreach (var channel in channels.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
         {
             builder.AppendLine($"- {channel.Name}: {channel.Status ?? "unknown"} ({BuildChannelDetail(channel)})");
+        }
+
+        return builder.ToString();
+    }
+
+    private static string BuildChannelDashboardPath(string channelName) =>
+        string.IsNullOrWhiteSpace(channelName)
+            ? "channels"
+            : $"channels/{Uri.EscapeDataString(channelName)}";
+
+    private static string BuildExtensibilitySummary(IReadOnlyCollection<ChannelCommandCenterInfo> channels)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("OpenClaw extensibility surfaces");
+        builder.AppendLine("Channels dashboard: channels");
+        builder.AppendLine("Skills dashboard: skills");
+        builder.AppendLine("Cron / schedules dashboard: cron");
+        builder.AppendLine();
+        builder.AppendLine("Channel health currently reported to Windows:");
+        foreach (var channel in channels.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            builder.AppendLine($"- {channel.Name}: {channel.Status} ({BuildChannelDetail(channel)})");
         }
 
         return builder.ToString();

@@ -375,11 +375,89 @@
                                             IsEnabled="{Binding ActionEnabled}"
                                             Click="OnToggleChannel"
                                             AutomationProperties.AutomationId="CommandCenterToggleChannelButton"/>
+                                    <Button Content="Open"
+                                            Tag="{Binding DashboardPath}"
+                                            Click="OnOpenDashboardPath"
+                                            AutomationProperties.AutomationId="CommandCenterOpenChannelDashboardButton"/>
                                 </StackPanel>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+            </StackPanel>
+
+            <!-- Extensibility Section -->
+            <StackPanel x:Name="ExtensibilitySection"
+                        AutomationProperties.AutomationId="CommandCenterExtensibilitySection"
+                        Spacing="8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="EXTENSIBILITY"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                               FontWeight="Bold"/>
+                    <Button Grid.Column="1"
+                            Content="Copy"
+                            Click="OnCopyExtensibilitySummary"
+                            AutomationProperties.AutomationId="CommandCenterCopyExtensibilitySummaryButton"/>
+                </Grid>
+                <TextBlock Text="Channel setup, skills, and scheduled automations are gateway-owned surfaces. Use these links when the connected gateway exposes the matching dashboard pages."
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap"/>
+                <Grid ColumnSpacing="8" RowSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Grid.Column="0">
+                        <TextBlock Text="Channel setup / schemas" FontWeight="SemiBold"/>
+                        <TextBlock Text="Open channel setup for schema-driven auth, QR, login, and dashboard flows where available."
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <Button Grid.Row="0" Grid.Column="1"
+                            Content="Open"
+                            Tag="channels"
+                            Click="OnOpenDashboardPath"
+                            AutomationProperties.AutomationId="CommandCenterOpenChannelsDashboardButton"/>
+
+                    <StackPanel Grid.Row="1" Grid.Column="0">
+                        <TextBlock Text="Skills" FontWeight="SemiBold"/>
+                        <TextBlock Text="Open gateway skills configuration when the connected gateway supports it."
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <Button Grid.Row="1" Grid.Column="1"
+                            Content="Open"
+                            Tag="skills"
+                            Click="OnOpenDashboardPath"
+                            AutomationProperties.AutomationId="CommandCenterOpenSkillsDashboardButton"/>
+
+                    <StackPanel Grid.Row="2" Grid.Column="0">
+                        <TextBlock Text="Cron / schedules" FontWeight="SemiBold"/>
+                        <TextBlock Text="Open scheduled automation controls when the connected gateway supports them."
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <Button Grid.Row="2" Grid.Column="1"
+                            Content="Open"
+                            Tag="cron"
+                            Click="OnOpenDashboardPath"
+                            AutomationProperties.AutomationId="CommandCenterOpenCronDashboardButton"/>
+                </Grid>
             </StackPanel>
 
             <!-- Nodes Section -->

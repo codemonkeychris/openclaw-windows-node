@@ -1924,6 +1924,7 @@ public partial class App : Application
             _statusDetailWindow.RefreshRequested += async (s, e) => await RefreshCommandCenterAsync();
             _statusDetailWindow.ActivityStreamRequested += (s, e) => ShowActivityStream();
             _statusDetailWindow.ChannelToggleRequested += (s, channelName) => ToggleChannel(channelName);
+            _statusDetailWindow.DashboardPathRequested += (s, dashboardPath) => OpenDashboard(dashboardPath);
             _statusDetailWindow.Closed += (s, e) => _statusDetailWindow = null;
         }
         else

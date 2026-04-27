@@ -441,8 +441,8 @@ Deliverables:
 - Cost 30-day bars: **implemented in Command Center from `usage.cost` daily totals**
 - Node copy submenus / summaries: **implemented first Command Center copy action**
 - Channel health summary and copyable context: **implemented first summary plus Command Center start/stop actions**
-- Channel schema forms and QR login flows.
-- Skills/Cron settings.
+- Channel schema forms and QR login flows: **implemented first Windows surface with channel setup/dashboard deep links and copyable channel context**
+- Skills/Cron settings: **implemented first Windows surface with Command Center dashboard entrypoints and copyable guidance**
 - Agent events ring expansion: **implemented first Command Center recent-activity panel with copy/open-stream actions**
 - Hover HUD / richer tray tooltip: **implemented with topology, channel, node, warning, and activity summary**
 

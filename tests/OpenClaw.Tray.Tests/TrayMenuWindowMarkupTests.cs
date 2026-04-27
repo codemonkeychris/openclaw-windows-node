@@ -144,6 +144,26 @@ public class TrayMenuWindowMarkupTests
         Assert.Contains(@"Click=""OnToggleChannel""", xaml);
     }
 
+    [Fact]
+    public void StatusDetailWindow_HasChannelDashboardAndExtensibilityActions()
+    {
+        var xamlPath = Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Windows",
+            "StatusDetailWindow.xaml");
+
+        var xaml = File.ReadAllText(xamlPath);
+
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterOpenChannelDashboardButton""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterExtensibilitySection""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterOpenChannelsDashboardButton""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterOpenSkillsDashboardButton""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterOpenCronDashboardButton""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterCopyExtensibilitySummaryButton""", xaml);
+    }
+
     private static string GetRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

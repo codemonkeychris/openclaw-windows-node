@@ -479,6 +479,103 @@ public class SystemCapabilityTests
     }
 
     [Fact]
+    public async Task ExecApprovalsGet_ReturnsRemoteMutationConstraints()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var cap = new SystemCapability(NullLogger.Instance);
+            var policy = new ExecApprovalPolicy(tempDir, NullLogger.Instance);
+            cap.SetApprovalPolicy(policy);
+
+            var req = new NodeInvokeRequest
+            {
+                Id = "ea-constraints",
+                Command = "system.execApprovals.get",
+                Args = Parse("""{}""")
+            };
+
+            var res = await cap.ExecuteAsync(req);
+
+            Assert.True(res.Ok);
+            var payload = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(res.Payload));
+            Assert.True(payload.TryGetProperty("constraints", out var constraints));
+            Assert.False(constraints.GetProperty("defaultAllowAllowed").GetBoolean());
+            Assert.False(constraints.GetProperty("broadAllowRulesAllowed").GetBoolean());
+            Assert.False(constraints.GetProperty("dangerousAllowRulesAllowed").GetBoolean());
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task ExecApprovalsSet_RejectsDefaultAllow()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var cap = new SystemCapability(NullLogger.Instance);
+            var policy = new ExecApprovalPolicy(tempDir, NullLogger.Instance);
+            cap.SetApprovalPolicy(policy);
+
+            var req = new NodeInvokeRequest
+            {
+                Id = "ea-default-allow",
+                Command = "system.execApprovals.set",
+                Args = Parse("""{"rules":[],"defaultAction":"allow"}""")
+            };
+
+            var res = await cap.ExecuteAsync(req);
+
+            Assert.False(res.Ok);
+            Assert.Contains("Default allow", res.Error);
+            Assert.Equal(ExecApprovalAction.Deny, policy.DefaultAction);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Theory]
+    [InlineData("*")]
+    [InlineData("cmd *")]
+    [InlineData("Remove-Item *")]
+    [InlineData("Invoke-WebRequest *")]
+    [InlineData("Start-Process *")]
+    public async Task ExecApprovalsSet_RejectsUnsafeAllowRules(string pattern)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var cap = new SystemCapability(NullLogger.Instance);
+            var policy = new ExecApprovalPolicy(tempDir, NullLogger.Instance);
+            cap.SetApprovalPolicy(policy);
+
+            var req = new NodeInvokeRequest
+            {
+                Id = "ea-unsafe-allow",
+                Command = "system.execApprovals.set",
+                Args = Parse($$"""{"rules":[{"pattern":"{{pattern}}","action":"allow","enabled":true}],"defaultAction":"deny"}""")
+            };
+
+            var res = await cap.ExecuteAsync(req);
+
+            Assert.False(res.Ok);
+            Assert.Contains("allow rule", res.Error, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
     public async Task Run_BlockedEnvVar_ReturnsError()
     {
         var cap = new SystemCapability(NullLogger.Instance);

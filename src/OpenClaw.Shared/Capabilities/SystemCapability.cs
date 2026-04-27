@@ -22,6 +22,26 @@ public class SystemCapability : NodeCapabilityBase
         "system.execApprovals.get",
         "system.execApprovals.set"
     };
+
+    private static readonly string[] DangerousAllowPatternFragments =
+    [
+        "remove-item",
+        "rm ",
+        "del ",
+        "erase ",
+        "rd ",
+        "rmdir ",
+        "format-",
+        "stop-computer",
+        "restart-computer",
+        "shutdown",
+        "invoke-webrequest",
+        "invoke-restmethod",
+        "start-process",
+        "set-executionpolicy",
+        "reg ",
+        "net "
+    ];
     
     public override IReadOnlyList<string> Commands => _commands;
     
@@ -407,6 +427,12 @@ public class SystemCapability : NodeCapabilityBase
         {
             enabled = true,
             defaultAction = data.DefaultAction.ToString().ToLowerInvariant(),
+            constraints = new
+            {
+                defaultAllowAllowed = false,
+                broadAllowRulesAllowed = false,
+                dangerousAllowRulesAllowed = false
+            },
             rules = rulesSummary
         });
     }
@@ -478,7 +504,20 @@ public class SystemCapability : NodeCapabilityBase
                     _ => ExecApprovalAction.Deny
                 };
             }
-            
+
+            if (defaultAction == ExecApprovalAction.Allow)
+            {
+                Logger.Warn("execApprovals.set denied: default allow is not permitted");
+                return Error("Default allow is not permitted for remote exec approval policy updates.");
+            }
+
+            var validationError = ValidateExecApprovalRules(rules);
+            if (validationError != null)
+            {
+                Logger.Warn($"execApprovals.set denied: {validationError}");
+                return Error(validationError);
+            }
+             
             _approvalPolicy.SetRules(rules, defaultAction);
             Logger.Info($"Exec approval policy updated: {rules.Count} rules");
             
@@ -489,6 +528,31 @@ public class SystemCapability : NodeCapabilityBase
             Logger.Error("execApprovals.set failed", ex);
             return Error($"Failed to update policy: {ex.Message}");
         }
+    }
+
+    private static string? ValidateExecApprovalRules(IEnumerable<ExecApprovalRule> rules)
+    {
+        foreach (var rule in rules)
+        {
+            if (rule.Action != ExecApprovalAction.Allow)
+                continue;
+
+            var pattern = rule.Pattern.Trim();
+            if (string.IsNullOrWhiteSpace(pattern))
+                return "Empty allow rule patterns are not permitted.";
+
+            var normalized = pattern.ToLowerInvariant();
+            if (normalized is "*" or "* *" or "powershell *" or "pwsh *" or "cmd *" or "cmd.exe *")
+                return $"Broad allow rule is not permitted: {pattern}";
+
+            foreach (var dangerous in DangerousAllowPatternFragments)
+            {
+                if (normalized.Contains(dangerous, StringComparison.Ordinal))
+                    return $"Dangerous allow rule is not permitted: {pattern}";
+            }
+        }
+
+        return null;
     }
 }
 

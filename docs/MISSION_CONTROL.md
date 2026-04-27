@@ -428,6 +428,7 @@ Deliverables:
 - Mac-style onboarding security warning.
 - Topology choice onboarding: **first Settings guide implemented with local, WSL, SSH tunnel, and remote/Tailscale presets**
 - Exec approval dialog with sanitizer and three-button flow.
+- Exec approval remote-policy hardening: **implemented guardrails so `system.execApprovals.set` cannot remotely switch to default allow or install broad/dangerous allow rules**
 - Host env sanitizer parity hardening.
 
 Risk: high for exec/security. Do not rush.

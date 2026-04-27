@@ -45,6 +45,7 @@
                         <RowDefinition/>
                         <RowDefinition/>
                         <RowDefinition/>
+                        <RowDefinition/>
                     </Grid.RowDefinitions>
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Kind:"/>
                     <TextBlock x:Name="GatewayKindText" Grid.Row="0" Grid.Column="1"
@@ -67,6 +68,10 @@
                     <TextBlock x:Name="GatewayStateLabelText" Grid.Row="6" Grid.Column="0" Text="State:" Visibility="Collapsed"/>
                     <TextBlock x:Name="GatewayStateText" Grid.Row="6" Grid.Column="1"
                                Text="" TextWrapping="Wrap" Visibility="Collapsed"/>
+                    <TextBlock x:Name="GatewayRuntimeLabelText" Grid.Row="7" Grid.Column="0" Text="Process:" Visibility="Collapsed"/>
+                    <TextBlock x:Name="GatewayRuntimeText" Grid.Row="7" Grid.Column="1"
+                               Text="" TextWrapping="Wrap" Visibility="Collapsed"
+                               AutomationProperties.AutomationId="CommandCenterGatewayRuntimeText"/>
                 </Grid>
                 <TextBlock x:Name="GatewayDetailText"
                            Style="{StaticResource CaptionTextBlockStyle}"

@@ -923,6 +923,7 @@ public class GatewayCommandCenterState
     public ConnectionStatus ConnectionStatus { get; set; } = ConnectionStatus.Disconnected;
     public DateTime LastRefresh { get; set; } = DateTime.UtcNow;
     public GatewayTopologyInfo Topology { get; set; } = new();
+    public GatewayRuntimeInfo Runtime { get; set; } = new();
     public UpdateCommandCenterInfo Update { get; set; } = new();
     public TunnelCommandCenterInfo? Tunnel { get; set; }
     public GatewaySelfInfo? GatewaySelf { get; set; }
@@ -936,6 +937,34 @@ public class GatewayCommandCenterState
     public List<NodeCapabilityHealthInfo> Nodes { get; set; } = new();
     public List<GatewayDiagnosticWarning> Warnings { get; set; } = new();
     public List<CommandCenterActivityInfo> RecentActivity { get; set; } = new();
+}
+
+public class GatewayRuntimeInfo
+{
+    public string ProcessName { get; set; } = "";
+    public int? ProcessId { get; set; }
+    public int? Port { get; set; }
+    public bool IsSshForward { get; set; }
+
+    public bool HasAnyDetails =>
+        !string.IsNullOrWhiteSpace(ProcessName) ||
+        ProcessId is > 0 ||
+        Port is > 0;
+
+    public string DisplayText
+    {
+        get
+        {
+            if (!HasAnyDetails)
+                return "unknown";
+
+            var process = string.IsNullOrWhiteSpace(ProcessName) ? "unknown process" : ProcessName;
+            var pid = ProcessId is > 0 ? $" (PID {ProcessId})" : "";
+            var port = Port is > 0 ? $" on :{Port}" : "";
+            var forward = IsSshForward ? " · SSH local forward" : "";
+            return $"{process}{pid}{port}{forward}";
+        }
+    }
 }
 
 public class UpdateCommandCenterInfo

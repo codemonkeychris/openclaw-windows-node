@@ -1968,6 +1968,7 @@ public partial class App : Application
         var tunnel = BuildTunnelInfo();
         var portDiagnostics = PortDiagnosticsService.BuildDiagnostics(topology, tunnel);
         ApplyDetectedSshForwardTopology(topology, portDiagnostics);
+        var runtime = BuildGatewayRuntimeInfo(portDiagnostics);
         var warnings = nodes.SelectMany(n => n.Warnings).ToList();
         warnings.AddRange(CommandCenterDiagnostics.BuildTopologyWarnings(topology, tunnel));
         warnings.AddRange(BuildPortDiagnosticWarnings(portDiagnostics, topology, tunnel));
@@ -2088,6 +2089,7 @@ public partial class App : Application
             ConnectionStatus = _currentStatus,
             LastRefresh = _lastCheckTime.ToUniversalTime(),
             Topology = topology,
+            Runtime = runtime,
             Update = _lastUpdateInfo,
             Tunnel = tunnel,
             GatewaySelf = _lastGatewaySelf,
@@ -2187,6 +2189,22 @@ public partial class App : Application
         topology.Transport = "ssh tunnel";
         topology.UsesSshTunnel = true;
         topology.Detail = $"Local gateway port {gatewayPort.Port} is owned by ssh, so Command Center treats it as a manually managed SSH local forward.";
+    }
+
+    private static GatewayRuntimeInfo BuildGatewayRuntimeInfo(IReadOnlyList<PortDiagnosticInfo> ports)
+    {
+        var gatewayPort = ports.FirstOrDefault(port =>
+            port.Purpose.Equals("Gateway endpoint", StringComparison.OrdinalIgnoreCase));
+        if (gatewayPort is null || !gatewayPort.IsListening)
+            return new GatewayRuntimeInfo();
+
+        return new GatewayRuntimeInfo
+        {
+            ProcessName = gatewayPort.OwningProcessName ?? "",
+            ProcessId = gatewayPort.OwningProcessId,
+            Port = gatewayPort.Port,
+            IsSshForward = string.Equals(gatewayPort.OwningProcessName, "ssh", StringComparison.OrdinalIgnoreCase)
+        };
     }
 
     private TunnelCommandCenterInfo? BuildTunnelInfo()

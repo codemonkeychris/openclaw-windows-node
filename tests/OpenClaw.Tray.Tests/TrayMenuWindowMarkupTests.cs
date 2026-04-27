@@ -92,6 +92,7 @@ public class TrayMenuWindowMarkupTests
         var xaml = File.ReadAllText(xamlPath);
 
         Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterSupportActionsSection""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterGatewayRuntimeText""", xaml);
         Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterOpenLogsButton""", xaml);
         Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterOpenConfigButton""", xaml);
         Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterOpenDiagnosticsButton""", xaml);
@@ -129,6 +130,7 @@ public class TrayMenuWindowMarkupTests
 
         Assert.Contains("Gateway URL: {RedactSupportValue", source);
         Assert.Contains("Topology detail: {RedactSupportValue", source);
+        Assert.Contains("Gateway runtime: {RedactSupportValue", source);
         Assert.Contains("Tunnel remote endpoint: {RedactSupportValue", source);
         Assert.Contains("Tunnel browser proxy local endpoint: {RedactSupportValue", source);
         Assert.Contains("Tunnel browser proxy remote endpoint: {RedactSupportValue", source);

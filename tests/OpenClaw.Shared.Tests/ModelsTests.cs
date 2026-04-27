@@ -1202,6 +1202,20 @@ public class CommandCenterModelTests
         Assert.Equal("Available · current 1.2.3 · latest v1.2.4 · prompted", info.DisplayText);
     }
 
+    [Fact]
+    public void GatewayRuntimeInfo_DisplayTextIncludesProcessPortAndForward()
+    {
+        var info = new GatewayRuntimeInfo
+        {
+            ProcessName = "ssh",
+            ProcessId = 1234,
+            Port = 18789,
+            IsSshForward = true
+        };
+
+        Assert.Equal("ssh (PID 1234) on :18789 · SSH local forward", info.DisplayText);
+    }
+
     [Theory]
     [InlineData("ws://localhost:18789", false, "", GatewayKind.WindowsNative)]
     [InlineData("ws://127.0.0.1:18789", false, "", GatewayKind.WindowsNative)]

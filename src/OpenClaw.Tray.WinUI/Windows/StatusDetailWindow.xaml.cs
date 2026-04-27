@@ -75,6 +75,18 @@ public sealed partial class StatusDetailWindow : WindowEx
         GatewayDetailText.Text = state.Topology.Detail;
         UpdateStatusText.Text = $"Updates: {state.Update.DisplayText}";
 
+        if (state.Runtime.HasAnyDetails)
+        {
+            GatewayRuntimeLabelText.Visibility = Visibility.Visible;
+            GatewayRuntimeText.Visibility = Visibility.Visible;
+            GatewayRuntimeText.Text = state.Runtime.DisplayText;
+        }
+        else
+        {
+            GatewayRuntimeLabelText.Visibility = Visibility.Collapsed;
+            GatewayRuntimeText.Visibility = Visibility.Collapsed;
+        }
+
         if (state.Tunnel != null && state.Tunnel.Status != TunnelStatus.NotConfigured)
         {
             TunnelLabelText.Visibility = Visibility.Visible;
@@ -449,6 +461,7 @@ public sealed partial class StatusDetailWindow : WindowEx
         builder.AppendLine($"Transport: {state.Topology.Transport}");
         builder.AppendLine($"Gateway URL: {RedactSupportValue(state.Topology.GatewayUrl)}");
         builder.AppendLine($"Topology detail: {RedactSupportValue(state.Topology.Detail)}");
+        builder.AppendLine($"Gateway runtime: {RedactSupportValue(state.Runtime.DisplayText)}");
         builder.AppendLine($"Update status: {RedactSupportValue(state.Update.DisplayText)}");
         if (state.Tunnel != null && state.Tunnel.Status != TunnelStatus.NotConfigured)
         {

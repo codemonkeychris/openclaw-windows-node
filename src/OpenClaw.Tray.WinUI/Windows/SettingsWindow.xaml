@@ -78,6 +78,11 @@
                                    Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextWrapping="Wrap"/>
+                        <TextBlock AutomationProperties.AutomationId="SettingsSshBrowserForwardHint"
+                                   Text="Browser proxy bridge: when enabled, the managed tunnel also forwards local-port+2 to remote-port+2 so browser.proxy can reach the browser control host."
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap"/>
 
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>

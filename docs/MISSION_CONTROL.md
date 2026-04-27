@@ -404,6 +404,7 @@ Deliverables:
 - Gateway runtime owner summary: **implemented in Command Center topology/support context so local gateway or SSH-forward listener process name, PID, and port are visible without managing the process**
 - Browser proxy SSH forward warning: **implemented targeted Command Center guidance when an SSH tunnel gateway is up but the companion `gateway port + 2` browser-control forward is missing**
 - Browser proxy invoke error guidance: **implemented `browser.proxy` unreachable/timeout errors that name `127.0.0.1:{gateway+2}` and show the exact SSH local-forward shape**
+- Settings SSH browser-forward guidance: **implemented Settings copy explaining that the managed SSH tunnel forwards `local-port+2` to `remote-port+2` for `browser.proxy` when the browser proxy bridge is enabled**
 
 Risk: medium-high for kill/restart actions; start as read-only/copy actions.
 

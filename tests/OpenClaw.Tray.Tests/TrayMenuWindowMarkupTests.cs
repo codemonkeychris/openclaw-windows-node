@@ -56,6 +56,8 @@ public class TrayMenuWindowMarkupTests
         Assert.Contains(@"AutomationProperties.AutomationId=""SettingsUseWslGatewayButton""", xaml);
         Assert.Contains(@"AutomationProperties.AutomationId=""SettingsUseSshTunnelButton""", xaml);
         Assert.Contains(@"AutomationProperties.AutomationId=""SettingsUseRemoteGatewayButton""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""SettingsSshBrowserForwardHint""", xaml);
+        Assert.Contains("local-port+2 to remote-port+2", xaml);
         Assert.Contains(@"TextChanged=""OnTopologyInputChanged""", xaml);
     }
 

@@ -152,7 +152,7 @@ This operator-only mode provides Quick Send, embedded WebChat, Command Center di
 |--------|---------|
 | **Gateway** | WSL2 (Ubuntu) |
 | **Nodes** | OpenClaw.Tray registers as `role: "node"` from Windows |
-| **Capabilities** | Camera ✅ (MediaCapture API) Canvas ✅ (WebView2) Screen ✅ (Graphics Capture) Notifications ✅ (Toast + agent-driven) Browser ✅/⚠️ (local `browser.proxy` bridge; requires browser-control host on gateway port + 2) Exec ✅ (WSL2 + optionally Windows `cmd`/`powershell`) Location ⚠️ (Windows Location API — desktop, less useful) Audio/TTS ✅ (Windows Speech) |
+| **Capabilities** | Camera ✅ (MediaCapture API) Canvas ✅ (WebView2) Screen ✅ (Graphics Capture) Notifications ✅ (Toast + agent-driven) Browser ✅/⚠️ (local `browser.proxy` bridge; requires browser-control host on gateway port + 2) Exec ✅ (WSL2 + optionally Windows `cmd`/`powershell`) Location ⚠️ (Windows Location API — desktop, less useful) Voice/TTS ⚠️ (separate parity track) |
 | **Networking** | WSL2 NAT still involved for gateway, but tray app connects outward to WSL2's WS — simpler direction. |
 | **Setup complexity** | Medium — WSL2 gateway + tray app auto-discovers and pairs |
 | **UX Rating** | ⭐⭐⭐⭐ Agent can now see and interact with Windows! |
@@ -169,7 +169,7 @@ The tray now also has a Command Center surface that combines gateway channel hea
 |--------|---------|
 | **Gateway** | Windows native (Node.js on Windows — `node.exe`) |
 | **Nodes** | OpenClaw.Tray as full Windows node |
-| **Capabilities** | Camera ✅ Canvas ✅ Screen ✅ Notifications ✅ Browser ✅/⚠️ (`browser.proxy` bridge; needs browser-control host on gateway+2) Exec ✅ (native `cmd.exe`, PowerShell, `wsl.exe`) Location ⚠️ Audio/TTS ✅ |
+| **Capabilities** | Camera ✅ Canvas ✅ Screen ✅ Notifications ✅ Browser ✅/⚠️ (`browser.proxy` bridge; needs browser-control host on gateway+2) Exec ✅ (native `cmd.exe`, PowerShell, `wsl.exe`) Location ⚠️ Voice/TTS ⚠️ (separate parity track) |
 | **Networking** | `ws://127.0.0.1:18789` — pure loopback, no NAT, no WSL2 networking issues |
 | **Setup complexity** | Low — `npm install -g openclaw && openclaw onboard` from PowerShell. Same as Mac. |
 | **UX Rating** | ⭐⭐⭐⭐⭐ True feature parity with Mac |
@@ -263,7 +263,7 @@ Niche scenario. If the "server" must be Windows for some reason, this works but 
 | `sms.send` | ❌ | ❌ | ✅ | ❌ | ❌ | N/A |
 | Browser proxy | ✅ | ❌ | ❌ | ✅ Playwright | **✅/⚠️ Local bridge** | Browser-control host on gateway port + 2 |
 | Accessibility | ✅ AX API | ❌ | ❌ | ❌ | **⚠️ Future** | UI Automation |
-| Speech/TTS | ✅ NSSpeechSynthesizer | ❌ | ❌ | ❌ | **✅** | Windows.Media.SpeechSynthesis |
+| Speech/TTS | ✅ NSSpeechSynthesizer | ❌ | ❌ | ❌ | **⚠️ Planned** | Windows.Media.SpeechSynthesis |
 | Microphone | ✅ AVAudioEngine | ✅ | ✅ | ❌ | **⚠️ Future** | Windows.Media.Audio |
 
 ---
@@ -475,6 +475,8 @@ var synth = new SpeechSynthesizer();
 var stream = await synth.SynthesizeTextToStreamAsync(text);
 // Play via MediaElement or save to file
 ```
+
+This is a candidate implementation path, not an implemented node command yet. Voice/Talk mode parity should stay on its own track so Windows does not advertise a speech capability before there is a shared command contract and permission model.
 
 ---
 

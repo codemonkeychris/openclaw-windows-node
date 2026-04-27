@@ -286,7 +286,7 @@ Keep StatusDetailWindow as the first Command Center, but plan for tabs/sections:
 | Agent events ring | Partial Activity Stream | Expand to 400-event rich ring |
 | Permissions matrix | Implemented first slice | Command Center shows safe Windows privacy settings deep links without probing devices |
 | Onboarding security banner | Partial setup wizard | Add Mac-style warning and topology choice |
-| Debug actions | Partial | Add restart/reset/log/config/port/test heartbeat actions |
+| Debug actions | Implemented first wave | Open logs/config/diagnostics, refresh health, copy support context, copy port diagnostics, and copy capability diagnostics |
 | Voice/Talk | Missing | Separate roadmap track |
 | Cron/Skills settings | Missing/limited | Separate roadmap track |
 

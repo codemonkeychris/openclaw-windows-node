@@ -100,6 +100,22 @@ public class TrayMenuWindowMarkupTests
     }
 
     [Fact]
+    public void StatusDetailWindow_HasCopyablePortDiagnostics()
+    {
+        var xamlPath = Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Windows",
+            "StatusDetailWindow.xaml");
+
+        var xaml = File.ReadAllText(xamlPath);
+
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterCopyPortDiagnosticsButton""", xaml);
+        Assert.Contains(@"Click=""OnCopyPortDiagnostics""", xaml);
+    }
+
+    [Fact]
     public void StatusDetailWindow_SupportContextIncludesRedactedTopology()
     {
         var sourcePath = Path.Combine(
@@ -119,6 +135,8 @@ public class TrayMenuWindowMarkupTests
         Assert.Contains("<host>", source);
         Assert.Contains("<ip>", source);
         Assert.Contains("<user>@<host>", source);
+        Assert.Contains("BuildPortDiagnosticsSummary", source);
+        Assert.Contains("OpenClaw port diagnostics", source);
     }
 
     [Fact]

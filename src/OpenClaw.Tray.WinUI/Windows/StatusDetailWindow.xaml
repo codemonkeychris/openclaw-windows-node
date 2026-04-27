@@ -178,6 +178,10 @@
             <StackPanel x:Name="PortDiagnosticsSection" AutomationProperties.AutomationId="CommandCenterPortDiagnosticsSection" Spacing="8" Visibility="Collapsed">
                 <TextBlock Text="PORT DIAGNOSTICS" Style="{StaticResource CaptionTextBlockStyle}"
                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontWeight="Bold"/>
+                <Button Content="Copy Port Diagnostics"
+                        HorizontalAlignment="Left"
+                        Click="OnCopyPortDiagnostics"
+                        AutomationProperties.AutomationId="CommandCenterCopyPortDiagnosticsButton"/>
                 <ItemsControl x:Name="PortDiagnosticsList" AutomationProperties.AutomationId="CommandCenterPortDiagnosticsList">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>

@@ -356,6 +356,11 @@ public sealed partial class StatusDetailWindow : WindowEx
         CopyText(BuildCapabilityDiagnosticsSummary(_state), "[CommandCenter] Copied capability diagnostics");
     }
 
+    private void OnCopyPortDiagnostics(object sender, RoutedEventArgs e)
+    {
+        CopyText(BuildPortDiagnosticsSummary(_state.PortDiagnostics), "[CommandCenter] Copied port diagnostics");
+    }
+
     private void OnOpenLogsFolder(object sender, RoutedEventArgs e)
     {
         OpenFolder(Path.GetDirectoryName(Logger.LogFilePath), "logs");
@@ -692,6 +697,22 @@ public sealed partial class StatusDetailWindow : WindowEx
 
         builder.AppendLine();
         builder.AppendLine("Rule: safe companion commands can be allowlisted for parity; privacy-sensitive commands such as camera.snap, camera.clip, and screen.record should stay explicit opt-ins.");
+        return builder.ToString();
+    }
+
+    private static string BuildPortDiagnosticsSummary(IReadOnlyCollection<PortDiagnosticInfo> ports)
+    {
+        if (ports.Count == 0)
+            return "No local port diagnostics available for the current topology.";
+
+        var builder = new StringBuilder();
+        builder.AppendLine("OpenClaw port diagnostics");
+        builder.AppendLine($"Generated: {DateTimeOffset.Now:O}");
+        foreach (var port in ports.OrderBy(p => p.Port).ThenBy(p => p.Purpose, StringComparer.OrdinalIgnoreCase))
+        {
+            builder.AppendLine($"- {port.Purpose}: {port.Port} {port.StatusText} - {RedactSupportValue(port.Detail)}");
+        }
+
         return builder.ToString();
     }
 

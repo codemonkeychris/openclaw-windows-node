@@ -76,6 +76,12 @@ OpenClaw Tray responds to `openclaw://` deep links, which can be invoked from a 
 | `openclaw://send` | Open the Quick Send dialog |
 | `openclaw://send?message=Hello` | Open Quick Send with pre-filled text |
 | `openclaw://settings` | Open the Settings dialog |
+| `openclaw://setup` | Open the Setup Wizard |
+| `openclaw://commandcenter` | Open Command Center diagnostics |
+| `openclaw://activity` | Open the Activity Stream |
+| `openclaw://history` | Open Notification History |
+| `openclaw://healthcheck` | Run a manual health check |
+| `openclaw://logs` | Open the current tray log file |
 | `openclaw://agent?message=Hello` | Send a message directly (with confirmation) |
 
 ## Troubleshooting

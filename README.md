@@ -294,9 +294,15 @@ OpenClaw registers the `openclaw://` URL scheme for automation and integration:
 | Link | Description |
 |------|-------------|
 | `openclaw://settings` | Open Settings dialog |
+| `openclaw://setup` | Open Setup Wizard |
 | `openclaw://chat` | Open Web Chat window |
+| `openclaw://commandcenter` | Open Command Center diagnostics |
+| `openclaw://activity` | Open Activity Stream |
+| `openclaw://history` | Open Notification History |
 | `openclaw://dashboard` | Open Dashboard in browser |
 | `openclaw://dashboard/sessions` | Open specific dashboard page |
+| `openclaw://healthcheck` | Run a manual health check |
+| `openclaw://logs` | Open the current tray log file |
 | `openclaw://send?message=Hello` | Open Quick Send with pre-filled text |
 | `openclaw://agent?message=Hello` | Send message directly (with confirmation) |
 

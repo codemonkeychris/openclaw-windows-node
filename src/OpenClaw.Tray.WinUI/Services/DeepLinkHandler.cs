@@ -63,6 +63,21 @@ public static class DeepLinkHandler
                 actions.OpenSetup?.Invoke();
                 break;
 
+            case "health":
+            case "healthcheck":
+            case "health-check":
+                if (actions.RunHealthCheck != null)
+                {
+                    _ = Task.Run(actions.RunHealthCheck);
+                }
+                break;
+
+            case "log":
+            case "logs":
+            case "log-file":
+                actions.OpenLogFile?.Invoke();
+                break;
+
             case "chat":
                 actions.OpenChat?.Invoke();
                 break;
@@ -132,6 +147,8 @@ public class DeepLinkActions
 {
     public Action? OpenSettings { get; set; }
     public Action? OpenSetup { get; set; }
+    public Func<Task>? RunHealthCheck { get; set; }
+    public Action? OpenLogFile { get; set; }
     public Action? OpenChat { get; set; }
     public Action? OpenCommandCenter { get; set; }
     public Action<string?>? OpenActivityStream { get; set; }

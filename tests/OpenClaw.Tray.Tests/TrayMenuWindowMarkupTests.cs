@@ -90,6 +90,26 @@ public class TrayMenuWindowMarkupTests
     }
 
     [Fact]
+    public void CommandPalette_HasTrayUtilityEntryPoints()
+    {
+        var sourcePath = Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.CommandPalette",
+            "Pages",
+            "OpenClawPage.cs");
+
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains(@"openclaw://setup", source);
+        Assert.Contains("Setup Wizard", source);
+        Assert.Contains(@"openclaw://healthcheck", source);
+        Assert.Contains("Run Health Check", source);
+        Assert.Contains(@"openclaw://logs", source);
+        Assert.Contains("Open Log File", source);
+    }
+
+    [Fact]
     public void DeepLinkHandler_HasActivityStreamEntryPoint()
     {
         var sourcePath = Path.Combine(
@@ -121,6 +141,24 @@ public class TrayMenuWindowMarkupTests
         Assert.Contains(@"case ""history"":", source);
         Assert.Contains(@"case ""notification-history"":", source);
         Assert.Contains("OpenNotificationHistory?.Invoke", source);
+    }
+
+    [Fact]
+    public void DeepLinkHandler_HasTrayUtilityEntryPoints()
+    {
+        var sourcePath = Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Services",
+            "DeepLinkHandler.cs");
+
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains(@"case ""healthcheck"":", source);
+        Assert.Contains("RunHealthCheck", source);
+        Assert.Contains(@"case ""logs"":", source);
+        Assert.Contains("OpenLogFile?.Invoke", source);
     }
 
     [Fact]

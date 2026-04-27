@@ -34,10 +34,20 @@ internal sealed partial class OpenClawPage : ListPage
                 Title = "📝 Quick Send", 
                 Subtitle = "Send a message to OpenClaw"
             },
+            new ListItem(new OpenUrlCommand("openclaw://setup"))
+            {
+                Title = "🧭 Setup Wizard",
+                Subtitle = "Open QR, setup code, and manual gateway pairing"
+            },
             new ListItem(new OpenUrlCommand("openclaw://commandcenter"))
             {
                 Title = "🧭 Command Center",
                 Subtitle = "Open gateway, tunnel, node, and browser diagnostics"
+            },
+            new ListItem(new OpenUrlCommand("openclaw://healthcheck"))
+            {
+                Title = "🔄 Run Health Check",
+                Subtitle = "Refresh gateway or node connection health"
             },
             new ListItem(new OpenUrlCommand("openclaw://activity"))
             {
@@ -53,6 +63,11 @@ internal sealed partial class OpenClawPage : ListPage
             {
                 Title = "⚙️ Settings",
                 Subtitle = "Configure OpenClaw Tray"
+            },
+            new ListItem(new OpenUrlCommand("openclaw://logs"))
+            {
+                Title = "📄 Open Log File",
+                Subtitle = "Open the current OpenClaw Tray log"
             }
         ];
     }

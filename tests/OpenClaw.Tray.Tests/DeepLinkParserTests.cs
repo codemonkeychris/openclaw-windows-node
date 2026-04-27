@@ -76,6 +76,17 @@ public class DeepLinkParserTests
         Assert.Equal("history", result.Path);
     }
 
+    [Theory]
+    [InlineData("openclaw://setup", "setup")]
+    [InlineData("openclaw://healthcheck", "healthcheck")]
+    [InlineData("openclaw://logs", "logs")]
+    public void ParseDeepLink_TrayUtilityEntrypoints(string uri, string expectedPath)
+    {
+        var result = DeepLinkParser.ParseDeepLink(uri);
+        Assert.NotNull(result);
+        Assert.Equal(expectedPath, result.Path);
+    }
+
     [Fact]
     public void ParseDeepLink_TrailingSlash_IsStripped()
     {

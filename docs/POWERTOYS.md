@@ -37,10 +37,13 @@ Open Command Palette (`Win+Alt+Space`), type **"OpenClaw"** — you should see t
 | **🦞 Open Dashboard** | Opens the OpenClaw web dashboard in your default browser |
 | **💬 Web Chat** | Opens the embedded Web Chat window in OpenClaw Tray |
 | **📝 Quick Send** | Opens the Quick Send dialog to compose a message |
+| **🧭 Setup Wizard** | Opens QR, setup code, and manual gateway pairing |
 | **🧭 Command Center** | Opens gateway, tunnel, node, browser, and support diagnostics |
+| **🔄 Run Health Check** | Refreshes gateway or node connection health |
 | **⚡ Activity Stream** | Opens recent tray activity and support bundle actions |
 | **📋 Notification History** | Opens recent OpenClaw tray notifications |
 | **⚙️ Settings** | Opens the OpenClaw Tray Settings dialog |
+| **📄 Open Log File** | Opens the current OpenClaw Tray log |
 
 ## Usage
 
@@ -92,7 +95,10 @@ Get-AppxPackage -Name '*OpenClaw*' | Remove-AppxPackage
   | Open Dashboard | `openclaw://dashboard` |
   | Web Chat | `openclaw://chat` |
   | Quick Send | `openclaw://send` |
+  | Setup Wizard | `openclaw://setup` |
   | Command Center | `openclaw://commandcenter` |
+  | Run Health Check | `openclaw://healthcheck` |
   | Activity Stream | `openclaw://activity` |
   | Notification History | `openclaw://history` |
   | Settings | `openclaw://settings` |
+  | Open Log File | `openclaw://logs` |

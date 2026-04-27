@@ -2753,6 +2753,8 @@ public partial class App : Application
         {
             OpenSettings = ShowSettings,
             OpenSetup = () => _ = ShowSetupWizardAsync(),
+            RunHealthCheck = () => RunHealthCheckAsync(userInitiated: true),
+            OpenLogFile = OpenLogFile,
             OpenChat = ShowWebChat,
             OpenCommandCenter = ShowStatusDetail,
             OpenActivityStream = ShowActivityStream,

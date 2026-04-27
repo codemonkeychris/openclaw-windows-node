@@ -429,7 +429,7 @@ Deliverables:
 - Topology choice onboarding: **first Settings guide implemented with local, WSL, SSH tunnel, and remote/Tailscale presets**
 - Exec approval dialog with sanitizer and three-button flow: **implemented for local `Prompt` policy decisions with Allow once / Always allow / Deny**
 - Exec approval remote-policy hardening: **implemented guardrails so `system.execApprovals.set` cannot remotely switch to default allow, install broad/dangerous allow rules, or overwrite a newer local policy without a matching `baseHash`**
-- Host env sanitizer parity hardening.
+- Host env sanitizer parity hardening: **implemented expanded blocking for secret-looking overrides such as tokens, passwords, API keys, access keys, private keys, client secrets, and connection strings**
 
 Risk: high for exec/security. Do not rush.
 

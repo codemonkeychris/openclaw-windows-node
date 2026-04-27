@@ -106,6 +106,7 @@ When the node connects, it advertises these capabilities:
    - `system.run.prepare` pre-flight command
    - `system.which` command lookup
    - `system.execApprovals` allowlist flow with base-hash optimistic concurrency for remote edits
+   - `system.run` environment override sanitizer blocks path/toolchain injection and secret-looking variables
 2. ~~**screen.record**~~ ✅ Implemented
    - Graphics Capture video recording (MP4/base64)
 3. ~~**camera.clip**~~ ✅ Implemented

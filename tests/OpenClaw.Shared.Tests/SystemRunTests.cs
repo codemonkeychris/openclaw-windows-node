@@ -169,6 +169,26 @@ public class SystemRunTests
     }
 
     [Fact]
+    public async Task SystemRun_BlocksSecretEnvOverride()
+    {
+        var runner = new FakeCommandRunner();
+        var cap = new SystemCapability(NullLogger.Instance);
+        cap.SetCommandRunner(runner);
+
+        var req = new NodeInvokeRequest
+        {
+            Id = "r5d",
+            Command = "system.run",
+            Args = Parse("""{"command":"test","env":{"GITHUB_TOKEN":"secret","FOO":"bar"}}""")
+        };
+
+        var res = await cap.ExecuteAsync(req);
+        Assert.False(res.Ok);
+        Assert.Contains("GITHUB_TOKEN", res.Error!, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(runner.LastRequest);
+    }
+
+    [Fact]
     public async Task SystemRun_DefaultsTimeout_To30s()
     {
         var runner = new FakeCommandRunner();

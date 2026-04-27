@@ -433,6 +433,7 @@ Deliverables:
 - Host env sanitizer parity hardening: **implemented expanded blocking for secret-looking overrides such as tokens, passwords, API keys, access keys, private keys, client secrets, and connection strings**
 - Dangerous command opt-in guidance: **implemented copyable safety guidance for camera/screen privacy-sensitive commands without emitting one-click dangerous repair commands**
 - Node capability settings: **implemented Settings toggles for canvas, screen, camera, location, and browser proxy command groups so privacy-sensitive surfaces can be disabled before reconnecting/re-pairing**
+- Disabled capability diagnostics: **implemented Command Center distinction between intentionally disabled Settings groups and true gateway allowlist/parity gaps**
 
 Risk: high for exec/security. Do not rush.
 

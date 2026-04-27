@@ -1051,6 +1051,47 @@ public class CommandCenterModelTests
     }
 
     [Fact]
+    public void NodeCapabilityHealthInfo_TreatsDisabledCommandsAsSettingsChoice()
+    {
+        var node = new GatewayNodeInfo
+        {
+            NodeId = "node-1",
+            DisplayName = "Windows Node",
+            Platform = "windows",
+            IsOnline = true,
+            Commands =
+            [
+                "system.notify",
+                "system.run",
+                "system.which",
+                "device.info",
+                "device.status"
+            ],
+            DisabledCommands =
+            [
+                "camera.list",
+                "camera.snap",
+                "camera.clip",
+                "screen.snapshot",
+                "screen.record",
+                "browser.proxy"
+            ]
+        };
+
+        var info = NodeCapabilityHealthInfo.FromNode(node);
+
+        Assert.Contains("camera.snap", info.DisabledBySettingsCommands);
+        Assert.DoesNotContain("camera.list", info.MissingMacParityCommands);
+        Assert.DoesNotContain("screen.snapshot", info.MissingMacParityCommands);
+        Assert.DoesNotContain("browser.proxy", info.MissingMacParityCommands);
+        Assert.Contains(info.Warnings, w =>
+            w.Category == "settings" &&
+            w.Title == "Some node capabilities are disabled" &&
+            w.Detail.Contains("screen.record", StringComparison.Ordinal));
+        Assert.DoesNotContain(info.Warnings, w => w.Title == "Browser proxy host not available");
+    }
+
+    [Fact]
     public void BuildAllowCommandsRepairCommand_IsStableAndDeduplicated()
     {
         var command = CommandCenterDiagnostics.BuildAllowCommandsRepairCommand(

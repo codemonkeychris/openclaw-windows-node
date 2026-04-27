@@ -615,6 +615,7 @@ public sealed partial class StatusDetailWindow : WindowEx
             builder.AppendLine($"  privacy-sensitive opt-ins: {FormatCommandList(node.DangerousDeclaredCommands)}");
             builder.AppendLine($"  Windows-specific commands: {FormatCommandList(node.WindowsSpecificDeclaredCommands)}");
             builder.AppendLine($"  filtered by gateway policy: {FormatCommandList(node.BlockedDeclaredCommands)}");
+            builder.AppendLine($"  disabled in Settings: {FormatCommandList(node.DisabledBySettingsCommands)}");
             builder.AppendLine($"  missing safe allowlist: {FormatCommandList(node.MissingSafeAllowlistCommands)}");
             builder.AppendLine($"  missing privacy-sensitive allowlist: {FormatCommandList(node.MissingDangerousAllowlistCommands)}");
             builder.AppendLine($"  missing Mac parity: {FormatCommandList(node.MissingMacParityCommands)}");
@@ -747,6 +748,8 @@ public sealed partial class StatusDetailWindow : WindowEx
             parts.Add($"{node.DangerousDeclaredCommands.Count} opt-in");
         if (node.WindowsSpecificDeclaredCommands.Count > 0)
             parts.Add($"{node.WindowsSpecificDeclaredCommands.Count} Windows");
+        if (node.DisabledBySettingsCommands.Count > 0)
+            parts.Add($"{node.DisabledBySettingsCommands.Count} disabled");
         if (node.MissingMacParityCommands.Contains("browser.proxy", StringComparer.OrdinalIgnoreCase))
             parts.Add("missing browser.proxy");
         return parts.Count == 0 ? "no command details" : string.Join(" · ", parts);
@@ -761,6 +764,8 @@ public sealed partial class StatusDetailWindow : WindowEx
         builder.AppendLine($"Status: {(node.IsOnline ? "online" : "offline")}");
         builder.AppendLine($"Capabilities: {string.Join(", ", node.Capabilities.OrderBy(c => c, StringComparer.OrdinalIgnoreCase))}");
         builder.AppendLine($"Commands: {string.Join(", ", node.Commands.OrderBy(c => c, StringComparer.OrdinalIgnoreCase))}");
+        if (node.DisabledBySettingsCommands.Count > 0)
+            builder.AppendLine($"Disabled in Settings: {string.Join(", ", node.DisabledBySettingsCommands)}");
         if (node.Warnings.Count > 0)
         {
             builder.AppendLine("Warnings:");

@@ -210,10 +210,27 @@ public class NodeService : IDisposable
             IsOnline = IsConnected,
             Capabilities = capabilities,
             Commands = commands,
+            DisabledCommands = BuildDisabledCommands(),
             CapabilityCount = capabilities.Count,
             CommandCount = commands.Count,
             Permissions = BuildLocalPermissions()
         };
+    }
+
+    private List<string> BuildDisabledCommands()
+    {
+        var disabled = new List<string>();
+        if (_settings?.NodeCanvasEnabled == false)
+            disabled.AddRange(CommandCenterCommandGroups.SafeCompanionCommands.Where(command => command.StartsWith("canvas.", StringComparison.OrdinalIgnoreCase)));
+        if (_settings?.NodeScreenEnabled == false)
+            disabled.AddRange(CommandCenterCommandGroups.MacNodeParityCommands.Where(command => command.StartsWith("screen.", StringComparison.OrdinalIgnoreCase)));
+        if (_settings?.NodeCameraEnabled == false)
+            disabled.AddRange(CommandCenterCommandGroups.MacNodeParityCommands.Where(command => command.StartsWith("camera.", StringComparison.OrdinalIgnoreCase)));
+        if (_settings?.NodeLocationEnabled == false)
+            disabled.AddRange(CommandCenterCommandGroups.SafeCompanionCommands.Where(command => command.StartsWith("location.", StringComparison.OrdinalIgnoreCase)));
+        if (_settings?.NodeBrowserProxyEnabled == false)
+            disabled.Add("browser.proxy");
+        return disabled;
     }
 
     private Dictionary<string, bool> BuildLocalPermissions()

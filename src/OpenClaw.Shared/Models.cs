@@ -486,6 +486,7 @@ public class GatewayNodeInfo
     public int CommandCount { get; set; }
     public List<string> Capabilities { get; set; } = new();
     public List<string> Commands { get; set; } = new();
+    public List<string> DisabledCommands { get; set; } = new();
     public Dictionary<string, bool> Permissions { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public string ShortId => NodeId.Length <= 12 ? NodeId : NodeId[..12] + "…";
@@ -847,6 +848,7 @@ public class NodeCapabilityHealthInfo
     public List<string> MissingSafeAllowlistCommands { get; set; } = new();
     public List<string> MissingDangerousAllowlistCommands { get; set; } = new();
     public List<string> MissingMacParityCommands { get; set; } = new();
+    public List<string> DisabledBySettingsCommands { get; set; } = new();
     public List<GatewayDiagnosticWarning> Warnings { get; set; } = new();
 
     public static NodeCapabilityHealthInfo FromNode(GatewayNodeInfo node)
@@ -864,6 +866,10 @@ public class NodeCapabilityHealthInfo
             IsOnline = node.IsOnline,
             Capabilities = node.Capabilities.ToList(),
             Commands = node.Commands.ToList(),
+            DisabledBySettingsCommands = node.DisabledCommands
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToList(),
             Permissions = new Dictionary<string, bool>(node.Permissions, StringComparer.OrdinalIgnoreCase),
             SafeDeclaredCommands = CommandCenterCommandGroups.SafeCompanionCommands
                 .Where(commandSet.Contains)
@@ -890,8 +896,9 @@ public class NodeCapabilityHealthInfo
 
         if (isWindows)
         {
+            var disabledSet = info.DisabledBySettingsCommands.ToHashSet(StringComparer.OrdinalIgnoreCase);
             info.MissingMacParityCommands = CommandCenterCommandGroups.MacNodeParityCommands
-                .Where(command => !commandSet.Contains(command))
+                .Where(command => !commandSet.Contains(command) && !disabledSet.Contains(command))
                 .ToList();
         }
 
@@ -1160,6 +1167,17 @@ public static class CommandCenterDiagnostics
                 Detail = $"{blocked} {(node.MissingDangerousAllowlistCommands.Count == 1 ? "is" : "are")} declared but filtered by gateway policy. Leave blocked unless you explicitly want camera or screen recording access for this node.",
                 RepairAction = "Copy opt-in guidance",
                 CopyText = BuildDangerousCommandOptInGuidance(node.MissingDangerousAllowlistCommands)
+            });
+        }
+
+        if (node.DisabledBySettingsCommands.Count > 0)
+        {
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Info,
+                Category = "settings",
+                Title = "Some node capabilities are disabled",
+                Detail = string.Join(", ", node.DisabledBySettingsCommands) + " are intentionally not advertised because their capability groups are disabled in Settings."
             });
         }
 

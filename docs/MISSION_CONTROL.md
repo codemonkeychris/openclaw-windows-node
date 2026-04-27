@@ -220,7 +220,7 @@ Add categories beyond current node/channel/allowlist/parity:
 | `tunnel` | SSH tunnel stopped/restarting/failed | Copy `ssh -N -L ...` command; "Reset tunnel" later |
 | `wsl` | Localhost likely backed by WSL; NAT or distro reboot may break it | Show WSL-specific diagnostic hints |
 | `tailscale` | Tailnet host but no tunnel/direct auth mismatch | Show Tailscale/wss/auth hints |
-| `browser` | `browser.proxy` not declared/implemented | Explain local-only browser proxy options |
+| `browser` | `browser.proxy` disabled, policy-filtered, or missing a gateway+2 browser-control host | Explain Settings, allowlist, SSH forward, or local browser-host repair path |
 | `gateway` | stale health/stateVersion, auth error, not connected | Existing patterns plus topology-specific detail |
 
 ### 4.3 Tray menu badge

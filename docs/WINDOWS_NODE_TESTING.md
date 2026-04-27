@@ -60,6 +60,7 @@ These features need the gateway to send `node.invoke` commands:
 | `camera.clip` | Capture video clip | Returns MP4/base64 metadata |
 | `location.get` | Get Windows location | Uses Windows location permission/settings |
 | `device.info` / `device.status` | Device metadata/status | Returns host/app/locale plus battery/storage/network/uptime payloads |
+| `browser.proxy` | Proxy browser-control host requests | Requires Browser proxy bridge enabled and a compatible browser-control host listening on gateway port + 2 |
 
 ## Capabilities Advertised
 
@@ -70,6 +71,7 @@ When the node connects, it advertises these capabilities:
 - `camera` - MediaCapture photo/video capture (frame reader fallback)
 - `location` - Windows.Devices.Geolocation
 - `device` - Host/app metadata and lightweight status
+- `browser` - Local `browser.proxy` bridge to a browser-control host on gateway port + 2, when enabled in Settings
 
 ## Security Features
 
@@ -90,6 +92,13 @@ When the node connects, it advertises these capabilities:
 ### No "Node Mode Active" notification
 - Ensure Windows notifications are enabled for the app
 - Check if notification settings in the app are enabled
+
+### `browser.proxy` reports no browser-control host
+- Confirm the Browser proxy bridge toggle is enabled in Settings, then save and reconnect or re-pair if the gateway keeps an older command snapshot.
+- The bridge is local-only: it calls `http://127.0.0.1:<gateway-port+2>` from Windows. For a gateway on `ws://127.0.0.1:18789`, the browser-control host must listen on `127.0.0.1:18791`.
+- In managed SSH tunnel mode, keep Browser proxy bridge enabled so the tray forwards local gateway port + 2 to remote gateway port + 2. Settings shows a selectable preview of the exact `ssh -N -L ...` command.
+- If using a manual SSH tunnel, add both forwards, for example: `ssh -N -L 18789:127.0.0.1:18789 -L 18791:127.0.0.1:18791 <user>@<host>`. If local and remote gateway ports differ, forward `<local-gateway-port+2>` to `127.0.0.1:<remote-gateway-port+2>`.
+- A local SSH forward is not enough if the remote browser-control host is not running. Command Center port diagnostics should show whether the local gateway and browser-control ports are listening and which process owns them.
 
 ### Canvas window doesn't appear
 - Check logs for `canvas.present` command received

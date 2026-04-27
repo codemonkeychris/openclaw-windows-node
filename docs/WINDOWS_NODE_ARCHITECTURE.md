@@ -611,7 +611,8 @@ The node protocol requires a stable device identity (`device.id`) derived from a
 - [ ] TTS / Speech Synthesis
 - [ ] Microphone / voice input
 - [x] `browser.proxy` — local browser-control bridge on gateway port + 2, including SSH companion-forward diagnostics
-- [ ] Bundled/browser-control host setup guidance for end-to-end browser smoke tests
+- [x] Browser-control host setup guidance for end-to-end browser smoke tests
+- [ ] Bundled/browser-control host installer/launcher
 - [ ] UI Automation (Windows equivalent of macOS Accessibility API)
 - [ ] Auto-update improvements (current auto-update from GitHub Releases → MSI/MSIX?)
 - [ ] PowerToys Command Palette integration for node commands

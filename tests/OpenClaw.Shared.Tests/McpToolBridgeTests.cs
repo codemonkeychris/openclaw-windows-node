@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using OpenClaw.Shared;
 using OpenClaw.Shared.Mcp;
@@ -269,6 +271,34 @@ public class McpToolBridgeTests
         using var doc = JsonDocument.Parse(resp!);
         var prompts = doc.RootElement.GetProperty("result").GetProperty("prompts");
         Assert.Equal(0, prompts.GetArrayLength());
+    }
+
+    [Fact]
+    public async Task ToolsCall_LongRunning_CancellationReturnsTimeoutToolError()
+    {
+        // CR-003: a tool that wedges past the request deadline must surface as
+        // a tool error instead of pinning the handler. The bridge gives up
+        // waiting once the CT fires; the underlying Task continues but is no
+        // longer the caller's problem.
+        var tcs = new TaskCompletionSource<NodeInvokeResponse>();
+        var fake = new FakeCapability("alpha", "alpha.slow")
+        {
+            OnExecute = _ => tcs.Task,
+        };
+        var bridge = CreateBridge(new List<INodeCapability> { fake });
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+        var resp = await bridge.HandleRequestAsync(
+            @"{""jsonrpc"":""2.0"",""id"":1,""method"":""tools/call"",""params"":{""name"":""alpha.slow""}}",
+            cts.Token);
+
+        // Unblock the dangling task so xunit doesn't complain about leaked work.
+        tcs.TrySetResult(new NodeInvokeResponse { Ok = true });
+
+        using var doc = JsonDocument.Parse(resp!);
+        var result = doc.RootElement.GetProperty("result");
+        Assert.True(result.GetProperty("isError").GetBoolean());
+        Assert.Contains("timed out", result.GetProperty("content")[0].GetProperty("text").GetString());
     }
 
     [Fact]

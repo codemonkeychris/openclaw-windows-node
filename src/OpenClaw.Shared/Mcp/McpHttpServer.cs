@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
@@ -27,11 +28,24 @@ namespace OpenClaw.Shared.Mcp;
 /// No bearer-token auth yet — local user-context processes are intentionally
 /// in-scope of trust (they can already call Win32 directly). Browser pages and
 /// other-machine attackers are not.
+///
+/// Stability defenses (CR-003/CR-005):
+///   - Per-request hard deadline (RequestTimeoutMs) bounds body-read and
+///     bridge dispatch so a slow or hung client cannot pin a handler slot
+///     forever.
+///   - Active handler tasks are tracked so Stop/Dispose can drain in-flight
+///     work before tearing down the semaphore and capability services.
 /// </summary>
 public sealed class McpHttpServer : IDisposable
 {
     private const long MaxRequestBodyBytes = 4L * 1024 * 1024; // 4 MiB
     private const int MaxConcurrentHandlers = 8;
+    // Generous enough to cover 60s camera.clip plus encoding/serialization
+    // overhead; tight enough to free handler slots if a tool wedges.
+    private const int RequestTimeoutMs = 90_000;
+    // How long Dispose waits for in-flight handlers to drain before forcing
+    // tear-down. Past this point handlers may observe disposed services.
+    private static readonly TimeSpan DrainTimeout = TimeSpan.FromSeconds(5);
 
     private readonly McpToolBridge _bridge;
     private readonly int _port;
@@ -39,6 +53,8 @@ public sealed class McpHttpServer : IDisposable
     private readonly HttpListener _listener;
     private readonly CancellationTokenSource _cts = new();
     private readonly SemaphoreSlim _handlerLimiter = new(MaxConcurrentHandlers, MaxConcurrentHandlers);
+    private readonly object _activeLock = new();
+    private readonly HashSet<Task> _activeHandlers = new();
     private Task? _acceptLoop;
     private int _disposed;
 
@@ -102,15 +118,47 @@ public sealed class McpHttpServer : IDisposable
                 continue;
             }
 
-            _ = Task.Run(async () =>
-            {
-                try { await HandleAsync(ctx).ConfigureAwait(false); }
-                finally { _handlerLimiter.Release(); }
-            }, ct);
+            // NOTE: do not pass `ct` to Task.Run. If the token is cancelled
+            // between WaitAsync returning and the delegate starting, Task.Run
+            // skips the delegate and the finally never runs — leaking a
+            // semaphore slot. Let the delegate observe cancellation itself.
+            var handlerTask = Task.Run(() => RunHandlerAsync(ctx));
+            TrackHandler(handlerTask);
         }
     }
 
-    private async Task HandleAsync(HttpListenerContext ctx)
+    private async Task RunHandlerAsync(HttpListenerContext ctx)
+    {
+        // Per-request linked CTS: server shutdown OR per-request deadline.
+        // The bridge call observes this so a wedged tool cannot pin the slot.
+        using var requestCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+        requestCts.CancelAfter(RequestTimeoutMs);
+        try
+        {
+            await HandleAsync(ctx, requestCts.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            // Defensive: if Dispose has already disposed the limiter, swallow.
+            // Without this guard, a handler racing with shutdown can throw
+            // ObjectDisposedException into an unobserved task, which surfaces
+            // through global unhandled-exception handlers.
+            try { _handlerLimiter.Release(); }
+            catch (ObjectDisposedException) { /* server torn down */ }
+            catch (SemaphoreFullException) { /* defensive */ }
+        }
+    }
+
+    private void TrackHandler(Task task)
+    {
+        lock (_activeLock) { _activeHandlers.Add(task); }
+        _ = task.ContinueWith(t =>
+        {
+            lock (_activeLock) { _activeHandlers.Remove(t); }
+        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    }
+
+    private async Task HandleAsync(HttpListenerContext ctx, CancellationToken ct)
     {
         try
         {
@@ -170,15 +218,30 @@ public sealed class McpHttpServer : IDisposable
             string body;
             try
             {
-                body = await ReadBodyAsync(ctx.Request, MaxRequestBodyBytes).ConfigureAwait(false);
+                body = await ReadBodyAsync(ctx.Request, MaxRequestBodyBytes, ct).ConfigureAwait(false);
             }
             catch (InvalidDataException)
             {
                 Reject(ctx, HttpStatusCode.RequestEntityTooLarge, "request body too large");
                 return;
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // Slow-body or stuck client — free the slot rather than blocking forever.
+                Reject(ctx, HttpStatusCode.RequestTimeout, "request timed out");
+                return;
+            }
 
-            var responseBody = await _bridge.HandleRequestAsync(body).ConfigureAwait(false);
+            string? responseBody;
+            try
+            {
+                responseBody = await _bridge.HandleRequestAsync(body, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                Reject(ctx, HttpStatusCode.RequestTimeout, "request timed out");
+                return;
+            }
 
             if (responseBody == null)
             {
@@ -209,18 +272,19 @@ public sealed class McpHttpServer : IDisposable
             || string.Equals(hostname, "localhost", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static async Task<string> ReadBodyAsync(HttpListenerRequest request, long maxBytes)
+    private static async Task<string> ReadBodyAsync(HttpListenerRequest request, long maxBytes, CancellationToken ct)
     {
         // Bounded read — never trust ContentLength as a sole limit; the client
         // can send chunked encoding or just lie. Read up to maxBytes+1 and
-        // throw if we crossed the cap.
+        // throw if we crossed the cap. The cancellation token enforces the
+        // per-request deadline so a slow-body client can't hold a handler slot.
         var encoding = request.ContentEncoding ?? Encoding.UTF8;
         var buffer = new byte[8192];
         using var ms = new MemoryStream();
         long total = 0;
         while (true)
         {
-            var n = await request.InputStream.ReadAsync(buffer.AsMemory(0, buffer.Length)).ConfigureAwait(false);
+            var n = await request.InputStream.ReadAsync(buffer.AsMemory(0, buffer.Length), ct).ConfigureAwait(false);
             if (n <= 0) break;
             total += n;
             if (total > maxBytes) throw new InvalidDataException("request body exceeds cap");
@@ -245,13 +309,49 @@ public sealed class McpHttpServer : IDisposable
         output.Write(bytes, 0, bytes.Length);
     }
 
+    /// <summary>
+    /// Stop accepting new requests, cancel in-flight ones, and wait for
+    /// active handlers to drain (or the timeout to elapse) before returning.
+    /// Idempotent. Returns when it is safe to dispose downstream services
+    /// (capabilities, capture services) without racing live handlers.
+    /// </summary>
+    public async Task StopAsync(TimeSpan drainTimeout)
+    {
+        if (Volatile.Read(ref _disposed) != 0) return;
+
+        try { _cts.Cancel(); } catch { /* already cancelled or disposed */ }
+        try { if (_listener.IsListening) _listener.Stop(); } catch { /* already stopped */ }
+
+        // Snapshot before awaiting — handlers remove themselves on completion,
+        // and we don't want enumeration to race the continuation.
+        Task[] toAwait;
+        lock (_activeLock) { toAwait = new Task[_activeHandlers.Count]; _activeHandlers.CopyTo(toAwait); }
+
+        var allHandlers = Task.WhenAll(toAwait);
+        var deadline = Task.Delay(drainTimeout);
+        var winner = await Task.WhenAny(allHandlers, deadline).ConfigureAwait(false);
+        if (winner == deadline && toAwait.Length > 0)
+        {
+            int still;
+            lock (_activeLock) { still = _activeHandlers.Count; }
+            _logger.Warn($"[MCP] Drain timeout ({drainTimeout.TotalSeconds:F1}s); {still} handler(s) still running");
+        }
+
+        if (_acceptLoop != null)
+        {
+            try { await Task.WhenAny(_acceptLoop, Task.Delay(TimeSpan.FromSeconds(1))).ConfigureAwait(false); }
+            catch { /* loop may have errored */ }
+        }
+    }
+
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        try { _cts.Cancel(); } catch { /* already cancelled or disposed */ }
-        try { if (_listener.IsListening) _listener.Stop(); } catch { /* already stopped */ }
+        // Drain in-flight handlers first so we don't pull the limiter out from
+        // under them. Block here — Dispose is the sync seam.
+        try { StopAsync(DrainTimeout).GetAwaiter().GetResult(); }
+        catch (Exception ex) { _logger.Warn($"[MCP] Drain error: {ex.Message}"); }
         try { _listener.Close(); } catch { /* already closed */ }
-        try { _acceptLoop?.Wait(TimeSpan.FromSeconds(2)); } catch { /* loop may have errored */ }
         _cts.Dispose();
         _handlerLimiter.Dispose();
     }

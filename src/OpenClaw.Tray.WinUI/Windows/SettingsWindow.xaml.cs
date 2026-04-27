@@ -94,20 +94,43 @@ public sealed partial class SettingsWindow : WindowEx
 
     private void UpdateMcpStatus()
     {
-        var enabled = McpServerToggle.IsOn;
+        var toggleOn = McpServerToggle.IsOn;
+        var savedOn = _settings.EnableMcpServer;
         var running = _nodeService?.IsMcpRunning == true;
         var startupError = _nodeService?.McpStartupError;
 
-        if (enabled && running)
-            McpStatusText.Text = "Listening";
-        else if (enabled && !string.IsNullOrEmpty(startupError))
-            McpStatusText.Text = $"Failed to start: {startupError}";
-        else if (enabled && _nodeService != null && _nodeService.IsMcpRunning == false && _settings.EnableMcpServer)
-            McpStatusText.Text = "Failed to start (port may be in use)";
-        else if (enabled)
-            McpStatusText.Text = "Stopped — save and restart to start";
-        else
+        if (!toggleOn)
+        {
             McpStatusText.Text = "Disabled";
+            return;
+        }
+
+        // Toggle changed but not saved yet — Save applies immediately, so be
+        // explicit instead of the old "save and restart" wording (the tray
+        // reinitializes services in OnSettingsSaved without an app restart).
+        if (toggleOn != savedOn)
+        {
+            McpStatusText.Text = savedOn
+                ? "Will stop on Save"
+                : "Will start on Save";
+            return;
+        }
+
+        if (running)
+        {
+            McpStatusText.Text = "Listening";
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(startupError))
+        {
+            McpStatusText.Text = $"Failed to start: {startupError}";
+            return;
+        }
+
+        // Toggle on, saved on, but no service yet — node service is still
+        // initializing or hasn't been created (gateway-only setup path).
+        McpStatusText.Text = "Stopped";
     }
 
     private void SaveSettings()

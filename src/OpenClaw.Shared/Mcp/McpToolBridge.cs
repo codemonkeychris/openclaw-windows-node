@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace OpenClaw.Shared.Mcp;
@@ -42,7 +43,17 @@ public class McpToolBridge
     /// Dispatch a JSON-RPC request body and return the response body (or null
     /// for a JSON-RPC notification, which receives no response).
     /// </summary>
-    public async Task<string?> HandleRequestAsync(string requestBody)
+    public Task<string?> HandleRequestAsync(string requestBody)
+        => HandleRequestAsync(requestBody, CancellationToken.None);
+
+    /// <summary>
+    /// Dispatch a JSON-RPC request body, observing a cancellation token (used
+    /// by the HTTP transport to enforce a per-request deadline). When the
+    /// token fires during a tool dispatch, the call surfaces as a tool error
+    /// ("request timed out") so the slot is freed even if the underlying
+    /// capability work continues to run.
+    /// </summary>
+    public async Task<string?> HandleRequestAsync(string requestBody, CancellationToken cancellationToken)
     {
         JsonDocument doc;
         try
@@ -81,7 +92,7 @@ public class McpToolBridge
                     "ping" => new { },
                     "notifications/initialized" => null,
                     "tools/list" => HandleToolsList(),
-                    "tools/call" => await HandleToolsCallAsync(paramsElement),
+                    "tools/call" => await HandleToolsCallAsync(paramsElement, cancellationToken),
                     // Some clients (notably Cursor) probe these on startup. Returning
                     // empty lists is friendlier than MethodNotFound — both feature sets
                     // are deferred but compatible by being absent rather than failing.
@@ -155,7 +166,7 @@ public class McpToolBridge
         return new { tools };
     }
 
-    private async Task<object> HandleToolsCallAsync(JsonElement parameters)
+    private async Task<object> HandleToolsCallAsync(JsonElement parameters, CancellationToken cancellationToken)
     {
         if (parameters.ValueKind != JsonValueKind.Object)
             throw new McpToolException("Invalid params: expected object");
@@ -188,7 +199,21 @@ public class McpToolBridge
         };
 
         _logger.Debug($"[MCP] tools/call {name}");
-        var response = await capability.ExecuteAsync(request);
+        // INodeCapability does not yet take a CancellationToken (changing it
+        // would touch every gateway capability). WaitAsync gives the bridge a
+        // hard deadline: when the request CT fires we abandon waiting and
+        // return a tool error to free the handler slot. The capability's
+        // underlying work may continue but cannot pin the MCP server.
+        NodeInvokeResponse response;
+        try
+        {
+            response = await capability.ExecuteAsync(request).WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.Warn($"[MCP] tools/call {name} timed out");
+            throw new McpToolException("request timed out");
+        }
 
         if (!response.Ok)
             throw new McpToolException(response.Error ?? "tool execution failed");

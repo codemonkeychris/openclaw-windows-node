@@ -275,19 +275,43 @@ public class NodeService : IDisposable
             attempt = new McpHttpServer(bridge, McpDefaultPort, _logger);
             attempt.Start();
             _mcpServer = attempt;
+            _mcpStartupError = null;
         }
         catch (Exception ex)
         {
-            _logger.Error($"[MCP] Failed to start HTTP server on port {McpDefaultPort}", ex);
-            _mcpStartupError = ex.Message;
+            // Categorize so Settings can show something actionable instead of
+            // raw HRESULT text. HttpListener errors on Windows fall into a
+            // small set of recurring causes on developer machines.
+            _mcpStartupError = DescribeMcpStartupFailure(ex, McpDefaultPort);
+            _logger.Error($"[MCP] Failed to start HTTP server on port {McpDefaultPort}: {_mcpStartupError}", ex);
             // Avoid leaking the half-constructed listener / CTS.
             try { attempt?.Dispose(); } catch { /* ignore */ }
             _mcpServer = null;
         }
     }
 
+    /// <summary>
+    /// Translate a startup exception into a short, actionable message for the
+    /// Settings UI. HttpListener wraps Win32 errors; a couple of NativeErrorCodes
+    /// dominate and are worth calling out by name.
+    /// </summary>
+    internal static string DescribeMcpStartupFailure(Exception ex, int port) => ex switch
+    {
+        System.Net.HttpListenerException hle => hle.ErrorCode switch
+        {
+            5 => $"Access denied registering URL ACL on port {port}. Run `netsh http add urlacl url=http://127.0.0.1:{port}/ user={Environment.UserName}` from an elevated prompt.",
+            32 or 183 => $"Port {port} is already in use. Stop the other process or change the MCP port.",
+            _ => $"HTTP listener error {hle.ErrorCode}: {hle.Message}",
+        },
+        _ => ex.Message,
+    };
+
     private void StopMcpServer()
     {
+        // McpHttpServer.Dispose drains in-flight handler tasks (CR-005) before
+        // returning, so by the time we tear down capability-backing services
+        // (camera/screen/canvas) on the next lines of Dispose/Disconnect there
+        // is no live handler still using them.
         try { _mcpServer?.Dispose(); } catch (Exception ex) { _logger.Warn($"[MCP] Dispose error: {ex.Message}"); }
         _mcpServer = null;
         _mcpStartupError = null;

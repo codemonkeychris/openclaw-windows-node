@@ -284,7 +284,7 @@ Keep StatusDetailWindow as the first Command Center, but plan for tabs/sections:
 | Nodes submenu copy actions | Implemented | Per-node copy and full node inventory copy include command groups, filtered commands, disabled settings, and parity gaps |
 | Session previews/settings | Partial | Add thinking/verbose submenus and richer previews |
 | Cost 30-day chart | Partial usage display | Add usage/cost section and daily bars |
-| Agent events ring | Partial Activity Stream | Expand to 400-event rich ring |
+| Agent events ring | Implemented | Activity Stream keeps a 400-event rich ring and support bundle window |
 | Permissions matrix | Implemented first slice | Command Center shows safe Windows privacy settings deep links without probing devices |
 | Onboarding security banner | Partial setup wizard | Add Mac-style warning and topology choice |
 | Debug actions | Implemented first wave | Open logs/config/diagnostics, refresh health, restart managed SSH tunnel, copy support context, copy port diagnostics, and copy capability diagnostics |

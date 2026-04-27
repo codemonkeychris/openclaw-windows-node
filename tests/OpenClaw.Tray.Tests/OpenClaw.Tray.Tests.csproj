@@ -11,6 +11,7 @@
   <ItemGroup>
     <Compile Include="..\..\src\OpenClaw.Tray.WinUI\Services\DeepLinkHandler.cs" Link="Services\DeepLinkHandler.cs" />
     <Compile Include="..\..\src\OpenClaw.Tray.WinUI\Services\Logger.cs" Link="Services\Logger.cs" />
+    <Compile Include="..\..\src\OpenClaw.Tray.WinUI\Services\ActivityStreamService.cs" Link="Services\ActivityStreamService.cs" />
   </ItemGroup>
 
 </Project>

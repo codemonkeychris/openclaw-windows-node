@@ -37,6 +37,8 @@ Open Command Palette (`Win+Alt+Space`), type **"OpenClaw"** — you should see t
 | **🦞 Open Dashboard** | Opens the OpenClaw web dashboard in your default browser |
 | **💬 Web Chat** | Opens the embedded Web Chat window in OpenClaw Tray |
 | **📝 Quick Send** | Opens the Quick Send dialog to compose a message |
+| **🧭 Command Center** | Opens gateway, tunnel, node, browser, and support diagnostics |
+| **⚡ Activity Stream** | Opens recent tray activity and support bundle actions |
 | **⚙️ Settings** | Opens the OpenClaw Tray Settings dialog |
 
 ## Usage
@@ -89,4 +91,6 @@ Get-AppxPackage -Name '*OpenClaw*' | Remove-AppxPackage
   | Open Dashboard | `openclaw://dashboard` |
   | Web Chat | `openclaw://chat` |
   | Quick Send | `openclaw://send` |
+  | Command Center | `openclaw://commandcenter` |
+  | Activity Stream | `openclaw://activity` |
   | Settings | `openclaw://settings` |

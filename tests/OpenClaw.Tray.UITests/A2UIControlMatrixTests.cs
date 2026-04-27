@@ -43,8 +43,8 @@ public sealed class A2UIControlMatrixTests
         });
 
     [Fact]
-    public Task ListVertical_RendersScrollViewer_WrappingVerticalStackPanel() => RunAsync(
-        "List vertical → ScrollViewer(StackPanel(Vertical))",
+    public Task ListVertical_RendersScrollViewer_WrappingItemsRepeater() => RunAsync(
+        "List vertical → ScrollViewer(ItemsRepeater + vertical StackLayout)",
         Surface("s", "lst", new[]
         {
             Component("lst", "List", new()
@@ -58,18 +58,25 @@ public sealed class A2UIControlMatrixTests
         }),
         root =>
         {
+            // List virtualizes via ItemsRepeater. Assert the wrapper shape and
+            // layout orientation; children realize on layout pass and aren't
+            // present in the unmounted visual tree.
             var sv = FindLogical<ScrollViewer>(root).Single();
             Assert.Equal(ScrollMode.Auto, sv.VerticalScrollMode);
             Assert.Equal(ScrollMode.Disabled, sv.HorizontalScrollMode);
 
-            var sp = FindLogical<StackPanel>(sv).First();
-            Assert.Equal(Orientation.Vertical, sp.Orientation);
-            Assert.Equal(3, FindLogical<TextBlock>(sp).Count());
+            var repeater = (ItemsRepeater)sv.Content;
+            var layout = (StackLayout)repeater.Layout;
+            Assert.Equal(Orientation.Vertical, layout.Orientation);
+            // ItemsSource carries the explicit children list — same source the
+            // template realizes from.
+            var ids = ((IEnumerable<string>)repeater.ItemsSource!).ToArray();
+            Assert.Equal(new[] { "i1", "i2", "i3" }, ids);
         });
 
     [Fact]
-    public Task ListHorizontal_RendersScrollViewer_WrappingHorizontalStackPanel() => RunAsync(
-        "List horizontal → ScrollViewer(StackPanel(Horizontal))",
+    public Task ListHorizontal_RendersScrollViewer_WrappingItemsRepeater() => RunAsync(
+        "List horizontal → ScrollViewer(ItemsRepeater + horizontal StackLayout)",
         Surface("s", "lst", new[]
         {
             Component("lst", "List", new()
@@ -86,8 +93,11 @@ public sealed class A2UIControlMatrixTests
             Assert.Equal(ScrollMode.Auto, sv.HorizontalScrollMode);
             Assert.Equal(ScrollMode.Disabled, sv.VerticalScrollMode);
 
-            var sp = FindLogical<StackPanel>(sv).First();
-            Assert.Equal(Orientation.Horizontal, sp.Orientation);
+            var repeater = (ItemsRepeater)sv.Content;
+            var layout = (StackLayout)repeater.Layout;
+            Assert.Equal(Orientation.Horizontal, layout.Orientation);
+            var ids = ((IEnumerable<string>)repeater.ItemsSource!).ToArray();
+            Assert.Equal(new[] { "a", "b" }, ids);
         });
 
     [Fact]

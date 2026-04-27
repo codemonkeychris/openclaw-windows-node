@@ -56,7 +56,8 @@ public class McpHttpServerIntegrationTests : IClassFixture<TrayAppFixture>
         };
         foreach (var cmd in expected)
         {
-            Assert.True(names.Contains(cmd), $"tools/list missing command: {cmd}");
+            Assert.True(names.Contains(cmd),
+                $"tools/list missing command: {cmd}. Got: {string.Join(", ", names)}");
         }
 
         // Curated descriptions kicked in (not the generic stub).

@@ -152,7 +152,7 @@ This operator-only mode provides Quick Send, embedded WebChat, Command Center di
 |--------|---------|
 | **Gateway** | WSL2 (Ubuntu) |
 | **Nodes** | OpenClaw.Tray registers as `role: "node"` from Windows |
-| **Capabilities** | Camera ✅ (MediaCapture API) Canvas ✅ (WebView2) Screen ✅ (Graphics Capture) Notifications ✅ (Toast + agent-driven) Browser ❌ (WSL2 browser proxy) Exec ✅ (WSL2 + optionally Windows `cmd`/`powershell`) Location ⚠️ (Windows Location API — desktop, less useful) Audio/TTS ✅ (Windows Speech) |
+| **Capabilities** | Camera ✅ (MediaCapture API) Canvas ✅ (WebView2) Screen ✅ (Graphics Capture) Notifications ✅ (Toast + agent-driven) Browser ✅/⚠️ (local `browser.proxy` bridge; requires browser-control host on gateway port + 2) Exec ✅ (WSL2 + optionally Windows `cmd`/`powershell`) Location ⚠️ (Windows Location API — desktop, less useful) Audio/TTS ✅ (Windows Speech) |
 | **Networking** | WSL2 NAT still involved for gateway, but tray app connects outward to WSL2's WS — simpler direction. |
 | **Setup complexity** | Medium — WSL2 gateway + tray app auto-discovers and pairs |
 | **UX Rating** | ⭐⭐⭐⭐ Agent can now see and interact with Windows! |

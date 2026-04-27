@@ -78,6 +78,33 @@ public static class DeepLinkHandler
                 actions.OpenLogFile?.Invoke();
                 break;
 
+            case "log-folder":
+            case "logs-folder":
+                actions.OpenLogFolder?.Invoke();
+                break;
+
+            case "config":
+            case "config-folder":
+            case "settings-folder":
+                actions.OpenConfigFolder?.Invoke();
+                break;
+
+            case "diagnostics":
+            case "diagnostics-folder":
+                actions.OpenDiagnosticsFolder?.Invoke();
+                break;
+
+            case "support":
+            case "support-context":
+                actions.CopySupportContext?.Invoke();
+                break;
+
+            case "ssh-restart":
+            case "restart-ssh":
+            case "restart-ssh-tunnel":
+                actions.RestartSshTunnel?.Invoke();
+                break;
+
             case "chat":
                 actions.OpenChat?.Invoke();
                 break;
@@ -149,6 +176,11 @@ public class DeepLinkActions
     public Action? OpenSetup { get; set; }
     public Func<Task>? RunHealthCheck { get; set; }
     public Action? OpenLogFile { get; set; }
+    public Action? OpenLogFolder { get; set; }
+    public Action? OpenConfigFolder { get; set; }
+    public Action? OpenDiagnosticsFolder { get; set; }
+    public Action? CopySupportContext { get; set; }
+    public Action? RestartSshTunnel { get; set; }
     public Action? OpenChat { get; set; }
     public Action? OpenCommandCenter { get; set; }
     public Action<string?>? OpenActivityStream { get; set; }

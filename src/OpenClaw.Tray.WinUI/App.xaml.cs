@@ -18,6 +18,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Updatum;
+using Windows.ApplicationModel.DataTransfer;
 using WinUIEx;
 
 namespace OpenClawTray;
@@ -2614,6 +2615,56 @@ public partial class App : Application
         }
     }
 
+    private void OpenLogFolder()
+    {
+        OpenFolder(Path.GetDirectoryName(Logger.LogFilePath), "logs");
+    }
+
+    private void OpenConfigFolder()
+    {
+        OpenFolder(SettingsManager.SettingsDirectoryPath, "config");
+    }
+
+    private void OpenDiagnosticsFolder()
+    {
+        OpenFolder(Path.GetDirectoryName(DiagnosticsJsonlService.FilePath), "diagnostics");
+    }
+
+    private static void OpenFolder(string? folderPath, string label)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath))
+        {
+            Logger.Warn($"Failed to open {label} folder: path is not configured");
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(folderPath);
+            Process.Start(new ProcessStartInfo(folderPath) { UseShellExecute = true });
+            Logger.Info($"Opened {label} folder: {folderPath}");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            Logger.Warn($"Failed to open {label} folder {folderPath}: {ex.Message}");
+        }
+    }
+
+    private void CopySupportContext()
+    {
+        try
+        {
+            var package = new DataPackage();
+            package.SetText(StatusDetailWindow.BuildSupportContext(BuildCommandCenterState()));
+            Clipboard.SetContent(package);
+            Logger.Info("Copied support context from deep link");
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"Failed to copy support context from deep link: {ex.Message}");
+        }
+    }
+
     private void OnGlobalHotkeyPressed(object? sender, EventArgs e)
     {
         // Hotkey events are raised from a dedicated Win32 message-loop thread.
@@ -2817,6 +2868,11 @@ public partial class App : Application
             OpenSetup = () => _ = ShowSetupWizardAsync(),
             RunHealthCheck = () => RunHealthCheckAsync(userInitiated: true),
             OpenLogFile = OpenLogFile,
+            OpenLogFolder = OpenLogFolder,
+            OpenConfigFolder = OpenConfigFolder,
+            OpenDiagnosticsFolder = OpenDiagnosticsFolder,
+            CopySupportContext = CopySupportContext,
+            RestartSshTunnel = RestartSshTunnel,
             OpenChat = ShowWebChat,
             OpenCommandCenter = ShowStatusDetail,
             OpenActivityStream = ShowActivityStream,

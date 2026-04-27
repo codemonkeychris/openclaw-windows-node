@@ -32,6 +32,17 @@ public class DeepLinkParserTests
         Assert.Equal("dashboard/sessions", result.Path);
     }
 
+    [Theory]
+    [InlineData("openclaw://dashboard/channels", "dashboard/channels")]
+    [InlineData("openclaw://dashboard/skills", "dashboard/skills")]
+    [InlineData("openclaw://dashboard/cron", "dashboard/cron")]
+    public void ParseDeepLink_DashboardKnownSubpaths(string uri, string expectedPath)
+    {
+        var result = DeepLinkParser.ParseDeepLink(uri);
+        Assert.NotNull(result);
+        Assert.Equal(expectedPath, result.Path);
+    }
+
     [Fact]
     public void ParseDeepLink_SendWithMessage()
     {
@@ -80,6 +91,11 @@ public class DeepLinkParserTests
     [InlineData("openclaw://setup", "setup")]
     [InlineData("openclaw://healthcheck", "healthcheck")]
     [InlineData("openclaw://logs", "logs")]
+    [InlineData("openclaw://log-folder", "log-folder")]
+    [InlineData("openclaw://config", "config")]
+    [InlineData("openclaw://diagnostics", "diagnostics")]
+    [InlineData("openclaw://support-context", "support-context")]
+    [InlineData("openclaw://restart-ssh-tunnel", "restart-ssh-tunnel")]
     public void ParseDeepLink_TrayUtilityEntrypoints(string uri, string expectedPath)
     {
         var result = DeepLinkParser.ParseDeepLink(uri);

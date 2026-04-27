@@ -72,6 +72,10 @@ OpenClaw Tray responds to `openclaw://` deep links, which can be invoked from a 
 | Link | Action |
 |------|--------|
 | `openclaw://dashboard` | Open the OpenClaw web dashboard |
+| `openclaw://dashboard/sessions` | Open the sessions dashboard page |
+| `openclaw://dashboard/channels` | Open the channels dashboard page |
+| `openclaw://dashboard/skills` | Open the skills dashboard page |
+| `openclaw://dashboard/cron` | Open the cron dashboard page |
 | `openclaw://chat` | Open the embedded Web Chat window |
 | `openclaw://send` | Open the Quick Send dialog |
 | `openclaw://send?message=Hello` | Open Quick Send with pre-filled text |
@@ -82,7 +86,12 @@ OpenClaw Tray responds to `openclaw://` deep links, which can be invoked from a 
 | `openclaw://history` | Open Notification History |
 | `openclaw://healthcheck` | Run a manual health check |
 | `openclaw://logs` | Open the current tray log file |
-| `openclaw://agent?message=Hello` | Send a message directly (with confirmation) |
+| `openclaw://log-folder` | Open the logs folder |
+| `openclaw://config` | Open the config folder |
+| `openclaw://diagnostics` | Open the diagnostics JSONL folder |
+| `openclaw://support-context` | Copy privacy-safe support context |
+| `openclaw://restart-ssh-tunnel` | Restart the tray-managed SSH tunnel when enabled |
+| `openclaw://agent?message=Hello` | Send a message directly to the connected gateway |
 
 ## Troubleshooting
 

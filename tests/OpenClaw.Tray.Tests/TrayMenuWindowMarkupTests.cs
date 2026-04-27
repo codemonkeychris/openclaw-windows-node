@@ -110,6 +110,52 @@ public class TrayMenuWindowMarkupTests
     }
 
     [Fact]
+    public void CommandPalette_HasDashboardSubpathEntryPoints()
+    {
+        var sourcePath = Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.CommandPalette",
+            "Pages",
+            "OpenClawPage.cs");
+
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains(@"openclaw://dashboard/sessions", source);
+        Assert.Contains("Dashboard: Sessions", source);
+        Assert.Contains(@"openclaw://dashboard/channels", source);
+        Assert.Contains("Dashboard: Channels", source);
+        Assert.Contains(@"openclaw://dashboard/skills", source);
+        Assert.Contains("Dashboard: Skills", source);
+        Assert.Contains(@"openclaw://dashboard/cron", source);
+        Assert.Contains("Dashboard: Cron", source);
+    }
+
+    [Fact]
+    public void CommandPalette_HasSupportDebugEntryPoints()
+    {
+        var sourcePath = Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.CommandPalette",
+            "Pages",
+            "OpenClawPage.cs");
+
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains(@"openclaw://log-folder", source);
+        Assert.Contains("Open Logs Folder", source);
+        Assert.Contains(@"openclaw://config", source);
+        Assert.Contains("Open Config Folder", source);
+        Assert.Contains(@"openclaw://diagnostics", source);
+        Assert.Contains("Open Diagnostics Folder", source);
+        Assert.Contains(@"openclaw://support-context", source);
+        Assert.Contains("Copy Support Context", source);
+        Assert.Contains(@"openclaw://restart-ssh-tunnel", source);
+        Assert.Contains("Restart SSH Tunnel", source);
+    }
+
+    [Fact]
     public void DeepLinkHandler_HasActivityStreamEntryPoint()
     {
         var sourcePath = Path.Combine(
@@ -159,6 +205,30 @@ public class TrayMenuWindowMarkupTests
         Assert.Contains("RunHealthCheck", source);
         Assert.Contains(@"case ""logs"":", source);
         Assert.Contains("OpenLogFile?.Invoke", source);
+    }
+
+    [Fact]
+    public void DeepLinkHandler_HasSupportDebugEntryPoints()
+    {
+        var sourcePath = Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Services",
+            "DeepLinkHandler.cs");
+
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains(@"case ""log-folder"":", source);
+        Assert.Contains("OpenLogFolder?.Invoke", source);
+        Assert.Contains(@"case ""config"":", source);
+        Assert.Contains("OpenConfigFolder?.Invoke", source);
+        Assert.Contains(@"case ""diagnostics"":", source);
+        Assert.Contains("OpenDiagnosticsFolder?.Invoke", source);
+        Assert.Contains(@"case ""support-context"":", source);
+        Assert.Contains("CopySupportContext?.Invoke", source);
+        Assert.Contains(@"case ""restart-ssh-tunnel"":", source);
+        Assert.Contains("RestartSshTunnel?.Invoke", source);
     }
 
     [Fact]

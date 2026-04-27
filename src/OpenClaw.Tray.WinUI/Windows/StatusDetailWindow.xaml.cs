@@ -460,7 +460,7 @@ public sealed partial class StatusDetailWindow : WindowEx
         }
     }
 
-    private static string BuildSupportContext(GatewayCommandCenterState state)
+    internal static string BuildSupportContext(GatewayCommandCenterState state)
     {
         var builder = new StringBuilder();
         builder.AppendLine("OpenClaw Windows Tray Support Context");

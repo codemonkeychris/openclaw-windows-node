@@ -35,6 +35,10 @@ Open Command Palette (`Win+Alt+Space`), type **"OpenClaw"** — you should see t
 | Command | Action |
 |---------|--------|
 | **🦞 Open Dashboard** | Opens the OpenClaw web dashboard in your default browser |
+| **💬 Dashboard: Sessions** | Opens the sessions dashboard |
+| **📡 Dashboard: Channels** | Opens the channel configuration dashboard |
+| **🧩 Dashboard: Skills** | Opens the skills dashboard |
+| **⏱️ Dashboard: Cron** | Opens the scheduled jobs dashboard |
 | **💬 Web Chat** | Opens the embedded Web Chat window in OpenClaw Tray |
 | **📝 Quick Send** | Opens the Quick Send dialog to compose a message |
 | **🧭 Setup Wizard** | Opens QR, setup code, and manual gateway pairing |
@@ -44,6 +48,11 @@ Open Command Palette (`Win+Alt+Space`), type **"OpenClaw"** — you should see t
 | **📋 Notification History** | Opens recent OpenClaw tray notifications |
 | **⚙️ Settings** | Opens the OpenClaw Tray Settings dialog |
 | **📄 Open Log File** | Opens the current OpenClaw Tray log |
+| **📁 Open Logs Folder** | Opens the OpenClaw Tray logs folder |
+| **🗂️ Open Config Folder** | Opens the OpenClaw Tray configuration folder |
+| **🧪 Open Diagnostics Folder** | Opens the diagnostics JSONL folder |
+| **📋 Copy Support Context** | Copies privacy-safe Command Center support metadata |
+| **🔁 Restart SSH Tunnel** | Restarts the tray-managed SSH tunnel when enabled |
 
 ## Usage
 
@@ -93,6 +102,10 @@ Get-AppxPackage -Name '*OpenClaw*' | Remove-AppxPackage
   | Command | Deep link |
   |---------|-----------|
   | Open Dashboard | `openclaw://dashboard` |
+  | Dashboard: Sessions | `openclaw://dashboard/sessions` |
+  | Dashboard: Channels | `openclaw://dashboard/channels` |
+  | Dashboard: Skills | `openclaw://dashboard/skills` |
+  | Dashboard: Cron | `openclaw://dashboard/cron` |
   | Web Chat | `openclaw://chat` |
   | Quick Send | `openclaw://send` |
   | Setup Wizard | `openclaw://setup` |
@@ -102,3 +115,8 @@ Get-AppxPackage -Name '*OpenClaw*' | Remove-AppxPackage
   | Notification History | `openclaw://history` |
   | Settings | `openclaw://settings` |
   | Open Log File | `openclaw://logs` |
+  | Open Logs Folder | `openclaw://log-folder` |
+  | Open Config Folder | `openclaw://config` |
+  | Open Diagnostics Folder | `openclaw://diagnostics` |
+  | Copy Support Context | `openclaw://support-context` |
+  | Restart SSH Tunnel | `openclaw://restart-ssh-tunnel` |

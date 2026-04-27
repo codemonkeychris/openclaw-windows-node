@@ -301,10 +301,18 @@ OpenClaw registers the `openclaw://` URL scheme for automation and integration:
 | `openclaw://history` | Open Notification History |
 | `openclaw://dashboard` | Open Dashboard in browser |
 | `openclaw://dashboard/sessions` | Open specific dashboard page |
+| `openclaw://dashboard/channels` | Open Channels dashboard page |
+| `openclaw://dashboard/skills` | Open Skills dashboard page |
+| `openclaw://dashboard/cron` | Open Cron dashboard page |
 | `openclaw://healthcheck` | Run a manual health check |
 | `openclaw://logs` | Open the current tray log file |
+| `openclaw://log-folder` | Open the logs folder |
+| `openclaw://config` | Open the config folder |
+| `openclaw://diagnostics` | Open the diagnostics JSONL folder |
+| `openclaw://support-context` | Copy privacy-safe support context |
+| `openclaw://restart-ssh-tunnel` | Restart the tray-managed SSH tunnel when enabled |
 | `openclaw://send?message=Hello` | Open Quick Send with pre-filled text |
-| `openclaw://agent?message=Hello` | Send message directly (with confirmation) |
+| `openclaw://agent?message=Hello` | Send message directly to the connected gateway |
 
 Deep links work even when Molty is already running - they're forwarded via IPC.
 
@@ -314,9 +322,21 @@ PowerToys Command Palette extension for quick OpenClaw access.
 
 ### Commands
 - **🦞 Open Dashboard** - Launch the OpenClaw web dashboard
+- **💬 Dashboard: Sessions** - Open the sessions dashboard
+- **📡 Dashboard: Channels** - Open the channel configuration dashboard
+- **🧩 Dashboard: Skills** - Open the skills dashboard
+- **⏱️ Dashboard: Cron** - Open the scheduled jobs dashboard
 - **💬 Web Chat** - Open the embedded Web Chat window
 - **📝 Quick Send** - Open the Quick Send dialog to compose a message
+- **🧭 Setup Wizard** - Open pairing/setup
+- **🧭 Command Center** - Open diagnostics and support actions
+- **🔄 Run Health Check** - Refresh connection health
+- **⚡ Activity Stream** - Open recent activity
+- **📋 Notification History** - Open notification history
 - **⚙️ Settings** - Open the OpenClaw Tray Settings dialog
+- **📄 Open Log File / 📁 Logs / 🗂️ Config / 🧪 Diagnostics** - Open support files and folders
+- **📋 Copy Support Context** - Copy privacy-safe Command Center metadata
+- **🔁 Restart SSH Tunnel** - Restart the tray-managed SSH tunnel when enabled
 
 ### Installation
 1. Run the OpenClaw Tray installer and tick **"Install PowerToys Command Palette extension"**, or

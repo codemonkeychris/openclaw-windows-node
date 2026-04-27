@@ -24,6 +24,26 @@ internal sealed partial class OpenClawPage : ListPage
                 Title = "🦞 Open Dashboard",
                 Subtitle = "Open OpenClaw web dashboard"
             },
+            new ListItem(new OpenUrlCommand("openclaw://dashboard/sessions"))
+            {
+                Title = "💬 Dashboard: Sessions",
+                Subtitle = "Open the sessions dashboard"
+            },
+            new ListItem(new OpenUrlCommand("openclaw://dashboard/channels"))
+            {
+                Title = "📡 Dashboard: Channels",
+                Subtitle = "Open the channel configuration dashboard"
+            },
+            new ListItem(new OpenUrlCommand("openclaw://dashboard/skills"))
+            {
+                Title = "🧩 Dashboard: Skills",
+                Subtitle = "Open the skills dashboard"
+            },
+            new ListItem(new OpenUrlCommand("openclaw://dashboard/cron"))
+            {
+                Title = "⏱️ Dashboard: Cron",
+                Subtitle = "Open the scheduled jobs dashboard"
+            },
             new ListItem(new OpenUrlCommand("openclaw://chat"))
             {
                 Title = "💬 Web Chat",
@@ -68,6 +88,31 @@ internal sealed partial class OpenClawPage : ListPage
             {
                 Title = "📄 Open Log File",
                 Subtitle = "Open the current OpenClaw Tray log"
+            },
+            new ListItem(new OpenUrlCommand("openclaw://log-folder"))
+            {
+                Title = "📁 Open Logs Folder",
+                Subtitle = "Open the OpenClaw Tray logs folder"
+            },
+            new ListItem(new OpenUrlCommand("openclaw://config"))
+            {
+                Title = "🗂️ Open Config Folder",
+                Subtitle = "Open the OpenClaw Tray configuration folder"
+            },
+            new ListItem(new OpenUrlCommand("openclaw://diagnostics"))
+            {
+                Title = "🧪 Open Diagnostics Folder",
+                Subtitle = "Open the OpenClaw Tray diagnostics JSONL folder"
+            },
+            new ListItem(new OpenUrlCommand("openclaw://support-context"))
+            {
+                Title = "📋 Copy Support Context",
+                Subtitle = "Copy privacy-safe Command Center support metadata"
+            },
+            new ListItem(new OpenUrlCommand("openclaw://restart-ssh-tunnel"))
+            {
+                Title = "🔁 Restart SSH Tunnel",
+                Subtitle = "Restart the tray-managed SSH tunnel when enabled"
             }
         ];
     }

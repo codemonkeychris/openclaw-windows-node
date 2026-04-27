@@ -384,16 +384,36 @@ public class TrayMenuWindowMarkupTests
         Assert.Contains(@"menu.AddMenuItem(""Open Logs Folder"", ""📁"", ""logfolder"", indent: true)", source);
         Assert.Contains(@"menu.AddMenuItem(""Open Config Folder"", ""🗂️"", ""configfolder"", indent: true)", source);
         Assert.Contains(@"menu.AddMenuItem(""Open Diagnostics Folder"", ""🧪"", ""diagnosticsfolder"", indent: true)", source);
-        Assert.Contains(@"menu.AddMenuItem(""Copy Support Context"", ""📋"", ""supportcontext"", indent: true)", source);
-        Assert.Contains(@"menu.AddMenuItem(""Copy Debug Bundle"", ""🧰"", ""debugbundle"", indent: true)", source);
-        Assert.Contains(@"menu.AddMenuItem(""Copy Browser Setup"", ""🌐"", ""browsersetup"", indent: true)", source);
-        Assert.Contains(@"menu.AddMenuItem(""Copy Port Diagnostics"", ""🔌"", ""portdiagnostics"", indent: true)", source);
-        Assert.Contains(@"menu.AddMenuItem(""Copy Capability Diagnostics"", ""🛡️"", ""capabilitydiagnostics"", indent: true)", source);
-        Assert.Contains(@"menu.AddMenuItem(""Copy Node Inventory"", ""🖥️"", ""nodeinventory"", indent: true)", source);
-        Assert.Contains(@"menu.AddMenuItem(""Copy Channel Summary"", ""📡"", ""channelsummary"", indent: true)", source);
-        Assert.Contains(@"menu.AddMenuItem(""Copy Activity Summary"", ""⚡"", ""activitysummary"", indent: true)", source);
-        Assert.Contains(@"menu.AddMenuItem(""Copy Extensibility Summary"", ""🧩"", ""extensibilitysummary"", indent: true)", source);
+        Assert.Contains(@"menu.AddFlyoutMenuItem(""Copy Diagnostics"", ""📋"", new[]", source);
+        Assert.Contains(@"new TrayMenuFlyoutItem(""Support Context"", ""📋"", ""supportcontext"")", source);
+        Assert.Contains(@"new TrayMenuFlyoutItem(""Debug Bundle"", ""🧰"", ""debugbundle"")", source);
+        Assert.Contains(@"new TrayMenuFlyoutItem(""Browser Setup"", ""🌐"", ""browsersetup"")", source);
+        Assert.Contains(@"new TrayMenuFlyoutItem(""Port Diagnostics"", ""🔌"", ""portdiagnostics"")", source);
+        Assert.Contains(@"new TrayMenuFlyoutItem(""Capability Diagnostics"", ""🛡️"", ""capabilitydiagnostics"")", source);
+        Assert.Contains(@"new TrayMenuFlyoutItem(""Node Inventory"", ""🖥️"", ""nodeinventory"")", source);
+        Assert.Contains(@"new TrayMenuFlyoutItem(""Channel Summary"", ""📡"", ""channelsummary"")", source);
+        Assert.Contains(@"new TrayMenuFlyoutItem(""Activity Summary"", ""⚡"", ""activitysummary"")", source);
+        Assert.Contains(@"new TrayMenuFlyoutItem(""Extensibility Summary"", ""🧩"", ""extensibilitysummary"")", source);
         Assert.Contains(@"menu.AddMenuItem(""Restart SSH Tunnel"", ""🔁"", ""restartsshtunnel"", indent: true)", source);
+    }
+
+    [Fact]
+    public void TrayMenuWindow_SupportsFlyoutMenuItems()
+    {
+        var sourcePath = Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Windows",
+            "TrayMenuWindow.xaml.cs");
+
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("AddFlyoutMenuItem", source);
+        Assert.Contains("Button", source);
+        Assert.Contains("Flyout = flyout", source);
+        Assert.Contains("MenuFlyoutItem", source);
+        Assert.Contains("TrayMenuFlyoutItem", source);
     }
 
     [Fact]

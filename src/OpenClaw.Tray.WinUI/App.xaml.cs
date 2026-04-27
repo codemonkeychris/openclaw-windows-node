@@ -990,15 +990,18 @@ public partial class App : Application
         menu.AddMenuItem("Open Logs Folder", "📁", "logfolder", indent: true);
         menu.AddMenuItem("Open Config Folder", "🗂️", "configfolder", indent: true);
         menu.AddMenuItem("Open Diagnostics Folder", "🧪", "diagnosticsfolder", indent: true);
-        menu.AddMenuItem("Copy Support Context", "📋", "supportcontext", indent: true);
-        menu.AddMenuItem("Copy Debug Bundle", "🧰", "debugbundle", indent: true);
-        menu.AddMenuItem("Copy Browser Setup", "🌐", "browsersetup", indent: true);
-        menu.AddMenuItem("Copy Port Diagnostics", "🔌", "portdiagnostics", indent: true);
-        menu.AddMenuItem("Copy Capability Diagnostics", "🛡️", "capabilitydiagnostics", indent: true);
-        menu.AddMenuItem("Copy Node Inventory", "🖥️", "nodeinventory", indent: true);
-        menu.AddMenuItem("Copy Channel Summary", "📡", "channelsummary", indent: true);
-        menu.AddMenuItem("Copy Activity Summary", "⚡", "activitysummary", indent: true);
-        menu.AddMenuItem("Copy Extensibility Summary", "🧩", "extensibilitysummary", indent: true);
+        menu.AddFlyoutMenuItem("Copy Diagnostics", "📋", new[]
+        {
+            new TrayMenuFlyoutItem("Support Context", "📋", "supportcontext"),
+            new TrayMenuFlyoutItem("Debug Bundle", "🧰", "debugbundle"),
+            new TrayMenuFlyoutItem("Browser Setup", "🌐", "browsersetup"),
+            new TrayMenuFlyoutItem("Port Diagnostics", "🔌", "portdiagnostics"),
+            new TrayMenuFlyoutItem("Capability Diagnostics", "🛡️", "capabilitydiagnostics"),
+            new TrayMenuFlyoutItem("Node Inventory", "🖥️", "nodeinventory"),
+            new TrayMenuFlyoutItem("Channel Summary", "📡", "channelsummary"),
+            new TrayMenuFlyoutItem("Activity Summary", "⚡", "activitysummary"),
+            new TrayMenuFlyoutItem("Extensibility Summary", "🧩", "extensibilitysummary")
+        }, indent: true);
         menu.AddMenuItem("Restart SSH Tunnel", "🔁", "restartsshtunnel", indent: true);
 
         menu.AddSeparator();

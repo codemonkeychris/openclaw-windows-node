@@ -99,6 +99,28 @@ public class TrayMenuWindowMarkupTests
     }
 
     [Fact]
+    public void StatusDetailWindow_SupportContextIncludesRedactedTopology()
+    {
+        var sourcePath = Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Windows",
+            "StatusDetailWindow.xaml.cs");
+
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("Gateway URL: {RedactSupportValue", source);
+        Assert.Contains("Topology detail: {RedactSupportValue", source);
+        Assert.Contains("Tunnel remote endpoint: {RedactSupportValue", source);
+        Assert.Contains("Tunnel last error: {RedactSupportValue", source);
+        Assert.Contains("RedactSupportValue", source);
+        Assert.Contains("<host>", source);
+        Assert.Contains("<ip>", source);
+        Assert.Contains("<user>@<host>", source);
+    }
+
+    [Fact]
     public void StatusDetailWindow_HasCopyableChannelAndNodeSummaries()
     {
         var xamlPath = Path.Combine(

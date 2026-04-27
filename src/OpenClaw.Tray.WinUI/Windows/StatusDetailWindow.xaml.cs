@@ -12,6 +12,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using Windows.ApplicationModel.DataTransfer;
 using WinUIEx;
 using Windows.UI;
@@ -435,6 +436,17 @@ public sealed partial class StatusDetailWindow : WindowEx
         builder.AppendLine($"Connection: {state.ConnectionStatus}");
         builder.AppendLine($"Topology: {state.Topology.DisplayName}");
         builder.AppendLine($"Transport: {state.Topology.Transport}");
+        builder.AppendLine($"Gateway URL: {RedactSupportValue(state.Topology.GatewayUrl)}");
+        builder.AppendLine($"Topology detail: {RedactSupportValue(state.Topology.Detail)}");
+        if (state.Tunnel != null && state.Tunnel.Status != TunnelStatus.NotConfigured)
+        {
+            builder.AppendLine($"Tunnel: {state.Tunnel.Status}");
+            builder.AppendLine($"Tunnel local endpoint: {RedactSupportValue(state.Tunnel.LocalEndpoint)}");
+            builder.AppendLine($"Tunnel remote endpoint: {RedactSupportValue(state.Tunnel.RemoteEndpoint)}");
+            if (!string.IsNullOrWhiteSpace(state.Tunnel.LastError))
+                builder.AppendLine($"Tunnel last error: {RedactSupportValue(state.Tunnel.LastError)}");
+        }
+
         builder.AppendLine($"Gateway version: {state.GatewaySelf?.ServerVersion ?? "unknown"}");
         builder.AppendLine($"Gateway uptime ms: {state.GatewaySelf?.UptimeMs?.ToString() ?? "unknown"}");
         builder.AppendLine($"Channels: {state.Channels.Count}");
@@ -453,13 +465,63 @@ public sealed partial class StatusDetailWindow : WindowEx
         builder.AppendLine($"Ports: {state.PortDiagnostics.Count}");
         foreach (var port in state.PortDiagnostics)
         {
-            builder.AppendLine($"- {port.Purpose}: {port.Port} {port.StatusText}");
+            builder.AppendLine($"- {port.Purpose}: {port.Port} {port.StatusText} ({RedactSupportValue(port.Detail)})");
         }
         builder.AppendLine($"Log file: {Logger.LogFilePath}");
         builder.AppendLine($"Diagnostics JSONL: {DiagnosticsJsonlService.FilePath ?? "not configured"}");
         builder.AppendLine($"Settings folder: {SettingsManager.SettingsDirectoryPath}");
         builder.AppendLine("Excluded: tokens, bootstrap tokens, command arguments, screenshots, recordings, camera data, microphone data, base64 payloads, and message payloads.");
         return builder.ToString();
+    }
+
+    private static string RedactSupportValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "unknown";
+
+        var redacted = Regex.Replace(
+            value,
+            @"\b[a-z][a-z0-9+.-]*://(?:[^@\s/]+@)?([^:/\s]+)",
+            match => match.Value.Replace(match.Groups[1].Value, "<host>"),
+            RegexOptions.IgnoreCase,
+            TimeSpan.FromMilliseconds(100));
+
+        redacted = Regex.Replace(
+            redacted,
+            @"\b(?:\d{1,3}\.){3}\d{1,3}\b",
+            "<ip>",
+            RegexOptions.None,
+            TimeSpan.FromMilliseconds(100));
+
+        redacted = Regex.Replace(
+            redacted,
+            @"\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b",
+            "<email>",
+            RegexOptions.IgnoreCase,
+            TimeSpan.FromMilliseconds(100));
+
+        redacted = Regex.Replace(
+            redacted,
+            @"\b(?<user>[A-Za-z0-9._-]+)@(?<host>[A-Za-z0-9._-]+)(?=[:\s]|$)",
+            "<user>@<host>",
+            RegexOptions.None,
+            TimeSpan.FromMilliseconds(100));
+
+        redacted = Regex.Replace(
+            redacted,
+            @"(?<=\bto\s)[A-Za-z0-9._-]+(?=:\d{1,5}\b)",
+            "<host>",
+            RegexOptions.IgnoreCase,
+            TimeSpan.FromMilliseconds(100));
+
+        redacted = Regex.Replace(
+            redacted,
+            @"^\s*[A-Za-z0-9._-]+(?=:\d{1,5}\b)",
+            "<host>",
+            RegexOptions.None,
+            TimeSpan.FromMilliseconds(100));
+
+        return redacted;
     }
 
     private class ChannelViewModel

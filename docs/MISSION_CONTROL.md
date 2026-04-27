@@ -524,7 +524,7 @@ dotnet test .\tests\OpenClaw.Tray.Tests\OpenClaw.Tray.Tests.csproj --no-restore
 4. Do we want a future "managed local gateway" mode, or only "detected local gateway"?
 5. How much Tailscale integration should Windows own vs merely detect?
 6. Should WSL detection use process/port probing, `wsl.exe`, or gateway presence fields once available?
-7. Should support bundles include topology/tunnel diagnostics by default, and how should they redact host/user/IP?
+7. Should support bundles include topology/tunnel diagnostics by default, and how should they redact host/user/IP? **Implemented for Command Center copy support context with redacted gateway URL, topology detail, tunnel endpoints/errors, and port details.**
 
 ## 11. Immediate recommendation
 

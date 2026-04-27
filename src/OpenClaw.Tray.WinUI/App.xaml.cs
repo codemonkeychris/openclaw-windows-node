@@ -1969,6 +1969,15 @@ public partial class App : Application
             _currentStatus = ConnectionStatus.Disconnected;
             UpdateTrayIcon();
 
+            if (!EnsureSshTunnelConfigured())
+            {
+                UpdateStatusDetailWindow();
+                ShowToast(new ToastContentBuilder()
+                    .AddText("SSH tunnel restart failed")
+                    .AddText(_sshTunnelService?.LastError ?? "Check SSH tunnel settings and logs."));
+                return;
+            }
+
             if (_settings.EnableNodeMode)
                 InitializeNodeService();
             else
@@ -1977,7 +1986,7 @@ public partial class App : Application
             UpdateStatusDetailWindow();
             ShowToast(new ToastContentBuilder()
                 .AddText("SSH tunnel")
-                .AddText("Restart requested."));
+                .AddText("Restarted; reconnecting to gateway."));
         }
         catch (Exception ex)
         {

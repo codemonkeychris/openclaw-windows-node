@@ -93,6 +93,23 @@ public class TrayMenuWindowMarkupTests
         Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterCopyNodeSummaryButton""", xaml);
     }
 
+    [Fact]
+    public void StatusDetailWindow_HasUsageCostTrendBars()
+    {
+        var xamlPath = Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Windows",
+            "StatusDetailWindow.xaml");
+
+        var xaml = File.ReadAllText(xamlPath);
+
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterCostTrendSection""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterCostTrendList""", xaml);
+        Assert.Contains("30-DAY COST TREND", xaml);
+    }
+
     private static string GetRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

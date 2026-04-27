@@ -257,6 +257,44 @@
                     <TextBlock x:Name="ProviderSummaryText" Grid.Row="2" Grid.Column="1"
                                Text="n/a" FontWeight="SemiBold" TextWrapping="Wrap"/>
                 </Grid>
+
+                <StackPanel x:Name="CostTrendSection"
+                            AutomationProperties.AutomationId="CommandCenterCostTrendSection"
+                            Spacing="6"
+                            Visibility="Collapsed">
+                    <TextBlock Text="30-DAY COST TREND"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                               FontWeight="SemiBold"/>
+                    <ItemsControl x:Name="CostTrendList"
+                                  AutomationProperties.AutomationId="CommandCenterCostTrendList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnSpacing="8" Padding="0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="54"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding DateLabel}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <Grid Grid.Column="1" Height="10" VerticalAlignment="Center"
+                                          Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                        <Border Width="{Binding BarWidth}"
+                                                HorizontalAlignment="Left"
+                                                Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                                CornerRadius="4"/>
+                                    </Grid>
+                                    <TextBlock Grid.Column="2"
+                                               Text="{Binding DetailText}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
             </StackPanel>
 
             <!-- Sessions Section -->

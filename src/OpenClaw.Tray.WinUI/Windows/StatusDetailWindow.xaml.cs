@@ -8,6 +8,7 @@ using System;
 using System.ComponentModel;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -19,6 +20,8 @@ namespace OpenClawTray.Windows;
 
 public sealed partial class StatusDetailWindow : WindowEx
 {
+    private const double MaxCostTrendBarWidth = 160;
+
     public bool IsClosed { get; private set; }
 
     public event EventHandler? RefreshRequested;
@@ -155,22 +158,36 @@ public sealed partial class StatusDetailWindow : WindowEx
         }).ToList();
 
         // Usage
-        if (state.Usage != null)
+        if (state.Usage != null || state.UsageCost != null || state.UsageStatus != null)
         {
             UsageSection.Visibility = Visibility.Visible;
             TodayCostText.Text = state.UsageCost != null
                 ? $"${state.UsageCost.Totals.TotalCost:F2} ({state.UsageCost.Days}d)"
-                : $"${state.Usage.CostUsd:F2}";
-            TodayRequestsText.Text = state.Usage.RequestCount > 0
+                : $"${state.Usage?.CostUsd ?? 0:F2}";
+            TodayRequestsText.Text = state.Usage?.RequestCount > 0
                 ? $"{state.Usage.RequestCount:N0} / {state.Usage.TotalTokens:N0}"
-                : $"{state.Usage.TotalTokens:N0}";
-            ProviderSummaryText.Text = string.IsNullOrWhiteSpace(state.Usage.ProviderSummary)
+                : $"{state.Usage?.TotalTokens ?? state.UsageCost?.Totals.TotalTokens ?? 0:N0}";
+            var providerSummary = string.IsNullOrWhiteSpace(state.Usage?.ProviderSummary)
+                ? BuildProviderSummary(state.UsageStatus)
+                : state.Usage.ProviderSummary;
+            ProviderSummaryText.Text = string.IsNullOrWhiteSpace(providerSummary)
                 ? LocalizationHelper.GetString("Status_NotAvailable")
-                : state.Usage.ProviderSummary!;
+                : providerSummary;
+
+            if (state.UsageCost?.Daily.Count > 0)
+            {
+                CostTrendList.ItemsSource = BuildCostTrend(state.UsageCost);
+                CostTrendSection.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                CostTrendSection.Visibility = Visibility.Collapsed;
+            }
         }
         else
         {
             UsageSection.Visibility = Visibility.Collapsed;
+            CostTrendSection.Visibility = Visibility.Collapsed;
         }
 
         // Sessions
@@ -404,6 +421,13 @@ public sealed partial class StatusDetailWindow : WindowEx
         public string SummaryText { get; set; } = "";
     }
 
+    private class CostTrendDayViewModel
+    {
+        public string DateLabel { get; set; } = "";
+        public double BarWidth { get; set; }
+        public string DetailText { get; set; } = "";
+    }
+
     private class PortDiagnosticViewModel
     {
         public string StatusIcon { get; set; } = "";
@@ -457,6 +481,62 @@ public sealed partial class StatusDetailWindow : WindowEx
         }
 
         return builder.ToString();
+    }
+
+    private static string BuildProviderSummary(GatewayUsageStatusInfo? usageStatus)
+    {
+        if (usageStatus?.Providers.Count > 0)
+        {
+            return string.Join(" · ", usageStatus.Providers.Select(provider =>
+            {
+                var displayName = string.IsNullOrWhiteSpace(provider.DisplayName)
+                    ? provider.Provider
+                    : provider.DisplayName;
+                return string.IsNullOrWhiteSpace(provider.Plan)
+                    ? displayName
+                    : $"{displayName} ({provider.Plan})";
+            }));
+        }
+
+        return "";
+    }
+
+    private static List<CostTrendDayViewModel> BuildCostTrend(GatewayCostUsageInfo usageCost)
+    {
+        var days = usageCost.Daily
+            .OrderBy(day => day.Date, StringComparer.Ordinal)
+            .TakeLast(30)
+            .ToList();
+        var maxCost = days.Max(day => day.TotalCost);
+
+        return days.Select(day =>
+        {
+            var width = maxCost > 0
+                ? Math.Max(4, day.TotalCost / maxCost * MaxCostTrendBarWidth)
+                : 4;
+            var missing = day.MissingCostEntries > 0
+                ? $" · {day.MissingCostEntries} missing"
+                : "";
+
+            return new CostTrendDayViewModel
+            {
+                DateLabel = FormatCostDate(day.Date),
+                BarWidth = width,
+                DetailText = $"${day.TotalCost:F2} · {day.TotalTokens:N0} tok{missing}"
+            };
+        }).ToList();
+    }
+
+    private static string FormatCostDate(string date)
+    {
+        return DateTime.TryParseExact(
+            date,
+            "yyyy-MM-dd",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal,
+            out var parsed)
+            ? parsed.ToString("MMM d", CultureInfo.CurrentCulture)
+            : date;
     }
 
     private static string BuildNodeCommandText(NodeCapabilityHealthInfo node)

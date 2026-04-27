@@ -438,7 +438,7 @@ Risk: high for exec/security. Do not rush.
 Deliverables:
 
 - Session previews with thinking/verbose controls.
-- Cost 30-day bars.
+- Cost 30-day bars: **implemented in Command Center from `usage.cost` daily totals**
 - Node copy submenus / summaries: **implemented first Command Center copy action**
 - Channel health summary and copyable context: **implemented first read-only summary**
 - Channel schema forms and QR login flows.

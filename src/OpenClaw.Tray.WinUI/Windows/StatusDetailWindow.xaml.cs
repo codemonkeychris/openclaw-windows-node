@@ -507,11 +507,53 @@ public sealed partial class StatusDetailWindow : WindowEx
         {
             builder.AppendLine($"- {port.Purpose}: {port.Port} {port.StatusText} ({RedactSupportValue(port.Detail)})");
         }
-        builder.AppendLine($"Log file: {Logger.LogFilePath}");
-        builder.AppendLine($"Diagnostics JSONL: {DiagnosticsJsonlService.FilePath ?? "not configured"}");
-        builder.AppendLine($"Settings folder: {SettingsManager.SettingsDirectoryPath}");
+        builder.AppendLine($"Log file: {RedactSupportPath(Logger.LogFilePath)}");
+        builder.AppendLine($"Diagnostics JSONL: {RedactSupportPath(DiagnosticsJsonlService.FilePath)}");
+        builder.AppendLine($"Settings folder: {RedactSupportPath(SettingsManager.SettingsDirectoryPath)}");
         builder.AppendLine("Excluded: tokens, bootstrap tokens, command arguments, screenshots, recordings, camera data, microphone data, base64 payloads, and message payloads.");
         return builder.ToString();
+    }
+
+    private static string RedactSupportPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return "not configured";
+
+        var redacted = path;
+        var knownFolders = new Dictionary<string, string>
+        {
+            [Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)] = "%USERPROFILE%",
+            [Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)] = "%APPDATA%",
+            [Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)] = "%LOCALAPPDATA%",
+            [Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)] = "%USERPROFILE%\\Documents"
+        };
+
+        foreach (var (folder, replacement) in knownFolders
+                     .Where(pair => !string.IsNullOrWhiteSpace(pair.Key))
+                     .OrderByDescending(pair => pair.Key.Length))
+        {
+            if (redacted.StartsWith(folder, StringComparison.OrdinalIgnoreCase))
+            {
+                redacted = replacement + redacted[folder.Length..];
+                break;
+            }
+        }
+
+        redacted = Regex.Replace(
+            redacted,
+            @"\b[A-Za-z]:\\Users\\[^\\]+",
+            "%USERPROFILE%",
+            RegexOptions.IgnoreCase,
+            TimeSpan.FromMilliseconds(100));
+
+        redacted = Regex.Replace(
+            redacted,
+            @"/Users/[^/]+",
+            "$HOME",
+            RegexOptions.None,
+            TimeSpan.FromMilliseconds(100));
+
+        return redacted;
     }
 
     private static string RedactSupportValue(string? value)

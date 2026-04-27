@@ -1,5 +1,6 @@
 using Microsoft.Win32;
 using System;
+using System.Runtime.Versioning;
 using System.Threading.Tasks;
 
 namespace OpenClawTray.Services;
@@ -12,10 +13,11 @@ public static class DeepLinkHandler
     private const string UriScheme = "openclaw";
     private const string UriSchemeKey = @"SOFTWARE\Classes\openclaw";
 
+    [SupportedOSPlatform("windows")]
     public static void RegisterUriScheme()
     {
         // MSIX-packaged apps declare the protocol in Package.appxmanifest — skip registry
-        if (Helpers.PackageHelper.IsPackaged)
+        if (IsPackagedApp())
         {
             Logger.Info("URI scheme handled by MSIX manifest (packaged mode)");
             return;
@@ -40,6 +42,20 @@ public static class DeepLinkHandler
         catch (Exception ex)
         {
             Logger.Warn($"Failed to register URI scheme: {ex.Message}");
+        }
+    }
+
+    private static bool IsPackagedApp()
+    {
+        try
+        {
+            var packageType = Type.GetType("Windows.ApplicationModel.Package, Windows, ContentType=WindowsRuntime");
+            var current = packageType?.GetProperty("Current")?.GetValue(null);
+            return current != null;
+        }
+        catch
+        {
+            return false;
         }
     }
 

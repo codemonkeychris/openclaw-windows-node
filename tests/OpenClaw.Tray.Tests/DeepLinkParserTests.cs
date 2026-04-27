@@ -1,4 +1,5 @@
 using OpenClaw.Shared;
+using OpenClawTray.Services;
 
 namespace OpenClaw.Tray.Tests;
 
@@ -210,6 +211,126 @@ public class DeepLinkParserTests
     public void GetQueryParam_ValueWithEquals()
     {
         Assert.Equal("a=b", DeepLinkParser.GetQueryParam("token=a=b", "token"));
+    }
+
+    #endregion
+
+    #region DeepLinkHandler
+
+    [Theory]
+    [InlineData("openclaw://settings", nameof(DeepLinkActions.OpenSettings))]
+    [InlineData("openclaw://setup", nameof(DeepLinkActions.OpenSetup))]
+    [InlineData("openclaw://chat", nameof(DeepLinkActions.OpenChat))]
+    [InlineData("openclaw://commandcenter", nameof(DeepLinkActions.OpenCommandCenter))]
+    [InlineData("openclaw://history", nameof(DeepLinkActions.OpenNotificationHistory))]
+    [InlineData("openclaw://logs", nameof(DeepLinkActions.OpenLogFile))]
+    [InlineData("openclaw://log-folder", nameof(DeepLinkActions.OpenLogFolder))]
+    [InlineData("openclaw://config", nameof(DeepLinkActions.OpenConfigFolder))]
+    [InlineData("openclaw://diagnostics", nameof(DeepLinkActions.OpenDiagnosticsFolder))]
+    [InlineData("openclaw://support-context", nameof(DeepLinkActions.CopySupportContext))]
+    [InlineData("openclaw://restart-ssh-tunnel", nameof(DeepLinkActions.RestartSshTunnel))]
+    public void Handle_InvokesExpectedAction(string uri, string expectedAction)
+    {
+        var invoked = "";
+        var actions = new DeepLinkActions
+        {
+            OpenSettings = () => invoked = nameof(DeepLinkActions.OpenSettings),
+            OpenSetup = () => invoked = nameof(DeepLinkActions.OpenSetup),
+            OpenChat = () => invoked = nameof(DeepLinkActions.OpenChat),
+            OpenCommandCenter = () => invoked = nameof(DeepLinkActions.OpenCommandCenter),
+            OpenNotificationHistory = () => invoked = nameof(DeepLinkActions.OpenNotificationHistory),
+            OpenLogFile = () => invoked = nameof(DeepLinkActions.OpenLogFile),
+            OpenLogFolder = () => invoked = nameof(DeepLinkActions.OpenLogFolder),
+            OpenConfigFolder = () => invoked = nameof(DeepLinkActions.OpenConfigFolder),
+            OpenDiagnosticsFolder = () => invoked = nameof(DeepLinkActions.OpenDiagnosticsFolder),
+            CopySupportContext = () => invoked = nameof(DeepLinkActions.CopySupportContext),
+            RestartSshTunnel = () => invoked = nameof(DeepLinkActions.RestartSshTunnel)
+        };
+
+        DeepLinkHandler.Handle(uri, actions);
+
+        Assert.Equal(expectedAction, invoked);
+    }
+
+    [Fact]
+    public void Handle_DashboardSubpath_PassesPath()
+    {
+        string? dashboardPath = null;
+        var actions = new DeepLinkActions
+        {
+            OpenDashboard = path => dashboardPath = path
+        };
+
+        DeepLinkHandler.Handle("openclaw://dashboard/skills", actions);
+
+        Assert.Equal("skills", dashboardPath);
+    }
+
+    [Fact]
+    public void Handle_Activity_PassesFilter()
+    {
+        string? filter = null;
+        var actions = new DeepLinkActions
+        {
+            OpenActivityStream = value => filter = value
+        };
+
+        DeepLinkHandler.Handle("openclaw://activity?filter=nodes", actions);
+
+        Assert.Equal("nodes", filter);
+    }
+
+    [Fact]
+    public void Handle_Send_PassesPrefillMessage()
+    {
+        string? message = null;
+        var actions = new DeepLinkActions
+        {
+            OpenQuickSend = value => message = value
+        };
+
+        DeepLinkHandler.Handle("openclaw://send?message=hello%20world", actions);
+
+        Assert.Equal("hello world", message);
+    }
+
+    [Fact]
+    public async Task Handle_Agent_SendsMessage()
+    {
+        var sent = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var actions = new DeepLinkActions
+        {
+            SendMessage = message =>
+            {
+                sent.SetResult(message);
+                return Task.CompletedTask;
+            }
+        };
+
+        DeepLinkHandler.Handle("openclaw://agent?message=ping", actions);
+
+        var completed = await Task.WhenAny(sent.Task, Task.Delay(TimeSpan.FromSeconds(3)));
+        Assert.Same(sent.Task, completed);
+        Assert.Equal("ping", await sent.Task);
+    }
+
+    [Fact]
+    public async Task Handle_HealthCheck_RunsAction()
+    {
+        var ran = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var actions = new DeepLinkActions
+        {
+            RunHealthCheck = () =>
+            {
+                ran.SetResult(true);
+                return Task.CompletedTask;
+            }
+        };
+
+        DeepLinkHandler.Handle("openclaw://healthcheck", actions);
+
+        var completed = await Task.WhenAny(ran.Task, Task.Delay(TimeSpan.FromSeconds(3)));
+        Assert.Same(ran.Task, completed);
     }
 
     #endregion

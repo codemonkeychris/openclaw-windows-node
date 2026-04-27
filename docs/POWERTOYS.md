@@ -51,7 +51,7 @@ Open Command Palette (`Win+Alt+Space`), type **"OpenClaw"** — you should see t
 | **📁 Open Logs Folder** | Opens the OpenClaw Tray logs folder |
 | **🗂️ Open Config Folder** | Opens the OpenClaw Tray configuration folder |
 | **🧪 Open Diagnostics Folder** | Opens the diagnostics JSONL folder |
-| **📋 Copy Support Context** | Copies privacy-safe Command Center support metadata |
+| **📋 Copy Support Context** | Copies redacted Command Center support metadata |
 | **🔁 Restart SSH Tunnel** | Restarts the tray-managed SSH tunnel when enabled |
 
 ## Usage

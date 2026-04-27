@@ -107,7 +107,7 @@ internal sealed partial class OpenClawPage : ListPage
             new ListItem(new OpenUrlCommand("openclaw://support-context"))
             {
                 Title = "📋 Copy Support Context",
-                Subtitle = "Copy privacy-safe Command Center support metadata"
+                Subtitle = "Copy redacted Command Center support metadata"
             },
             new ListItem(new OpenUrlCommand("openclaw://restart-ssh-tunnel"))
             {

@@ -18,16 +18,19 @@ public class BrowserProxyCapability : NodeCapabilityBase
     private static readonly string[] s_commands = ["browser.proxy"];
     private readonly string _gatewayUrl;
     private readonly string _bearerToken;
+    private readonly int? _sshRemoteGatewayPort;
     private readonly HttpClient _httpClient;
 
     public BrowserProxyCapability(
         IOpenClawLogger logger,
         string gatewayUrl,
         string? bearerToken,
-        HttpMessageHandler? handler = null) : base(logger)
+        HttpMessageHandler? handler = null,
+        int? sshRemoteGatewayPort = null) : base(logger)
     {
         _gatewayUrl = gatewayUrl;
         _bearerToken = bearerToken ?? "";
+        _sshRemoteGatewayPort = sshRemoteGatewayPort;
         _httpClient = handler == null ? new HttpClient() : new HttpClient(handler);
     }
 
@@ -73,11 +76,11 @@ public class BrowserProxyCapability : NodeCapabilityBase
         }
         catch (TaskCanceledException)
         {
-            return Error($"browser proxy timed out for {method} {path} after {timeoutMs}ms. {BuildReachabilityGuidance(controlPort)}");
+            return Error($"browser proxy timed out for {method} {path} after {timeoutMs}ms. {BuildReachabilityGuidance(controlPort, _sshRemoteGatewayPort)}");
         }
         catch (HttpRequestException ex)
         {
-            return Error($"Browser control host is not reachable on 127.0.0.1:{controlPort}: {ex.Message}. {BuildReachabilityGuidance(controlPort)}");
+            return Error($"Browser control host is not reachable on 127.0.0.1:{controlPort}: {ex.Message}. {BuildReachabilityGuidance(controlPort, _sshRemoteGatewayPort)}");
         }
         catch (JsonException ex)
         {
@@ -159,8 +162,14 @@ public class BrowserProxyCapability : NodeCapabilityBase
         return true;
     }
 
-    private static string BuildReachabilityGuidance(int controlPort) =>
-        $"Start the local OpenClaw browser control host on gateway port + 2 ({controlPort}). If the gateway is reached through SSH, also forward it with: ssh -N -L {controlPort}:127.0.0.1:{controlPort} <user>@<host>";
+    private static string BuildReachabilityGuidance(int localControlPort, int? sshRemoteGatewayPort)
+    {
+        var sshForward = sshRemoteGatewayPort is >= 1 and <= 65533
+            ? $"ssh -N -L {localControlPort}:127.0.0.1:{sshRemoteGatewayPort.Value + 2} <user>@<host>"
+            : $"ssh -N -L {localControlPort}:127.0.0.1:<remote-gateway-port+2> <user>@<host>";
+
+        return $"Start the local OpenClaw browser control host on gateway port + 2 ({localControlPort}). If the gateway is reached through SSH, also forward the browser-control port with: {sshForward}";
+    }
 
     private static bool TryNormalizePath(string? rawPath, out string path, out string error)
     {

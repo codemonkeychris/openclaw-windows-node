@@ -408,6 +408,7 @@ Deliverables:
 - Settings SSH test tunnel parity: **implemented temporary Settings test tunnels with the same optional browser-control `local+2` forward runtime uses when Browser proxy bridge is enabled**
 - Settings SSH tunnel preview: **implemented selectable Settings preview of the exact managed `ssh -N -L ...` command, including the optional browser-control companion forward**
 - Browser proxy disabled guidance: **implemented a specific Command Center warning/copy hint when `browser.proxy` is intentionally disabled in Settings**
+- Asymmetric SSH browser guidance: **fixed Command Center and `browser.proxy` invoke guidance so local `gateway+2` and remote `gateway+2` can differ**
 
 Risk: medium-high for kill/restart actions; start as read-only/copy actions.
 

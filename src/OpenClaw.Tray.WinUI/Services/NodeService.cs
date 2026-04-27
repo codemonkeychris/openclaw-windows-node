@@ -184,7 +184,10 @@ public class NodeService : IDisposable
             _browserProxyCapability = new BrowserProxyCapability(
                 _logger,
                 _nodeClient.GatewayUrl,
-                _token);
+                _token,
+                sshRemoteGatewayPort: _settings?.UseSshTunnel == true
+                    ? _settings.SshTunnelRemotePort
+                    : null);
             _nodeClient.RegisterCapability(_browserProxyCapability);
         }
 

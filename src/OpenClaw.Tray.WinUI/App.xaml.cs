@@ -2162,7 +2162,7 @@ public partial class App : Application
                         Title = "Browser proxy SSH forward is not listening",
                         Detail = $"browser.proxy over SSH needs a companion local forward for port {port.Port}. Add the browser-control forward to the same tunnel, or enable the managed SSH tunnel so Windows starts both forwards.",
                         RepairAction = "Copy browser proxy SSH forward",
-                        CopyText = BuildBrowserProxySshForwardHint(port.Port)
+                        CopyText = BuildBrowserProxySshForwardHint(port.Port, tunnel)
                     };
                     continue;
                 }
@@ -2178,12 +2178,59 @@ public partial class App : Application
         }
     }
 
-    private static string BuildBrowserProxySshForwardHint(int browserProxyPort)
+    private static string BuildBrowserProxySshForwardHint(int browserProxyPort, TunnelCommandCenterInfo? tunnel)
     {
         if (browserProxyPort is < 1 or > 65535)
-            return "ssh -N -L <browser-port>:127.0.0.1:<browser-port> <user>@<host>";
+            return "ssh -N -L <local-browser-port>:127.0.0.1:<remote-browser-port> <user>@<host>";
 
-        return $"ssh -N -L {browserProxyPort}:127.0.0.1:{browserProxyPort} <user>@<host>";
+        var target = BuildSshTarget(tunnel);
+        var remoteBrowserPort = ResolveRemoteBrowserProxyPort(browserProxyPort, tunnel);
+        return remoteBrowserPort is >= 1 and <= 65535
+            ? $"ssh -N -L {browserProxyPort}:127.0.0.1:{remoteBrowserPort} {target}"
+            : $"ssh -N -L {browserProxyPort}:127.0.0.1:<remote-gateway-port+2> {target}";
+    }
+
+    private static string BuildSshTarget(TunnelCommandCenterInfo? tunnel)
+    {
+        var host = tunnel?.Host?.Trim();
+        var user = tunnel?.User?.Trim();
+        if (!string.IsNullOrWhiteSpace(host) && !string.IsNullOrWhiteSpace(user))
+            return $"{user}@{host}";
+        if (!string.IsNullOrWhiteSpace(host))
+            return $"<user>@{host}";
+        return "<user>@<host>";
+    }
+
+    private static int? ResolveRemoteBrowserProxyPort(int localBrowserProxyPort, TunnelCommandCenterInfo? tunnel)
+    {
+        if (TryGetEndpointPort(tunnel?.BrowserProxyRemoteEndpoint, out var browserRemotePort))
+            return browserRemotePort;
+
+        if (!TryGetEndpointPort(tunnel?.RemoteEndpoint, out var remoteGatewayPort) ||
+            remoteGatewayPort > 65533)
+        {
+            return null;
+        }
+
+        if (TryGetEndpointPort(tunnel?.LocalEndpoint, out var localGatewayPort) &&
+            localBrowserProxyPort != localGatewayPort + 2)
+        {
+            return null;
+        }
+
+        return remoteGatewayPort + 2;
+    }
+
+    private static bool TryGetEndpointPort(string? endpoint, out int port)
+    {
+        port = 0;
+        if (string.IsNullOrWhiteSpace(endpoint))
+            return false;
+
+        var separator = endpoint.LastIndexOf(':');
+        return separator >= 0 &&
+            int.TryParse(endpoint[(separator + 1)..], out port) &&
+            port is >= 1 and <= 65535;
     }
 
     private static void ApplyDetectedSshForwardTopology(

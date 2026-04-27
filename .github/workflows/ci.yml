@@ -49,6 +49,7 @@ jobs:
       run: |
         dotnet build tests/OpenClaw.Shared.Tests -c Debug --no-restore
         dotnet build tests/OpenClaw.Tray.Tests -c Debug --no-restore
+        dotnet build tests/OpenClaw.Tray.IntegrationTests -c Debug --no-restore
 
     - name: Run Shared Tests
       env:

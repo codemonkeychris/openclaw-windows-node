@@ -406,6 +406,7 @@ Deliverables:
 - Browser proxy invoke error guidance: **implemented `browser.proxy` unreachable/timeout errors that name `127.0.0.1:{gateway+2}` and show the exact SSH local-forward shape**
 - Settings SSH browser-forward guidance: **implemented Settings copy explaining that the managed SSH tunnel forwards `local-port+2` to `remote-port+2` for `browser.proxy` when the browser proxy bridge is enabled**
 - Settings SSH test tunnel parity: **implemented temporary Settings test tunnels with the same optional browser-control `local+2` forward runtime uses when Browser proxy bridge is enabled**
+- Settings SSH tunnel preview: **implemented selectable Settings preview of the exact managed `ssh -N -L ...` command, including the optional browser-control companion forward**
 
 Risk: medium-high for kill/restart actions; start as read-only/copy actions.
 

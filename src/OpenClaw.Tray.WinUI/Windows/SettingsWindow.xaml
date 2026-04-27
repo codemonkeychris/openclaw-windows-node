@@ -90,7 +90,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
 
-                            <TextBox x:Name="SshTunnelUserTextBox" AutomationProperties.AutomationId="SshTunnelUserTextBox" Grid.Column="0" Header="SSH User" PlaceholderText="user"/>
+                            <TextBox x:Name="SshTunnelUserTextBox" AutomationProperties.AutomationId="SshTunnelUserTextBox" Grid.Column="0" Header="SSH User" PlaceholderText="user" TextChanged="OnTopologyInputChanged"/>
                             <TextBox x:Name="SshTunnelHostTextBox" AutomationProperties.AutomationId="SshTunnelHostTextBox" Grid.Column="1" Header="SSH Host" PlaceholderText="machine-name or IP" TextChanged="OnTopologyInputChanged"/>
                         </Grid>
 
@@ -103,6 +103,12 @@
                             <TextBox x:Name="SshTunnelRemotePortTextBox" AutomationProperties.AutomationId="SshTunnelRemotePortTextBox" Grid.Column="0" Header="Remote Gateway Port" PlaceholderText="18789" TextChanged="OnTopologyInputChanged"/>
                             <TextBox x:Name="SshTunnelLocalPortTextBox" AutomationProperties.AutomationId="SshTunnelLocalPortTextBox" Grid.Column="1" Header="Local Forward Port" PlaceholderText="18789" TextChanged="OnSshTunnelLocalPortTextChanged"/>
                         </Grid>
+                        <TextBlock x:Name="SshTunnelPreviewText"
+                                   AutomationProperties.AutomationId="SettingsSshTunnelPreviewText"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   IsTextSelectionEnabled="True"/>
                     </StackPanel>
                     
                     <TextBox x:Name="GatewayUrlTextBox" x:Uid="SettingsGatewayUrlTextBox" AutomationProperties.AutomationId="GatewayUrlTextBox" Header="Gateway URL" 
@@ -193,7 +199,7 @@
                             <ToggleSwitch x:Name="NodeScreenToggle" AutomationProperties.AutomationId="NodeScreenToggle" Header="Screen snapshot and recording"/>
                             <ToggleSwitch x:Name="NodeCameraToggle" AutomationProperties.AutomationId="NodeCameraToggle" Header="Camera list, snapshot, and clips"/>
                             <ToggleSwitch x:Name="NodeLocationToggle" AutomationProperties.AutomationId="NodeLocationToggle" Header="Location"/>
-                            <ToggleSwitch x:Name="NodeBrowserProxyToggle" AutomationProperties.AutomationId="NodeBrowserProxyToggle" Header="Browser proxy bridge"/>
+                            <ToggleSwitch x:Name="NodeBrowserProxyToggle" AutomationProperties.AutomationId="NodeBrowserProxyToggle" Header="Browser proxy bridge" Toggled="OnNodeBrowserProxyToggled"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>

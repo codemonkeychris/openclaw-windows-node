@@ -83,6 +83,7 @@ public sealed partial class SettingsWindow : WindowEx
         NodeCameraToggle.IsOn = _settings.NodeCameraEnabled;
         NodeLocationToggle.IsOn = _settings.NodeLocationEnabled;
         NodeBrowserProxyToggle.IsOn = _settings.NodeBrowserProxyEnabled;
+        UpdateSshTunnelPreviewText();
     }
 
     private void SaveSettings()
@@ -355,12 +356,19 @@ public sealed partial class SettingsWindow : WindowEx
         else
         {
             UpdateDetectedTopologyText();
+            UpdateSshTunnelPreviewText();
         }
     }
 
     private void OnTopologyInputChanged(object sender, Microsoft.UI.Xaml.Controls.TextChangedEventArgs e)
     {
         UpdateDetectedTopologyText();
+        UpdateSshTunnelPreviewText();
+    }
+
+    private void OnNodeBrowserProxyToggled(object sender, RoutedEventArgs e)
+    {
+        UpdateSshTunnelPreviewText();
     }
 
     private void OnUseLocalGateway(object sender, RoutedEventArgs e)
@@ -432,6 +440,7 @@ public sealed partial class SettingsWindow : WindowEx
         }
 
         UpdateDetectedTopologyText();
+        UpdateSshTunnelPreviewText();
     }
 
     private void UpdateDetectedTopologyText()
@@ -447,6 +456,46 @@ public sealed partial class SettingsWindow : WindowEx
             ParsePortOrDefault(SshTunnelRemotePortTextBox.Text, _settings.SshTunnelRemotePort));
 
         DetectedTopologyText.Text = $"Detected: {topology.DisplayName} · {topology.Transport} · {topology.Detail}";
+    }
+
+    private void UpdateSshTunnelPreviewText()
+    {
+        if (SshTunnelPreviewText == null)
+            return;
+
+        if (!UseSshTunnelToggle.IsOn)
+        {
+            SshTunnelPreviewText.Text = "";
+            return;
+        }
+
+        var user = SshTunnelUserTextBox.Text.Trim();
+        var host = SshTunnelHostTextBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(host) ||
+            !int.TryParse(SshTunnelRemotePortTextBox.Text.Trim(), out var remotePort) ||
+            !int.TryParse(SshTunnelLocalPortTextBox.Text.Trim(), out var localPort))
+        {
+            SshTunnelPreviewText.Text = "Managed tunnel preview: fill SSH user, SSH host, and ports to preview the exact ssh command.";
+            return;
+        }
+
+        var includeBrowserProxyForward =
+            NodeBrowserProxyToggle.IsOn &&
+            SshTunnelCommandLine.CanForwardBrowserProxyPort(remotePort, localPort);
+
+        try
+        {
+            var args = SshTunnelCommandLine.BuildArguments(user, host, remotePort, localPort, includeBrowserProxyForward);
+            SshTunnelPreviewText.Text = $"Managed tunnel preview: ssh {args}";
+            if (NodeBrowserProxyToggle.IsOn && !includeBrowserProxyForward)
+            {
+                SshTunnelPreviewText.Text += "\nBrowser proxy companion forward skipped because gateway ports must be 65533 or below.";
+            }
+        }
+        catch (ArgumentException ex)
+        {
+            SshTunnelPreviewText.Text = $"Managed tunnel preview unavailable: {ex.Message}";
+        }
     }
 
     private class TestLogger : IOpenClawLogger

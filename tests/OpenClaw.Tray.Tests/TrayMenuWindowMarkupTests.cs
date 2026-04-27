@@ -167,6 +167,9 @@ public class TrayMenuWindowMarkupTests
         Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterOpenDiagnosticsButton""", xaml);
         Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterCopySupportContextButton""", xaml);
         Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterUpdateStatusText""", xaml);
+        Assert.Matches(
+            new Regex(@"<Grid\.RowDefinitions>\s*<RowDefinition/>\s*<RowDefinition/>\s*<RowDefinition/>\s*</Grid\.RowDefinitions>\s*<StackPanel Grid\.Row=""0""", RegexOptions.Singleline),
+            xaml);
     }
 
     [Fact]

@@ -758,6 +758,210 @@ public class GatewayNodeInfoTests
         var node = new GatewayNodeInfo { NodeId = "n1", CommandCount = 0, CapabilityCount = 0 };
         Assert.Equal("no details", node.DetailText);
     }
+
+    [Fact]
+    public void CapabilityLists_DefaultToEmptyCollections()
+    {
+        var node = new GatewayNodeInfo { NodeId = "n1" };
+        Assert.Empty(node.Capabilities);
+        Assert.Empty(node.Commands);
+        Assert.Empty(node.Permissions);
+    }
+}
+
+public class CommandCenterModelTests
+{
+    [Fact]
+    public void ChannelHealthParser_ParsesGatewayHealthObject()
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse("""
+            {
+              "discord": { "configured": false, "running": false, "lastError": null },
+              "telegram": { "configured": true, "running": false, "tokenSource": "env" },
+              "whatsapp": { "configured": true, "running": true, "linked": true, "authAge": "5m", "type": "web" },
+              "broken": { "configured": true, "running": false, "lastError": "bad token" }
+            }
+            """);
+
+        var channels = ChannelHealthParser.Parse(doc.RootElement);
+
+        Assert.Equal(4, channels.Length);
+        Assert.Equal("not configured", channels.Single(c => c.Name == "discord").Status);
+        Assert.Equal("ready", channels.Single(c => c.Name == "telegram").Status);
+        Assert.Equal("running", channels.Single(c => c.Name == "whatsapp").Status);
+        Assert.True(channels.Single(c => c.Name == "whatsapp").IsLinked);
+        Assert.Equal("5m", channels.Single(c => c.Name == "whatsapp").AuthAge);
+        Assert.Equal("error", channels.Single(c => c.Name == "broken").Status);
+        Assert.Equal("bad token", channels.Single(c => c.Name == "broken").Error);
+    }
+
+    [Fact]
+    public void CommandGroups_IncludeCurrentSafeParityCommands()
+    {
+        Assert.Contains("canvas.a2ui.pushJSONL", CommandCenterCommandGroups.SafeCompanionCommands);
+        Assert.Contains("device.info", CommandCenterCommandGroups.SafeCompanionCommands);
+        Assert.Contains("device.status", CommandCenterCommandGroups.SafeCompanionCommands);
+        Assert.Contains("screen.record", CommandCenterCommandGroups.DangerousCommands);
+        Assert.Contains("browser.proxy", CommandCenterCommandGroups.MacNodeParityCommands);
+    }
+
+    [Fact]
+    public void ChannelCommandCenterInfo_EnablesStopForHealthyChannel()
+    {
+        var info = ChannelCommandCenterInfo.FromHealth(new ChannelHealth
+        {
+            Name = "telegram",
+            Status = "running",
+            IsLinked = true,
+            AuthAge = "2h",
+            Type = "webhook"
+        });
+
+        Assert.Equal("telegram", info.Name);
+        Assert.True(info.CanStop);
+        Assert.False(info.CanStart);
+        Assert.True(info.IsLinked);
+        Assert.Equal("2h", info.AuthAge);
+        Assert.Equal("webhook", info.Type);
+    }
+
+    [Fact]
+    public void ChannelCommandCenterInfo_EnablesStartForStoppedChannel()
+    {
+        var info = ChannelCommandCenterInfo.FromHealth(new ChannelHealth
+        {
+            Name = "discord",
+            Status = "stopped"
+        });
+
+        Assert.True(info.CanStart);
+        Assert.False(info.CanStop);
+    }
+
+    [Fact]
+    public void NodeCapabilityHealthInfo_GroupsCommandsAndWarnsForKnownWindowsGap()
+    {
+        var node = new GatewayNodeInfo
+        {
+            NodeId = "node-1",
+            DisplayName = "Windows Node",
+            Platform = "windows",
+            IsOnline = true,
+            Capabilities = ["canvas", "camera", "screen", "location", "device"],
+            Commands =
+            [
+                "canvas.present",
+                "canvas.a2ui.pushJSONL",
+                "camera.list",
+                "camera.snap",
+                "screen.record",
+                "device.info",
+                "device.status",
+                "system.execApprovals.get"
+            ],
+            Permissions = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["screen.record"] = true
+            }
+        };
+
+        var info = NodeCapabilityHealthInfo.FromNode(node);
+
+        Assert.Contains("canvas.a2ui.pushJSONL", info.SafeDeclaredCommands);
+        Assert.Contains("device.info", info.SafeDeclaredCommands);
+        Assert.Contains("camera.snap", info.DangerousDeclaredCommands);
+        Assert.Contains("screen.record", info.DangerousDeclaredCommands);
+        Assert.Contains("system.execApprovals.get", info.WindowsSpecificDeclaredCommands);
+        Assert.True(info.Permissions["screen.record"]);
+        Assert.Empty(info.MissingDangerousAllowlistCommands);
+        Assert.Contains("browser.proxy", info.MissingMacParityCommands);
+        Assert.Contains(info.Warnings, w => w.Category == "allowlist" && w.Severity == GatewayDiagnosticSeverity.Info);
+        Assert.Contains(info.Warnings, w => w.Category == "parity" && w.Title.Contains("Browser proxy"));
+    }
+
+    [Fact]
+    public void NodeCapabilityHealthInfo_WarnsForOfflineNodeWithNoCommands()
+    {
+        var node = new GatewayNodeInfo
+        {
+            NodeId = "node-1",
+            DisplayName = "Offline Node",
+            Platform = "windows",
+            IsOnline = false
+        };
+
+        var info = NodeCapabilityHealthInfo.FromNode(node);
+
+        Assert.Contains(info.Warnings, w => w.Title == "Node offline" && w.Severity == GatewayDiagnosticSeverity.Warning);
+        Assert.Contains(info.Warnings, w => w.Title == "No node commands visible" && w.Category == "allowlist");
+    }
+
+    [Fact]
+    public void NodeCapabilityHealthInfo_SeparatesSafeAndDangerousPolicyBlocks()
+    {
+        var node = new GatewayNodeInfo
+        {
+            NodeId = "node-1",
+            DisplayName = "Windows Node",
+            Platform = "windows",
+            IsOnline = true,
+            Commands =
+            [
+                "canvas.present",
+                "screen.snapshot",
+                "screen.record",
+                "camera.snap"
+            ],
+            Permissions = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["commands.canvas.present"] = false,
+                ["screen.snapshot"] = false,
+                ["command:screen.record"] = false,
+                ["camera.snap"] = false
+            }
+        };
+
+        var info = NodeCapabilityHealthInfo.FromNode(node);
+
+        Assert.Contains("canvas.present", info.MissingSafeAllowlistCommands);
+        Assert.Contains("screen.snapshot", info.MissingSafeAllowlistCommands);
+        Assert.Contains("screen.record", info.MissingDangerousAllowlistCommands);
+        Assert.Contains("camera.snap", info.MissingDangerousAllowlistCommands);
+        Assert.Contains(info.Warnings, w =>
+            w.Title == "Safe node commands are filtered by gateway policy" &&
+            w.CopyText != null &&
+            w.CopyText.Contains("canvas.a2ui.pushJSONL", StringComparison.Ordinal) &&
+            !w.CopyText.Contains("screen.record", StringComparison.Ordinal));
+        Assert.Contains(info.Warnings, w =>
+            w.Title == "Privacy-sensitive commands are currently blocked" &&
+            string.IsNullOrEmpty(w.CopyText));
+    }
+
+    [Fact]
+    public void BuildAllowCommandsRepairCommand_IsStableAndDeduplicated()
+    {
+        var command = CommandCenterDiagnostics.BuildAllowCommandsRepairCommand(
+            ["screen.snapshot", "canvas.present", "screen.snapshot"]);
+
+        Assert.Equal("openclaw config set gateway.nodes.allowCommands '[\"canvas.present\",\"screen.snapshot\"]'", command);
+    }
+
+    [Fact]
+    public void SortAndDedupeWarnings_PrioritizesAndRemovesDuplicates()
+    {
+        var warnings = CommandCenterDiagnostics.SortAndDedupeWarnings(
+        [
+            new GatewayDiagnosticWarning { Severity = GatewayDiagnosticSeverity.Info, Category = "node", Title = "Node info", Detail = "same" },
+            new GatewayDiagnosticWarning { Severity = GatewayDiagnosticSeverity.Warning, Category = "channel", Title = "Channel warning", Detail = "same" },
+            new GatewayDiagnosticWarning { Severity = GatewayDiagnosticSeverity.Critical, Category = "auth", Title = "Auth failed", Detail = "same" },
+            new GatewayDiagnosticWarning { Severity = GatewayDiagnosticSeverity.Info, Category = "node", Title = "Node info", Detail = "same" }
+        ]);
+
+        Assert.Equal(3, warnings.Count);
+        Assert.Equal(GatewayDiagnosticSeverity.Critical, warnings[0].Severity);
+        Assert.Equal(GatewayDiagnosticSeverity.Warning, warnings[1].Severity);
+        Assert.Equal(GatewayDiagnosticSeverity.Info, warnings[2].Severity);
+    }
 }
 
 public class SessionInfoAgeTextTests

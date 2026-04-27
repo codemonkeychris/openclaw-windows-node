@@ -67,6 +67,12 @@ public static class DeepLinkHandler
                 actions.OpenChat?.Invoke();
                 break;
 
+            case "status":
+            case "commandcenter":
+            case "command-center":
+                actions.OpenCommandCenter?.Invoke();
+                break;
+
             case "dashboard":
                 actions.OpenDashboard?.Invoke(null);
                 break;
@@ -116,6 +122,7 @@ public class DeepLinkActions
     public Action? OpenSettings { get; set; }
     public Action? OpenSetup { get; set; }
     public Action? OpenChat { get; set; }
+    public Action? OpenCommandCenter { get; set; }
     public Action<string?>? OpenDashboard { get; set; }
     public Action<string?>? OpenQuickSend { get; set; }
     public Func<string, Task>? SendMessage { get; set; }

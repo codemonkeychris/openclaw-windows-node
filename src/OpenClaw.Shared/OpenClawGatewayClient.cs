@@ -1394,74 +1394,14 @@ public class OpenClawGatewayClient : WebSocketClientBase
 
     private void ParseChannelHealth(JsonElement channels)
     {
-        var healthList = new List<ChannelHealth>();
-        
         // Debug: log raw channel data
         _logger.Debug($"Raw channel health JSON: {channels.GetRawText()}");
+        var healthList = ChannelHealthParser.Parse(channels);
 
-        foreach (var prop in channels.EnumerateObject())
-        {
-            var ch = new ChannelHealth { Name = prop.Name };
-            var val = prop.Value;
-
-            // Get running status
-            bool isRunning = false;
-            bool isConfigured = false;
-            bool isLinked = false;
-            bool probeOk = false;
-            bool hasError = false;
-            string? tokenSource = null;
-            
-            if (val.TryGetProperty("running", out var running))
-                isRunning = running.GetBoolean();
-            if (val.TryGetProperty("configured", out var configured))
-                isConfigured = configured.GetBoolean();
-            if (val.TryGetProperty("linked", out var linked))
-            {
-                isLinked = linked.GetBoolean();
-                ch.IsLinked = isLinked;
-            }
-            // Check probe status for webhook-based channels like Telegram
-            if (val.TryGetProperty("probe", out var probe) && probe.TryGetProperty("ok", out var ok))
-                probeOk = ok.GetBoolean();
-            // Check for errors
-            if (val.TryGetProperty("lastError", out var lastError) && lastError.ValueKind != JsonValueKind.Null)
-                hasError = true;
-            // Check token source (for Telegram - if configured, bot token was validated)
-            if (val.TryGetProperty("tokenSource", out var ts))
-                tokenSource = ts.GetString();
-            
-            // Determine status string - unified for parity between channels
-            // Key insight: if configured=true and no errors, the channel is ready
-            // - WhatsApp: linked=true means authenticated
-            // - Telegram: configured=true means bot token was validated
-            if (val.TryGetProperty("status", out var status))
-                ch.Status = status.GetString() ?? "unknown";
-            else if (hasError)
-                ch.Status = "error";
-            else if (isRunning)
-                ch.Status = "running";
-            else if (isConfigured && (probeOk || isLinked))
-                ch.Status = "ready";  // Explicitly verified ready
-            else if (isConfigured && !hasError)
-                ch.Status = "ready";  // Configured without errors = ready (token was validated at config time)
-            else
-                ch.Status = "not configured";
-            
-            if (val.TryGetProperty("error", out var error))
-                ch.Error = error.GetString();
-            if (val.TryGetProperty("authAge", out var authAge))
-                ch.AuthAge = authAge.GetString();
-            if (val.TryGetProperty("type", out var chType))
-                ch.Type = chType.GetString();
-
-            healthList.Add(ch);
-        }
-
-        _logger.Info(healthList.Count > 0
-            ? $"Channel health: {string.Join(", ", healthList.ConvertAll(c => $"{c.Name}={c.Status}"))}"
+        _logger.Info(healthList.Length > 0
+            ? $"Channel health: {string.Join(", ", healthList.Select(c => $"{c.Name}={c.Status}"))}"
             : "Channel health: no channels");
-        ChannelHealthUpdated?.Invoke(this, healthList.ToArray());
+        ChannelHealthUpdated?.Invoke(this, healthList);
     }
 
     private void ParseSessions(JsonElement sessions)
@@ -1649,6 +1589,13 @@ public class OpenClawGatewayClient : WebSocketClientBase
                     "unknown");
                 var connected = GetOptionalBool(nodeElement, "connected");
                 var online = GetOptionalBool(nodeElement, "online");
+                var capabilities = GetStringArray(nodeElement, "caps");
+                if (capabilities.Length == 0)
+                    capabilities = GetStringArray(nodeElement, "capabilities");
+                var commands = GetStringArray(nodeElement, "declaredCommands");
+                if (commands.Length == 0)
+                    commands = GetStringArray(nodeElement, "commands");
+                var permissions = GetBoolDictionary(nodeElement, "permissions");
 
                 buffer[count++] = new GatewayNodeInfo
                 {
@@ -1671,12 +1618,11 @@ public class OpenClawGatewayClient : WebSocketClientBase
                                ParseUnixTimestampMs(nodeElement, "lastSeen") ??
                                ParseUnixTimestampMs(nodeElement, "updatedAt") ??
                                ParseUnixTimestampMs(nodeElement, "connectedAt"),
-                    CapabilityCount = Math.Max(
-                        GetArrayLength(nodeElement, "caps"),
-                        GetArrayLength(nodeElement, "capabilities")),
-                    CommandCount = Math.Max(
-                        GetArrayLength(nodeElement, "declaredCommands"),
-                        GetArrayLength(nodeElement, "commands")),
+                    Capabilities = capabilities.ToList(),
+                    Commands = commands.ToList(),
+                    Permissions = permissions,
+                    CapabilityCount = capabilities.Length,
+                    CommandCount = commands.Length,
                     IsOnline = online ?? connected ?? status is "ok" or "online" or "connected" or "ready" or "active"
                 };
             }
@@ -2018,6 +1964,46 @@ public class OpenClawGatewayClient : WebSocketClientBase
         if (!parent.TryGetProperty(property, out var value) || value.ValueKind != JsonValueKind.Array)
             return 0;
         return value.GetArrayLength();
+    }
+
+    private static string[] GetStringArray(JsonElement parent, string property)
+    {
+        if (!parent.TryGetProperty(property, out var value) || value.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var buffer = new string[value.GetArrayLength()];
+        var count = 0;
+        foreach (var item in value.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String)
+                continue;
+
+            var text = item.GetString();
+            if (!string.IsNullOrWhiteSpace(text))
+                buffer[count++] = text;
+        }
+
+        return count == 0 ? [] : buffer[..count];
+    }
+
+    private static Dictionary<string, bool> GetBoolDictionary(JsonElement parent, string property)
+    {
+        var result = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        if (!parent.TryGetProperty(property, out var value) || value.ValueKind != JsonValueKind.Object)
+            return result;
+
+        foreach (var item in value.EnumerateObject())
+        {
+            if (string.IsNullOrWhiteSpace(item.Name))
+                continue;
+
+            if (item.Value.ValueKind == JsonValueKind.True)
+                result[item.Name] = true;
+            else if (item.Value.ValueKind == JsonValueKind.False)
+                result[item.Name] = false;
+        }
+
+        return result;
     }
 
     private static DateTime? ParseUnixTimestampMs(JsonElement parent, string property)

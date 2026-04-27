@@ -57,6 +57,7 @@ public partial class App : Application
     private GatewayCostUsageInfo? _lastUsageCost;
     private DateTime _lastCheckTime = DateTime.Now;
     private DateTime _lastUsageActivityLogUtc = DateTime.MinValue;
+    private string? _lastChannelStatusSignature;
 
     // FrozenDictionary for O(1) case-insensitive notification type → setting lookup — no per-call allocation.
     private static readonly System.Collections.Frozen.FrozenDictionary<string, Func<SettingsManager, bool>> s_notifTypeMap =
@@ -1168,6 +1169,8 @@ public partial class App : Application
             _nodeService.StatusChanged += OnNodeStatusChanged;
             _nodeService.NotificationRequested += OnNodeNotificationRequested;
             _nodeService.PairingStatusChanged += OnPairingStatusChanged;
+            _nodeService.ChannelHealthUpdated += OnChannelHealthUpdated;
+            _nodeService.InvokeCompleted += OnNodeInvokeCompleted;
             
             // Connect to gateway as a node (separate connection from operator)
             _ = _nodeService.ConnectAsync(_settings.GetEffectiveGatewayUrl(), _settings.Token, _settings.BootstrapToken);
@@ -1198,6 +1201,7 @@ public partial class App : Application
         {
             _currentStatus = status;
             UpdateTrayIcon();
+            _dispatcherQueue?.TryEnqueue(UpdateStatusDetailWindow);
         }
         
         // Don't show "connected" toast if waiting for pairing - we'll show pairing status instead
@@ -1267,12 +1271,49 @@ public partial class App : Application
         }
     }
 
+    private void OnNodeInvokeCompleted(object? sender, NodeInvokeCompletedEventArgs args)
+    {
+        var status = args.Ok ? "completed" : "failed";
+        var durationMs = Math.Max(0, (int)Math.Round(args.Duration.TotalMilliseconds));
+        var details = args.Ok
+            ? $"{GetNodeInvokePrivacyClass(args.Command)} · {durationMs} ms"
+            : $"{GetNodeInvokePrivacyClass(args.Command)} · {durationMs} ms · {args.Error ?? "unknown error"}";
+
+        AddRecentActivity(
+            $"node.invoke {status}: {args.Command}",
+            category: "node.invoke",
+            dashboardPath: "nodes",
+            details: details,
+            nodeId: args.NodeId);
+
+        _dispatcherQueue?.TryEnqueue(UpdateStatusDetailWindow);
+    }
+
+    private static string GetNodeInvokePrivacyClass(string command)
+    {
+        if (string.Equals(command, "screen.record", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(command, "screen.snapshot", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(command, "camera.snap", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(command, "camera.clip", StringComparison.OrdinalIgnoreCase))
+        {
+            return "privacy-sensitive";
+        }
+
+        if (command.StartsWith("system.run", StringComparison.OrdinalIgnoreCase))
+        {
+            return "exec";
+        }
+
+        return "metadata";
+    }
+
     private void OnConnectionStatusChanged(object? sender, ConnectionStatus status)
     {
         _currentStatus = status;
         if (status == ConnectionStatus.Connected)
             _authFailureMessage = null;
         UpdateTrayIcon();
+        _dispatcherQueue?.TryEnqueue(UpdateStatusDetailWindow);
         
         if (status == ConnectionStatus.Connected)
         {
@@ -1331,18 +1372,29 @@ public partial class App : Application
     private void OnChannelHealthUpdated(object? sender, ChannelHealth[] channels)
     {
         _lastChannels = channels;
+        _lastCheckTime = DateTime.Now;
+        var signature = string.Join("|", channels
+            .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(c => $"{c.Name}:{c.Status}:{c.Error}"));
+        if (!string.Equals(signature, _lastChannelStatusSignature, StringComparison.Ordinal))
+        {
+            _lastChannelStatusSignature = signature;
+            var summary = channels.Length == 0
+                ? "No channels reported"
+                : string.Join(", ", channels.Select(c => $"{c.Name}={c.Status}"));
+            AddRecentActivity("Channel health updated", category: "channel", dashboardPath: "channels", details: summary);
+        }
 
         _dispatcherQueue?.TryEnqueue(() =>
         {
-            if (_statusDetailWindow != null && !_statusDetailWindow.IsClosed)
-                _statusDetailWindow.UpdateStatus(
-                    _currentStatus, _lastChannels, _lastSessions, _lastUsage, _lastCheckTime);
+            UpdateStatusDetailWindow();
         });
     }
 
     private void OnSessionsUpdated(object? sender, SessionInfo[] sessions)
     {
         _lastSessions = sessions;
+        _dispatcherQueue?.TryEnqueue(UpdateStatusDetailWindow);
 
         var activeKeys = new HashSet<string>(sessions.Select(s => s.Key), StringComparer.Ordinal);
         lock (_sessionPreviewsLock)
@@ -1365,16 +1417,19 @@ public partial class App : Application
     private void OnUsageUpdated(object? sender, GatewayUsageInfo usage)
     {
         _lastUsage = usage;
+        _dispatcherQueue?.TryEnqueue(UpdateStatusDetailWindow);
     }
 
     private void OnUsageStatusUpdated(object? sender, GatewayUsageStatusInfo usageStatus)
     {
         _lastUsageStatus = usageStatus;
+        _dispatcherQueue?.TryEnqueue(UpdateStatusDetailWindow);
     }
 
     private void OnUsageCostUpdated(object? sender, GatewayCostUsageInfo usageCost)
     {
         _lastUsageCost = usageCost;
+        _dispatcherQueue?.TryEnqueue(UpdateStatusDetailWindow);
 
         if (DateTime.UtcNow - _lastUsageActivityLogUtc > TimeSpan.FromMinutes(1))
         {
@@ -1393,6 +1448,7 @@ public partial class App : Application
         var previousOnline = _lastNodes.Count(n => n.IsOnline);
         var online = nodes.Count(n => n.IsOnline);
         _lastNodes = nodes;
+        _dispatcherQueue?.TryEnqueue(UpdateStatusDetailWindow);
 
         if (nodes.Length != previousCount || online != previousOnline)
         {
@@ -1412,6 +1468,7 @@ public partial class App : Application
                 _sessionPreviews[preview.Key] = preview;
             }
         }
+        _dispatcherQueue?.TryEnqueue(UpdateStatusDetailWindow);
     }
 
     private void OnSessionCommandCompleted(object? sender, SessionCommandResult result)
@@ -1761,16 +1818,157 @@ public partial class App : Application
     {
         if (_statusDetailWindow == null || _statusDetailWindow.IsClosed)
         {
-            _statusDetailWindow = new StatusDetailWindow(
-                _currentStatus, _lastChannels, _lastSessions, _lastUsage, _lastCheckTime);
+            _statusDetailWindow = new StatusDetailWindow(BuildCommandCenterState());
             _statusDetailWindow.Closed += (s, e) => _statusDetailWindow = null;
         }
         else
         {
-            _statusDetailWindow.UpdateStatus(
-                _currentStatus, _lastChannels, _lastSessions, _lastUsage, _lastCheckTime);
+            _statusDetailWindow.UpdateStatus(BuildCommandCenterState());
         }
         _statusDetailWindow.Activate();
+    }
+
+    private void UpdateStatusDetailWindow()
+    {
+        if (_statusDetailWindow != null && !_statusDetailWindow.IsClosed)
+        {
+            _statusDetailWindow.UpdateStatus(BuildCommandCenterState());
+        }
+    }
+
+    private GatewayCommandCenterState BuildCommandCenterState()
+    {
+        var nodes = _lastNodes.Select(NodeCapabilityHealthInfo.FromNode).ToList();
+        if (nodes.Count == 0 && _nodeService?.GetLocalNodeInfo() is { } localNode)
+        {
+            nodes.Add(NodeCapabilityHealthInfo.FromNode(localNode));
+        }
+
+        var warnings = nodes.SelectMany(n => n.Warnings).ToList();
+
+        if (!string.IsNullOrWhiteSpace(_authFailureMessage))
+        {
+            warnings.Insert(0, new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Critical,
+                Category = "auth",
+                Title = "Gateway authentication failed",
+                Detail = _authFailureMessage
+            });
+        }
+
+        if (_nodeService?.IsPendingApproval == true && !string.IsNullOrWhiteSpace(_nodeService.FullDeviceId))
+        {
+            var approvalCommand = $"openclaw devices approve {_nodeService.FullDeviceId}";
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Warning,
+                Category = "pairing",
+                Title = "Node is waiting for approval",
+                Detail = $"Approve device {_nodeService.ShortDeviceId} from the gateway CLI, then re-open the command center after reconnect.",
+                RepairAction = "Copy approval command",
+                CopyText = approvalCommand
+            });
+        }
+
+        if (_currentStatus == ConnectionStatus.Error)
+        {
+            warnings.Insert(0, new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Critical,
+                Category = "gateway",
+                Title = "Gateway connection error",
+                Detail = "The tray is not currently connected to the gateway."
+            });
+        }
+        else if (_currentStatus != ConnectionStatus.Connected)
+        {
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Warning,
+                Category = "gateway",
+                Title = "Gateway is not connected",
+                Detail = $"Current connection state is {_currentStatus}."
+            });
+        }
+
+        if (_currentStatus == ConnectionStatus.Connected &&
+            DateTime.Now - _lastCheckTime > TimeSpan.FromMinutes(2))
+        {
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Warning,
+                Category = "gateway",
+                Title = "Gateway health is stale",
+                Detail = $"Last health check was {_lastCheckTime:t}. Run a health check or verify the localhost tunnel."
+            });
+        }
+
+        if (_lastChannels.Length == 0 && _currentStatus == ConnectionStatus.Connected && _gatewayClient != null)
+        {
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Info,
+                Category = "channel",
+                Title = "No channels reported",
+                Detail = "The gateway health payload did not report any channels."
+            });
+        }
+        else if (_lastChannels.Length == 0 && _currentStatus == ConnectionStatus.Connected && _settings?.EnableNodeMode == true)
+        {
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Info,
+                Category = "gateway",
+                Title = "Waiting for gateway health",
+                Detail = "Node mode is connected. Channel/session inventories are filled from gateway health events when available."
+            });
+        }
+        else if (_lastChannels.Length > 0 && _lastChannels.All(c => !ChannelHealth.IsHealthyStatus(c.Status)))
+        {
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Warning,
+                Category = "channel",
+                Title = "No channels are currently running",
+                Detail = "Channels are configured but none are reporting a running/ready state."
+            });
+        }
+
+        if (_currentStatus == ConnectionStatus.Connected && nodes.Count == 0 && _gatewayClient != null)
+        {
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Info,
+                Category = "node",
+                Title = "No nodes reported",
+                Detail = "node.list did not report any connected nodes. Pair a Windows node or verify the operator token has node inventory access."
+            });
+        }
+
+        if (_lastUsageCost?.Totals.MissingCostEntries > 0)
+        {
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Info,
+                Category = "usage",
+                Title = "Some usage costs are missing",
+                Detail = $"{_lastUsageCost.Totals.MissingCostEntries} usage entr{(_lastUsageCost.Totals.MissingCostEntries == 1 ? "y is" : "ies are")} missing cost data."
+            });
+        }
+
+        return new GatewayCommandCenterState
+        {
+            ConnectionStatus = _currentStatus,
+            LastRefresh = _lastCheckTime.ToUniversalTime(),
+            Channels = _lastChannels.Select(ChannelCommandCenterInfo.FromHealth).ToList(),
+            Sessions = _lastSessions.ToList(),
+            Usage = _lastUsage,
+            UsageStatus = _lastUsageStatus,
+            UsageCost = _lastUsageCost,
+            Nodes = nodes,
+            Warnings = CommandCenterDiagnostics.SortAndDedupeWarnings(warnings)
+        };
     }
 
     private void ShowNotificationHistory()
@@ -2108,6 +2306,7 @@ public partial class App : Application
             OpenSettings = ShowSettings,
             OpenSetup = () => _ = ShowSetupWizardAsync(),
             OpenChat = ShowWebChat,
+            OpenCommandCenter = ShowStatusDetail,
             OpenDashboard = OpenDashboard,
             OpenQuickSend = ShowQuickSend,
             SendMessage = async (msg) =>

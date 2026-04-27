@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -42,7 +43,9 @@ public class WindowsNodeClient : WebSocketClientBase
 
     // Events
     public event EventHandler<NodeInvokeRequest>? InvokeReceived;
+    public event EventHandler<NodeInvokeCompletedEventArgs>? InvokeCompleted;
     public event EventHandler<PairingStatusEventArgs>? PairingStatusChanged;
+    public event EventHandler<JsonElement>? HealthReceived;
     
     public new bool IsConnected => _isConnected;
     public string? NodeId => _nodeId;
@@ -239,6 +242,10 @@ public class WindowsNodeClient : WebSocketClientBase
             case "node.invoke.request":
                 await HandleNodeInvokeEventAsync(root);
                 break;
+            case "health":
+                if (root.TryGetProperty("payload", out var payload))
+                    HealthReceived?.Invoke(this, payload.Clone());
+                break;
         }
     }
 
@@ -402,9 +409,11 @@ public class WindowsNodeClient : WebSocketClientBase
         {
             _logger.Warn($"[NODE] No capability registered for command: {command}");
             await SendNodeInvokeResultAsync(requestId, false, null, $"Command not supported: {command}");
+            RaiseInvokeCompleted(requestId, command, false, $"Command not supported: {command}", TimeSpan.Zero);
             return;
         }
         
+        var stopwatch = Stopwatch.StartNew();
         try
         {
             // Raise event for UI notification
@@ -413,13 +422,17 @@ public class WindowsNodeClient : WebSocketClientBase
             // Execute the command
             var response = await capability.ExecuteAsync(request);
             response.Id = requestId;
-            
+             
             await SendNodeInvokeResultAsync(requestId, response.Ok, response.Payload, response.Error);
+            stopwatch.Stop();
+            RaiseInvokeCompleted(requestId, command, response.Ok, response.Error, stopwatch.Elapsed);
         }
         catch (Exception ex)
         {
             _logger.Error($"[NODE] Command execution failed: {command}", ex);
             await SendNodeInvokeResultAsync(requestId, false, null, $"Execution failed: {ex.Message}");
+            stopwatch.Stop();
+            RaiseInvokeCompleted(requestId, command, false, $"Execution failed: {ex.Message}", stopwatch.Elapsed);
         }
     }
     
@@ -833,9 +846,11 @@ public class WindowsNodeClient : WebSocketClientBase
         {
             _logger.Warn($"No capability registered for command: {command}");
             await SendErrorResponseAsync(requestId, $"Command not supported: {command}");
+            RaiseInvokeCompleted(requestId, command, false, $"Command not supported: {command}", TimeSpan.Zero);
             return;
         }
         
+        var stopwatch = Stopwatch.StartNew();
         try
         {
             // Raise event for UI notification
@@ -844,14 +859,31 @@ public class WindowsNodeClient : WebSocketClientBase
             // Execute the command
             var response = await capability.ExecuteAsync(request);
             response.Id = requestId;
-            
+             
             await SendInvokeResponseAsync(response);
+            stopwatch.Stop();
+            RaiseInvokeCompleted(requestId, command, response.Ok, response.Error, stopwatch.Elapsed);
         }
         catch (Exception ex)
         {
             _logger.Error($"Command execution failed: {command}", ex);
             await SendErrorResponseAsync(requestId, $"Execution failed: {ex.Message}");
+            stopwatch.Stop();
+            RaiseInvokeCompleted(requestId, command, false, $"Execution failed: {ex.Message}", stopwatch.Elapsed);
         }
+    }
+
+    private void RaiseInvokeCompleted(string requestId, string command, bool ok, string? error, TimeSpan duration)
+    {
+        InvokeCompleted?.Invoke(this, new NodeInvokeCompletedEventArgs
+        {
+            RequestId = requestId,
+            Command = command,
+            Ok = ok,
+            Error = error,
+            Duration = duration,
+            NodeId = _nodeId ?? _deviceIdentity.DeviceId
+        });
     }
     
     private async Task SendInvokeResponseAsync(NodeInvokeResponse response)

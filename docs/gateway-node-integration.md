@@ -410,12 +410,14 @@ When shipping the Windows node, README/wiki should tell users:
 
 > **First-time setup**: After pairing your Windows node, add these commands to your gateway config:
 > ```bash
-> openclaw config set gateway.nodes.allowCommands '["canvas.present", "canvas.hide", "canvas.navigate", "canvas.eval", "canvas.snapshot", "canvas.a2ui.push", "canvas.a2ui.reset", "camera.list", "camera.snap", "camera.clip", "screen.snapshot", "location.get", "system.execApprovals.get", "system.execApprovals.set"]'
+> openclaw config set gateway.nodes.allowCommands '["canvas.present", "canvas.hide", "canvas.navigate", "canvas.eval", "canvas.snapshot", "canvas.a2ui.push", "canvas.a2ui.pushJSONL", "canvas.a2ui.reset", "camera.list", "screen.snapshot", "location.get", "device.info", "device.status", "system.execApprovals.get", "system.execApprovals.set"]'
 > openclaw gateway restart
 > ```
 > Then re-pair the node (`openclaw devices reject <old-id>` + re-approve).
 >
-> Add `screen.record` only when you explicitly want to allow privacy-sensitive screen recording.
+> Add `camera.snap`, `camera.clip`, and `screen.record` only when you explicitly want to allow privacy-sensitive camera or screen capture.
+>
+> The Windows tray Command Center (`openclaw://commandcenter`) surfaces these policy problems directly: it separates safe companion allowlist fixes from privacy-sensitive opt-ins and provides copyable repair text for safe fixes or pending pairing approval.
 
 ---
 

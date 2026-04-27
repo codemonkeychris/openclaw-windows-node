@@ -97,6 +97,7 @@ Modern Windows 11-style system tray companion that connects to your local OpenCl
 - 🔄 **Auto-updates** - Automatic updates from GitHub Releases
 - 🌐 **Web Chat** - Embedded chat window with WebView2
 - 📊 **Live Status** - Real-time sessions, channels, and usage display
+- 🧭 **Command Center** - Dense gateway, channel, usage, node, pairing, and allowlist diagnostics from one window
 - ⚡ **Activity Stream** - Dedicated flyout for live session, usage, node, and notification events
 - 🔔 **Toast Notifications** - Clickable Windows notifications with [smart categorization](docs/NOTIFICATION_CATEGORIZATION.md)
 - 📡 **Channel Control** - Start/stop Telegram & WhatsApp from the menu
@@ -122,6 +123,7 @@ If Quick Send fails with `pairing required` / `NOT_PAIRED`, that is a **device a
 
 ### Menu Sections
 - **Status** - Gateway connection status with click-to-view details
+- **Command Center** - Status detail window with diagnostics, channel health, usage, sessions, nodes, and copyable repair commands
 - **Sessions** - Active agent sessions with preview and per-session controls
 - **Usage** - Provider/cost summary with quick jump to activity details
 - **Channels** - Telegram/WhatsApp status with toggle control
@@ -171,9 +173,11 @@ When Node Mode is enabled in Settings, your Windows PC becomes a **node** that t
 | Capability | Commands | Description |
 |------------|----------|-------------|
 | **System** | `system.notify`, `system.run`, `system.run.prepare`, `system.which`, `system.execApprovals.get`, `system.execApprovals.set` | Show Windows toast notifications, execute commands with policy controls |
-| **Canvas** | `canvas.present`, `canvas.hide`, `canvas.navigate`, `canvas.eval`, `canvas.snapshot`, `canvas.a2ui.push`, `canvas.a2ui.reset` | Display and control a WebView2 window |
+| **Canvas** | `canvas.present`, `canvas.hide`, `canvas.navigate`, `canvas.eval`, `canvas.snapshot`, `canvas.a2ui.push`, `canvas.a2ui.pushJSONL`, `canvas.a2ui.reset` | Display and control a WebView2 window |
 | **Screen** | `screen.snapshot`, `screen.record` | Capture screenshots and fixed-duration MP4 screen recordings |
 | **Camera** | `camera.list`, `camera.snap`, `camera.clip` | Enumerate cameras and capture still photos or short video clips |
+| **Location** | `location.get` | Return Windows geolocation when permission is available |
+| **Device** | `device.info`, `device.status` | Return Windows host/app metadata and lightweight status |
 
 #### Node Setup
 
@@ -258,6 +262,16 @@ When Node Mode is enabled in Settings, your Windows PC becomes a **node** that t
     > 🔒 **Exec Policy**: `system.run` is gated by an approval policy on the Windows node at `%LOCALAPPDATA%\OpenClawTray\exec-policy.json` (schema: `{ "defaultAction": "...", "rules": [...] }`). This is separate from gateway-side `~/.openclaw/exec-approvals.json`.
     >
     > Rules are matched against the full command line. Known wrapper payloads such as `cmd /c ...`, `powershell -Command ...`, `pwsh -EncodedCommand ...`, and `bash -c ...` are also evaluated before execution. Dangerous environment overrides like `PATH`, `PATHEXT`, `NODE_OPTIONS`, `GIT_SSH_COMMAND`, `LD_*`, and `DYLD_*` are rejected.
+
+#### Command Center diagnostics
+
+Open the status detail/Command Center from the tray menu or with `openclaw://commandcenter`. It shows:
+
+- channel health from gateway `health` events, including node-mode health received without a separate operator connection
+- active sessions, usage/cost data, node inventory, declared commands, and Mac parity notes
+- allowlist diagnostics that separate safe companion commands from privacy-sensitive opt-ins like `screen.record`, `camera.snap`, and `camera.clip`
+- copyable repair commands for safe allowlist fixes and pending pairing approval
+- recent activity and node invoke results through the Activity Stream, storing command names/status/duration only (not payloads, screenshots, recordings, or secrets)
     >
     > ```bash
     > openclaw nodes invoke --node <id> --command system.execApprovals.set --params '{"rules":[{"pattern":"powershell.exe","action":"allow"},{"pattern":"pwsh.exe","action":"allow"},{"pattern":"echo *","action":"allow"},{"pattern":"*","action":"deny"}],"defaultAction":"deny"}'

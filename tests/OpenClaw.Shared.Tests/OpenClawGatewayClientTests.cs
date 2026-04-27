@@ -924,12 +924,13 @@ public class OpenClawGatewayClientTests
                   "nodeId": "node-online",
                   "displayName": "Windows Node",
                   "status": "connected",
-                  "platform": "windows",
-                  "mode": "node",
-                  "declaredCommands": ["system.run", "canvas.present"],
-                  "caps": ["system"],
-                  "lastSeenAt": 1739760000000
-                },
+                   "platform": "windows",
+                   "mode": "node",
+                   "declaredCommands": ["system.run", "canvas.present"],
+                   "caps": ["system"],
+                   "permissions": { "screen.record": true, "camera.snap": false },
+                   "lastSeenAt": 1739760000000
+                 },
                 {
                   "deviceId": "node-offline",
                   "name": "Mac Node",
@@ -949,9 +950,15 @@ public class OpenClawGatewayClientTests
         Assert.True(nodes[0].IsOnline);
         Assert.Equal(2, nodes[0].CommandCount);
         Assert.Equal(1, nodes[0].CapabilityCount);
+        Assert.Equal(["system.run", "canvas.present"], nodes[0].Commands);
+        Assert.Equal(["system"], nodes[0].Capabilities);
+        Assert.True(nodes[0].Permissions["screen.record"]);
+        Assert.False(nodes[0].Permissions["camera.snap"]);
 
         Assert.Equal("node-offline", nodes[1].NodeId);
         Assert.False(nodes[1].IsOnline);
+        Assert.Empty(nodes[1].Commands);
+        Assert.Equal(["camera"], nodes[1].Capabilities);
     }
 
     [Fact]

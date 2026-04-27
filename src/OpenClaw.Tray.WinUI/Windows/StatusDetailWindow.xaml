@@ -11,7 +11,7 @@
     </Window.SystemBackdrop>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24">
-        <StackPanel Spacing="16" MaxWidth="400">
+        <StackPanel Spacing="16" MaxWidth="520">
             
             <!-- Status Header -->
             <StackPanel Orientation="Horizontal" Spacing="12">
@@ -26,8 +26,64 @@
                 </StackPanel>
             </StackPanel>
 
+            <!-- Overview Section -->
+            <StackPanel x:Name="OverviewSection" AutomationProperties.AutomationId="CommandCenterOverviewSection" Spacing="8">
+                <TextBlock Text="COMMAND CENTER" Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontWeight="Bold"/>
+                <Grid Padding="12" CornerRadius="8"
+                      Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                      ColumnSpacing="16" RowSpacing="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                    </Grid.RowDefinitions>
+                    <TextBlock x:Name="OverviewChannelsText" Grid.Row="0" Grid.Column="0" Text="Channels: 0"/>
+                    <TextBlock x:Name="OverviewSessionsText" Grid.Row="0" Grid.Column="1" Text="Sessions: 0"/>
+                    <TextBlock x:Name="OverviewNodesText" Grid.Row="1" Grid.Column="0" Text="Nodes: 0"/>
+                    <TextBlock x:Name="OverviewWarningsText" Grid.Row="1" Grid.Column="1" Text="Warnings: 0"/>
+                </Grid>
+            </StackPanel>
+
+            <!-- Diagnostics Section -->
+            <StackPanel x:Name="WarningsSection" AutomationProperties.AutomationId="CommandCenterDiagnosticsSection" Spacing="8" Visibility="Collapsed">
+                <TextBlock Text="DIAGNOSTICS" Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontWeight="Bold"/>
+                <ItemsControl x:Name="WarningsList" AutomationProperties.AutomationId="CommandCenterWarningsList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Padding="8" Margin="0,2" CornerRadius="4"
+                                  Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Icon}" Grid.Column="0" Margin="0,0,8,0"/>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                     <TextBlock Text="{Binding Detail}"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                TextWrapping="Wrap"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                     <Button Content="{Binding RepairAction}"
+                                             Tag="{Binding CopyText}"
+                                             Visibility="{Binding CopyVisibility}"
+                                             Click="OnCopyWarningFix"
+                                             AutomationProperties.AutomationId="CommandCenterCopyWarningFixButton"
+                                             Margin="0,8,0,0"
+                                             HorizontalAlignment="Left"/>
+                                 </StackPanel>
+                             </Grid>
+                         </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
             <!-- Usage Section -->
-            <StackPanel x:Name="UsageSection" Spacing="8">
+            <StackPanel x:Name="UsageSection" AutomationProperties.AutomationId="CommandCenterUsageSection" Spacing="8">
                 <TextBlock x:Uid="StatusUsageHeader" Text="USAGE" Style="{StaticResource CaptionTextBlockStyle}"
                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontWeight="Bold"/>
                 
@@ -57,11 +113,11 @@
             </StackPanel>
 
             <!-- Sessions Section -->
-            <StackPanel x:Name="SessionsSection" Spacing="8">
+            <StackPanel x:Name="SessionsSection" AutomationProperties.AutomationId="CommandCenterSessionsSection" Spacing="8">
                 <TextBlock x:Uid="StatusSessionsHeader" Text="ACTIVE SESSIONS" Style="{StaticResource CaptionTextBlockStyle}"
                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontWeight="Bold"/>
                 
-                <ItemsControl x:Name="SessionsList">
+                <ItemsControl x:Name="SessionsList" AutomationProperties.AutomationId="CommandCenterSessionsList">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Grid Padding="8" Margin="0,2" CornerRadius="4"
@@ -90,11 +146,11 @@
             </StackPanel>
 
             <!-- Channels Section -->
-            <StackPanel x:Name="ChannelsSection" Spacing="8">
+            <StackPanel x:Name="ChannelsSection" AutomationProperties.AutomationId="CommandCenterChannelsSection" Spacing="8">
                 <TextBlock x:Uid="StatusChannelsHeader" Text="CHANNELS" Style="{StaticResource CaptionTextBlockStyle}"
                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontWeight="Bold"/>
                 
-                <ItemsControl x:Name="ChannelsList">
+                <ItemsControl x:Name="ChannelsList" AutomationProperties.AutomationId="CommandCenterChannelsList">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Grid Padding="8" Margin="0,2" CornerRadius="4"
@@ -105,12 +161,53 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{Binding StatusIcon}" Grid.Column="0" Margin="0,0,8,0"/>
-                                <TextBlock Text="{Binding Name}" Grid.Column="1"/>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding DetailText}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
                                 <TextBlock Text="{Binding StatusText}" Grid.Column="2"/>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+            </StackPanel>
+
+            <!-- Nodes Section -->
+            <StackPanel x:Name="NodesSection" AutomationProperties.AutomationId="CommandCenterNodesSection" Spacing="8">
+                <TextBlock Text="NODES" Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontWeight="Bold"/>
+                <ItemsControl x:Name="NodesList" AutomationProperties.AutomationId="CommandCenterNodesList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Padding="8" Margin="0,2" CornerRadius="4"
+                                  Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding StatusIcon}" Grid.Column="0" Margin="0,0,8,0"/>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding DetailText}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding CommandText}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock x:Name="NoNodesText" Text="No nodes reported"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           Visibility="Collapsed"/>
             </StackPanel>
 
             <!-- Refresh Button -->

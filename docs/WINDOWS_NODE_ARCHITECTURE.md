@@ -38,7 +38,7 @@ Related issues: #5 (Canvas Panel), #6 (Skills Settings UI), #7 (DEVELOPMENT.md),
 | `OpenClaw.Shared` | ✅ Working | Gateway WebSocket client library (.NET) |
 | `OpenClaw.Tray.WinUI` | ✅ Working | System tray app — status, Quick Send, WebChat (WebView2), toast notifications, channel control |
 | `OpenClaw.CommandPalette` | ✅ Working | PowerToys extension for quick commands |
-| Windows Node | ✅ Implemented | Canvas, screen, camera, system.run, notifications — all working via Node Mode |
+| Windows Node | ✅ Implemented | Canvas, screen, camera, location, device info/status, system.run, notifications — all working via Node Mode |
 | Windows Gateway | ❌ Unexplored | Gateway runs in WSL2 only |
 
 ### How Scott uses it today
@@ -142,7 +142,7 @@ The gold standard. Everything works out of the box. This is what Windows should 
 | **Setup complexity** | Medium — WSL2 + openclaw + configure tray app to point at `ws://localhost:18789` |
 | **UX Rating** | ⭐⭐⭐ Nice UI wrapper but agent still can't see or interact with Windows |
 
-This is what the tray app provides *today*. Quick Send, embedded WebChat, status display. But it's a viewport into the agent, not a bridge for the agent to interact with Windows.
+This operator-only mode provides Quick Send, embedded WebChat, Command Center diagnostics, activity stream, and status display. But without Node Mode it is still a viewport into the agent, not a bridge for the agent to interact with Windows.
 
 ---
 
@@ -158,6 +158,8 @@ This is what the tray app provides *today*. Quick Send, embedded WebChat, status
 | **UX Rating** | ⭐⭐⭐⭐ Agent can now see and interact with Windows! |
 
 **This is the sweet spot for Phase 1.** The gateway stays in WSL2 (proven, works), but the tray app lights up all the Windows-native capabilities. The agent gains eyes and hands on Windows.
+
+The tray now also has a Command Center surface that combines gateway channel health, sessions, usage/cost, node inventory, pairing state, command allowlist diagnostics, and recent invoke activity. It is read-only by default and does not invoke camera or screen commands while diagnosing capability health.
 
 ---
 

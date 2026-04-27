@@ -34,6 +34,12 @@ The Windows Node feature allows the tray app to receive commands from the OpenCl
 - When the agent captures your screen, you should see "📸 Screen Captured" toast
 - This is throttled to max once per 10 seconds
 
+### 4. Command Center
+- Open the tray status detail or launch `openclaw://commandcenter`
+- In Node Mode, verify the window shows gateway channel health from node `health` events plus a synthesized local Windows node when operator `node.list` is not connected
+- Check diagnostics for pairing approval, stale health, all-stopped channels, allowlist filtering, missing `browser.proxy` parity, and usage-cost gaps
+- Use "Copy fix" only for safe repair commands; privacy-sensitive commands remain informational unless you explicitly opt in on the gateway
+
 ## What Requires Gateway Support
 
 These features need the gateway to send `node.invoke` commands:
@@ -70,6 +76,7 @@ When the node connects, it advertises these capabilities:
 - **URL Validation**: Canvas blocks `file://`, `javascript:`, localhost, private IPs, IPv6 localhost
 - **Screen Capture Notification**: User is notified when screen snapshots are captured
 - **Screen Recording Allowlist**: `screen.record` must be explicitly allowed by the gateway and does not leave a hidden local MP4 copy on Windows
+- **Command Center Redaction**: recent node invoke activity records command name, status, duration, node id, and privacy class only; it does not store base64 payloads, screenshots, recordings, tokens, or command arguments
 - **Node Mode Toggle**: Must be explicitly enabled by user
 - **Command Validation**: Only alphanumeric commands with dots/hyphens allowed
 
@@ -106,9 +113,11 @@ When the node connects, it advertises these capabilities:
 4. ~~**A2UI pushJSONL alias + device status**~~ ✅ Implemented
    - Legacy `canvas.a2ui.pushJSONL`
    - Safe `device.info` / `device.status`
-5. **Packaging & consent prompts**
+5. ~~**Command Center diagnostics**~~ ✅ Implemented
+   - Channel/node/usage/pairing/allowlist diagnostics and recent invoke timeline
+6. **Packaging & consent prompts**
    - MSIX packaging with camera/screen capabilities for system prompts
-6. **Test matrix & polish**
+7. **Test matrix & polish**
    - Canvas/screen/camera regression tests
    - Handle timeouts/disconnects, reduce verbose logging
 

@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Toolkit.Uwp.Notifications;
@@ -40,6 +42,8 @@ public class NodeService : IDisposable
     public event EventHandler<ConnectionStatus>? StatusChanged;
     public event EventHandler<SystemNotifyArgs>? NotificationRequested;
     public event EventHandler<PairingStatusEventArgs>? PairingStatusChanged;
+    public event EventHandler<ChannelHealth[]>? ChannelHealthUpdated;
+    public event EventHandler<NodeInvokeCompletedEventArgs>? InvokeCompleted;
     
     public bool IsConnected => _nodeClient?.IsConnected ?? false;
     public string? NodeId => _nodeClient?.NodeId;
@@ -75,6 +79,8 @@ public class NodeService : IDisposable
         _nodeClient = new WindowsNodeClient(gatewayUrl, token, _dataPath, _logger, bootstrapToken);
         _nodeClient.StatusChanged += OnNodeStatusChanged;
         _nodeClient.PairingStatusChanged += OnPairingStatusChanged;
+        _nodeClient.HealthReceived += OnNodeHealthReceived;
+        _nodeClient.InvokeCompleted += OnNodeInvokeCompleted;
         
         // Register capabilities
         RegisterCapabilities();
@@ -154,6 +160,35 @@ public class NodeService : IDisposable
         
         _logger.Info("All capabilities registered");
     }
+
+    public GatewayNodeInfo? GetLocalNodeInfo()
+    {
+        if (_nodeClient == null)
+            return null;
+
+        var capabilities = _nodeClient.Capabilities.Select(c => c.Category).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var commands = _nodeClient.Capabilities.SelectMany(c => c.Commands).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        return new GatewayNodeInfo
+        {
+            NodeId = _nodeClient.NodeId ?? _nodeClient.FullDeviceId ?? "",
+            DisplayName = $"Windows Node ({Environment.MachineName})",
+            Mode = "node",
+            Status = IsConnected ? "connected" : "disconnected",
+            Platform = "windows",
+            LastSeen = DateTime.UtcNow,
+            IsOnline = IsConnected,
+            Capabilities = capabilities,
+            Commands = commands,
+            CapabilityCount = capabilities.Count,
+            CommandCount = commands.Count,
+            Permissions = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["camera.capture"] = true,
+                ["screen.record"] = true
+            }
+        };
+    }
     
     private void OnNodeStatusChanged(object? sender, ConnectionStatus status)
     {
@@ -165,6 +200,23 @@ public class NodeService : IDisposable
     {
         _logger.Info($"Pairing status changed: {args.Status} (device: {args.DeviceId.Substring(0, 16)}...)");
         PairingStatusChanged?.Invoke(this, args);
+    }
+
+    private void OnNodeHealthReceived(object? sender, JsonElement payload)
+    {
+        if (payload.TryGetProperty("channels", out var channels))
+        {
+            var parsed = ChannelHealthParser.Parse(channels);
+            _logger.Info(parsed.Length > 0
+                ? $"Node health channels: {string.Join(", ", parsed.Select(c => $"{c.Name}={c.Status}"))}"
+                : "Node health channels: none");
+            ChannelHealthUpdated?.Invoke(this, parsed);
+        }
+    }
+
+    private void OnNodeInvokeCompleted(object? sender, NodeInvokeCompletedEventArgs args)
+    {
+        InvokeCompleted?.Invoke(this, args);
     }
     
     #region System Capability Handlers

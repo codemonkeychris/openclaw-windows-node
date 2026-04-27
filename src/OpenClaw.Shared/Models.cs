@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text.Json;
 
 namespace OpenClaw.Shared;
 
@@ -169,6 +170,60 @@ public class ChannelHealth
 
     private static string Capitalize(string s) =>
         string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..];
+}
+
+public static class ChannelHealthParser
+{
+    public static ChannelHealth[] Parse(JsonElement channels)
+    {
+        if (channels.ValueKind != JsonValueKind.Object)
+            return [];
+
+        var healthList = new List<ChannelHealth>();
+        foreach (var prop in channels.EnumerateObject())
+        {
+            var ch = new ChannelHealth { Name = prop.Name };
+            var val = prop.Value;
+
+            var isRunning = TryGetBool(val, "running");
+            var isConfigured = TryGetBool(val, "configured");
+            var isLinked = TryGetBool(val, "linked");
+            var probeOk = val.TryGetProperty("probe", out var probe) && TryGetBool(probe, "ok");
+            var hasError = val.TryGetProperty("lastError", out var lastError) && lastError.ValueKind != JsonValueKind.Null;
+
+            ch.IsLinked = isLinked;
+            if (val.TryGetProperty("status", out var status) && status.ValueKind == JsonValueKind.String)
+                ch.Status = status.GetString() ?? "unknown";
+            else if (hasError)
+                ch.Status = "error";
+            else if (isRunning)
+                ch.Status = "running";
+            else if (isConfigured && (probeOk || isLinked))
+                ch.Status = "ready";
+            else if (isConfigured && !hasError)
+                ch.Status = "ready";
+            else
+                ch.Status = "not configured";
+
+            ch.Error = GetString(val, "error") ?? GetString(val, "lastError");
+            ch.AuthAge = GetString(val, "authAge");
+            ch.Type = GetString(val, "type");
+
+            healthList.Add(ch);
+        }
+
+        return healthList.ToArray();
+    }
+
+    private static bool TryGetBool(JsonElement parent, string property) =>
+        parent.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.True;
+
+    private static string? GetString(JsonElement parent, string property)
+    {
+        if (!parent.TryGetProperty(property, out var value) || value.ValueKind != JsonValueKind.String)
+            return null;
+        return value.GetString();
+    }
 }
 
 public class SessionInfo
@@ -428,6 +483,9 @@ public class GatewayNodeInfo
     public bool IsOnline { get; set; }
     public int CapabilityCount { get; set; }
     public int CommandCount { get; set; }
+    public List<string> Capabilities { get; set; } = new();
+    public List<string> Commands { get; set; } = new();
+    public Dictionary<string, bool> Permissions { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public string ShortId => NodeId.Length <= 12 ? NodeId : NodeId[..12] + "…";
 
@@ -458,6 +516,325 @@ public class GatewayNodeInfo
     }
 
     private static string FormatAge(DateTime timestampUtc) => ModelFormatting.FormatAge(timestampUtc);
+}
+
+public enum GatewayDiagnosticSeverity
+{
+    Info,
+    Warning,
+    Critical
+}
+
+public class GatewayDiagnosticWarning
+{
+    public GatewayDiagnosticSeverity Severity { get; set; } = GatewayDiagnosticSeverity.Info;
+    public string Category { get; set; } = "general";
+    public string Title { get; set; } = "";
+    public string Detail { get; set; } = "";
+    public string? RepairAction { get; set; }
+    public string? CopyText { get; set; }
+}
+
+public class ChannelCommandCenterInfo
+{
+    public string Name { get; set; } = "";
+    public string Status { get; set; } = "unknown";
+    public bool IsLinked { get; set; }
+    public string? Error { get; set; }
+    public string? AuthAge { get; set; }
+    public string? Type { get; set; }
+    public bool CanStart { get; set; }
+    public bool CanStop { get; set; }
+
+    public static ChannelCommandCenterInfo FromHealth(ChannelHealth health)
+    {
+        var isHealthy = ChannelHealth.IsHealthyStatus(health.Status);
+        var hasName = !string.IsNullOrWhiteSpace(health.Name);
+        return new ChannelCommandCenterInfo
+        {
+            Name = health.Name,
+            Status = health.Status,
+            IsLinked = health.IsLinked,
+            Error = health.Error,
+            AuthAge = health.AuthAge,
+            Type = health.Type,
+            CanStart = hasName && !isHealthy,
+            CanStop = hasName && isHealthy
+        };
+    }
+}
+
+public class NodeCapabilityHealthInfo
+{
+    public string NodeId { get; set; } = "";
+    public string DisplayName { get; set; } = "";
+    public string? Platform { get; set; }
+    public bool IsOnline { get; set; }
+    public List<string> Capabilities { get; set; } = new();
+    public List<string> Commands { get; set; } = new();
+    public Dictionary<string, bool> Permissions { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public List<string> SafeDeclaredCommands { get; set; } = new();
+    public List<string> DangerousDeclaredCommands { get; set; } = new();
+    public List<string> WindowsSpecificDeclaredCommands { get; set; } = new();
+    public List<string> BlockedDeclaredCommands { get; set; } = new();
+    public List<string> MissingSafeAllowlistCommands { get; set; } = new();
+    public List<string> MissingDangerousAllowlistCommands { get; set; } = new();
+    public List<string> MissingMacParityCommands { get; set; } = new();
+    public List<GatewayDiagnosticWarning> Warnings { get; set; } = new();
+
+    public static NodeCapabilityHealthInfo FromNode(GatewayNodeInfo node)
+    {
+        var commandSet = new HashSet<string>(node.Commands, StringComparer.OrdinalIgnoreCase);
+        var platform = node.Platform ?? "";
+        var isWindows = platform.Contains("windows", StringComparison.OrdinalIgnoreCase)
+            || platform.Contains("win32", StringComparison.OrdinalIgnoreCase);
+
+        var info = new NodeCapabilityHealthInfo
+        {
+            NodeId = node.NodeId,
+            DisplayName = string.IsNullOrWhiteSpace(node.DisplayName) ? node.ShortId : node.DisplayName,
+            Platform = node.Platform,
+            IsOnline = node.IsOnline,
+            Capabilities = node.Capabilities.ToList(),
+            Commands = node.Commands.ToList(),
+            Permissions = new Dictionary<string, bool>(node.Permissions, StringComparer.OrdinalIgnoreCase),
+            SafeDeclaredCommands = CommandCenterCommandGroups.SafeCompanionCommands
+                .Where(commandSet.Contains)
+                .ToList(),
+            DangerousDeclaredCommands = CommandCenterCommandGroups.DangerousCommands
+                .Where(commandSet.Contains)
+                .ToList(),
+            WindowsSpecificDeclaredCommands = CommandCenterCommandGroups.WindowsSpecificCommands
+                .Where(commandSet.Contains)
+                .ToList()
+        };
+
+        foreach (var command in info.Commands)
+        {
+            if (!CommandCenterDiagnostics.TryGetCommandPermission(info.Permissions, command, out var allowed) || allowed)
+                continue;
+
+            info.BlockedDeclaredCommands.Add(command);
+            if (CommandCenterCommandGroups.SafeCompanionCommandSet.Contains(command))
+                info.MissingSafeAllowlistCommands.Add(command);
+            else if (CommandCenterCommandGroups.DangerousCommandSet.Contains(command))
+                info.MissingDangerousAllowlistCommands.Add(command);
+        }
+
+        if (isWindows)
+        {
+            info.MissingMacParityCommands = CommandCenterCommandGroups.MacNodeParityCommands
+                .Where(command => !commandSet.Contains(command))
+                .ToList();
+        }
+
+        info.Warnings = CommandCenterDiagnostics.BuildNodeWarnings(info);
+        return info;
+    }
+}
+
+public class GatewayCommandCenterState
+{
+    public ConnectionStatus ConnectionStatus { get; set; } = ConnectionStatus.Disconnected;
+    public DateTime LastRefresh { get; set; } = DateTime.UtcNow;
+    public List<ChannelCommandCenterInfo> Channels { get; set; } = new();
+    public List<SessionInfo> Sessions { get; set; } = new();
+    public GatewayUsageInfo? Usage { get; set; }
+    public GatewayUsageStatusInfo? UsageStatus { get; set; }
+    public GatewayCostUsageInfo? UsageCost { get; set; }
+    public List<NodeCapabilityHealthInfo> Nodes { get; set; } = new();
+    public List<GatewayDiagnosticWarning> Warnings { get; set; } = new();
+}
+
+public static class CommandCenterCommandGroups
+{
+    public static readonly string[] SafeCompanionCommands =
+    [
+        "canvas.present",
+        "canvas.hide",
+        "canvas.navigate",
+        "canvas.eval",
+        "canvas.snapshot",
+        "canvas.a2ui.push",
+        "canvas.a2ui.pushJSONL",
+        "canvas.a2ui.reset",
+        "camera.list",
+        "location.get",
+        "screen.snapshot",
+        "device.info",
+        "device.status"
+    ];
+
+    public static readonly FrozenSet<string> SafeCompanionCommandSet =
+        SafeCompanionCommands.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
+    public static readonly string[] DangerousCommands =
+    [
+        "camera.snap",
+        "camera.clip",
+        "screen.record"
+    ];
+
+    public static readonly FrozenSet<string> DangerousCommandSet =
+        DangerousCommands.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
+    public static readonly string[] WindowsSpecificCommands =
+    [
+        "system.execApprovals.get",
+        "system.execApprovals.set"
+    ];
+
+    public static readonly string[] MacNodeParityCommands =
+    [
+        .. SafeCompanionCommands,
+        .. DangerousCommands,
+        "system.notify",
+        "system.run",
+        "system.which",
+        "browser.proxy"
+    ];
+}
+
+public static class CommandCenterDiagnostics
+{
+    private static readonly IReadOnlyDictionary<GatewayDiagnosticSeverity, int> s_severityPriority =
+        new Dictionary<GatewayDiagnosticSeverity, int>
+        {
+            [GatewayDiagnosticSeverity.Critical] = 0,
+            [GatewayDiagnosticSeverity.Warning] = 1,
+            [GatewayDiagnosticSeverity.Info] = 2
+        };
+
+    public static List<GatewayDiagnosticWarning> SortAndDedupeWarnings(IEnumerable<GatewayDiagnosticWarning> warnings) =>
+        warnings
+            .Where(w => !string.IsNullOrWhiteSpace(w.Title))
+            .GroupBy(w => $"{w.Severity}|{w.Category}|{w.Title}|{w.Detail}", StringComparer.Ordinal)
+            .Select(g => g.First())
+            .OrderBy(w => s_severityPriority[w.Severity])
+            .ThenBy(w => w.Category, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(w => w.Title, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    public static string BuildAllowCommandsRepairCommand(IEnumerable<string> commands)
+    {
+        var json = "[" + string.Join(",", commands
+            .Where(command => !string.IsNullOrWhiteSpace(command))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .Select(command => $"\"{command}\"")) + "]";
+        return $"openclaw config set gateway.nodes.allowCommands '{json}'";
+    }
+
+    public static bool TryGetCommandPermission(
+        IReadOnlyDictionary<string, bool> permissions,
+        string command,
+        out bool allowed)
+    {
+        allowed = false;
+        if (string.IsNullOrWhiteSpace(command))
+            return false;
+
+        if (permissions.TryGetValue(command, out allowed))
+            return true;
+
+        if (permissions.TryGetValue($"commands.{command}", out allowed))
+            return true;
+
+        if (permissions.TryGetValue($"command:{command}", out allowed))
+            return true;
+
+        return false;
+    }
+
+    public static List<GatewayDiagnosticWarning> BuildNodeWarnings(NodeCapabilityHealthInfo node)
+    {
+        var warnings = new List<GatewayDiagnosticWarning>();
+
+        if (!node.IsOnline)
+        {
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Warning,
+                Category = "node",
+                Title = "Node offline",
+                Detail = $"{node.DisplayName} is not currently online."
+            });
+        }
+
+        if (node.Commands.Count == 0)
+        {
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Warning,
+                Category = "allowlist",
+                Title = "No node commands visible",
+                Detail = "The gateway did not report any commands for this node. It may be unpaired, filtered by policy, or connected to an older gateway."
+            });
+        }
+
+        if (node.MissingSafeAllowlistCommands.Count > 0)
+        {
+            var missing = string.Join(", ", node.MissingSafeAllowlistCommands);
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Warning,
+                Category = "allowlist",
+                Title = "Safe node commands are filtered by gateway policy",
+                Detail = $"{missing} {(node.MissingSafeAllowlistCommands.Count == 1 ? "is" : "are")} declared by the node but not allowed by gateway policy. After changing allowCommands, re-approve or re-pair the device if the gateway keeps an older command snapshot.",
+                RepairAction = "Copy safe allowlist repair command",
+                CopyText = BuildAllowCommandsRepairCommand(CommandCenterCommandGroups.SafeCompanionCommands)
+            });
+        }
+
+        if (node.DangerousDeclaredCommands.Count > 0)
+        {
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Info,
+                Category = "allowlist",
+                Title = "Privacy-sensitive commands require explicit opt-in",
+                Detail = string.Join(", ", node.DangerousDeclaredCommands) + " should only be available when explicitly allowed by gateway.nodes.allowCommands."
+            });
+        }
+
+        if (node.MissingDangerousAllowlistCommands.Count > 0)
+        {
+            var blocked = string.Join(", ", node.MissingDangerousAllowlistCommands);
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Info,
+                Category = "allowlist",
+                Title = "Privacy-sensitive commands are currently blocked",
+                Detail = $"{blocked} {(node.MissingDangerousAllowlistCommands.Count == 1 ? "is" : "are")} declared but filtered by gateway policy. Leave blocked unless you explicitly want camera or screen recording access for this node."
+            });
+        }
+
+        if (node.BlockedDeclaredCommands.Count > 0 &&
+            node.MissingSafeAllowlistCommands.Count == 0 &&
+            node.MissingDangerousAllowlistCommands.Count == 0)
+        {
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Info,
+                Category = "allowlist",
+                Title = "Some node commands are filtered",
+                Detail = string.Join(", ", node.BlockedDeclaredCommands) + " are declared but not allowed by gateway policy."
+            });
+        }
+
+        if (node.MissingMacParityCommands.Contains("browser.proxy", StringComparer.OrdinalIgnoreCase))
+        {
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Info,
+                Category = "parity",
+                Title = "Browser proxy parity not implemented",
+                Detail = "Windows does not yet implement the Mac node's browser.proxy command."
+            });
+        }
+
+        return warnings;
+    }
 }
 
 /// <summary>Shared display-formatting helpers used by model classes.</summary>

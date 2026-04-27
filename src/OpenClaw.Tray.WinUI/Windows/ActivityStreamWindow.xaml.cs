@@ -6,6 +6,7 @@ using OpenClawTray.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Windows.ApplicationModel.DataTransfer;
 using WinUIEx;
 
 namespace OpenClawTray.Windows;
@@ -131,6 +132,11 @@ public sealed partial class ActivityStreamWindow : WindowEx
             "usage" => "usage",
             "nodes" => "node",
             "notifications" => "notification",
+            "invokes" => "node.invoke",
+            "node.invoke" => "node.invoke",
+            "channel" => "channel",
+            "channels" => "channel",
+            "gateway" => "gateway",
             "all" => "all",
             "session" => "session",
             "node" => "node",
@@ -168,6 +174,14 @@ public sealed partial class ActivityStreamWindow : WindowEx
     private void OnOpenDashboard(object sender, RoutedEventArgs e)
     {
         _openDashboard(null);
+    }
+
+    private void OnCopySupportBundle(object sender, RoutedEventArgs e)
+    {
+        var package = new DataPackage();
+        package.SetText(ActivityStreamService.BuildSupportBundle());
+        Clipboard.SetContent(package);
+        Logger.Info("[ActivityStream] Copied support bundle");
     }
 
     private void OnClearAll(object sender, RoutedEventArgs e)

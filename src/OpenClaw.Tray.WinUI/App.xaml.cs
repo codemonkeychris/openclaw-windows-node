@@ -1857,7 +1857,15 @@ public partial class App : Application
             nodes.Add(NodeCapabilityHealthInfo.FromNode(localNode));
         }
 
+        var topology = GatewayTopologyClassifier.Classify(
+            _settings?.GatewayUrl,
+            _settings?.UseSshTunnel == true,
+            _settings?.SshTunnelHost,
+            _settings?.SshTunnelLocalPort ?? 0,
+            _settings?.SshTunnelRemotePort ?? 0);
+        var tunnel = BuildTunnelInfo();
         var warnings = nodes.SelectMany(n => n.Warnings).ToList();
+        warnings.AddRange(CommandCenterDiagnostics.BuildTopologyWarnings(topology, tunnel));
 
         if (!string.IsNullOrWhiteSpace(_authFailureMessage))
         {
@@ -1974,6 +1982,8 @@ public partial class App : Application
         {
             ConnectionStatus = _currentStatus,
             LastRefresh = _lastCheckTime.ToUniversalTime(),
+            Topology = topology,
+            Tunnel = tunnel,
             Channels = _lastChannels.Select(ChannelCommandCenterInfo.FromHealth).ToList(),
             Sessions = _lastSessions.ToList(),
             Usage = _lastUsage,
@@ -1981,6 +1991,45 @@ public partial class App : Application
             UsageCost = _lastUsageCost,
             Nodes = nodes,
             Warnings = CommandCenterDiagnostics.SortAndDedupeWarnings(warnings)
+        };
+    }
+
+    private TunnelCommandCenterInfo? BuildTunnelInfo()
+    {
+        if (_settings?.UseSshTunnel != true)
+        {
+            return null;
+        }
+
+        var localPort = _sshTunnelService is { CurrentLocalPort: > 0 }
+            ? _sshTunnelService.CurrentLocalPort
+            : _settings.SshTunnelLocalPort;
+        var remotePort = _sshTunnelService is { CurrentRemotePort: > 0 }
+            ? _sshTunnelService.CurrentRemotePort
+            : _settings.SshTunnelRemotePort;
+        var host = string.IsNullOrWhiteSpace(_sshTunnelService?.CurrentHost)
+            ? _settings.SshTunnelHost
+            : _sshTunnelService!.CurrentHost!;
+        var user = string.IsNullOrWhiteSpace(_sshTunnelService?.CurrentUser)
+            ? _settings.SshTunnelUser
+            : _sshTunnelService!.CurrentUser!;
+        var status = _sshTunnelService?.IsRunning == true
+            ? TunnelStatus.Up
+            : string.IsNullOrWhiteSpace(_sshTunnelService?.LastError)
+                ? TunnelStatus.Stopped
+                : TunnelStatus.Failed;
+
+        return new TunnelCommandCenterInfo
+        {
+            Status = status,
+            LocalEndpoint = $"127.0.0.1:{localPort}",
+            RemoteEndpoint = string.IsNullOrWhiteSpace(host)
+                ? $"127.0.0.1:{remotePort}"
+                : $"{host}:127.0.0.1:{remotePort}",
+            Host = host,
+            User = user,
+            LastError = _sshTunnelService?.LastError,
+            StartedAt = _sshTunnelService?.StartedAtUtc
         };
     }
 

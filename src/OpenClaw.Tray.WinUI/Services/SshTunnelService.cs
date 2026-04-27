@@ -25,12 +25,19 @@ public sealed class SshTunnelService : IDisposable
     }
 
     public bool IsRunning => _process is { HasExited: false };
+    public string? CurrentUser { get; private set; }
+    public string? CurrentHost { get; private set; }
+    public int CurrentRemotePort { get; private set; }
+    public int CurrentLocalPort { get; private set; }
+    public DateTime? StartedAtUtc { get; private set; }
+    public string? LastError { get; private set; }
 
     public void EnsureStarted(SettingsManager settings)
     {
         if (!settings.UseSshTunnel)
         {
             Stop();
+            LastError = null;
             return;
         }
 
@@ -85,6 +92,7 @@ public sealed class SshTunnelService : IDisposable
             try { _process.Dispose(); } catch { }
             _process = null;
             _lastSpec = null;
+            StartedAtUtc = null;
             _stopping = false;
         }
     }
@@ -133,6 +141,8 @@ public sealed class SshTunnelService : IDisposable
             else
             {
                 _logger.Warn($"SSH tunnel exited unexpectedly (code {exitCode})");
+                LastError = $"SSH tunnel exited unexpectedly with code {exitCode}.";
+                StartedAtUtc = null;
                 try { process.Dispose(); } catch { }
                 _process = null;
                 _lastSpec = null;
@@ -149,6 +159,7 @@ public sealed class SshTunnelService : IDisposable
         }
         catch (Exception ex)
         {
+            LastError = ex.Message;
             process.Dispose();
             throw new InvalidOperationException("Unable to start SSH tunnel process. Ensure OpenSSH client is installed and available in PATH.", ex);
         }
@@ -156,6 +167,12 @@ public sealed class SshTunnelService : IDisposable
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
         _process = process;
+        CurrentUser = user;
+        CurrentHost = host;
+        CurrentRemotePort = remotePort;
+        CurrentLocalPort = localPort;
+        StartedAtUtc = DateTime.UtcNow;
+        LastError = null;
 
         _logger.Info($"SSH tunnel started: 127.0.0.1:{localPort} -> 127.0.0.1:{remotePort} via {user}@{host}");
     }

@@ -962,6 +962,65 @@ public class CommandCenterModelTests
         Assert.Equal(GatewayDiagnosticSeverity.Warning, warnings[1].Severity);
         Assert.Equal(GatewayDiagnosticSeverity.Info, warnings[2].Severity);
     }
+
+    [Theory]
+    [InlineData("ws://localhost:18789", false, "", GatewayKind.WindowsNative)]
+    [InlineData("ws://127.0.0.1:18789", false, "", GatewayKind.WindowsNative)]
+    [InlineData("ws://192.168.1.20:18789", false, "", GatewayKind.RemoteLan)]
+    [InlineData("wss://openclaw.local:18789", false, "", GatewayKind.RemoteLan)]
+    [InlineData("wss://box.ts.net:18789", false, "", GatewayKind.Tailscale)]
+    [InlineData("ws://100.100.100.100:18789", false, "", GatewayKind.Tailscale)]
+    [InlineData("wss://example.com:18789", false, "", GatewayKind.Remote)]
+    [InlineData("ws://127.0.0.1:18789", true, "mac-mini", GatewayKind.MacOverSsh)]
+    public void GatewayTopologyClassifier_ClassifiesCommonTopologies(
+        string url,
+        bool useSshTunnel,
+        string sshHost,
+        GatewayKind expectedKind)
+    {
+        var topology = GatewayTopologyClassifier.Classify(url, useSshTunnel, sshHost, 18789, 18789);
+
+        Assert.Equal(expectedKind, topology.DetectedKind);
+    }
+
+    [Fact]
+    public void GatewayTopologyClassifier_InvalidUrl_IsUnknown()
+    {
+        var topology = GatewayTopologyClassifier.Classify("not a url", useSshTunnel: false);
+
+        Assert.Equal(GatewayKind.Unknown, topology.DetectedKind);
+        Assert.Equal("Gateway URL is missing or invalid.", topology.Detail);
+    }
+
+    [Fact]
+    public void BuildTopologyWarnings_WarnsForRemotePlaintextWebSocket()
+    {
+        var topology = GatewayTopologyClassifier.Classify("ws://example.com:18789", useSshTunnel: false);
+
+        var warnings = CommandCenterDiagnostics.BuildTopologyWarnings(topology, tunnel: null);
+
+        Assert.Contains(warnings, w =>
+            w.Category == "topology" &&
+            w.Title == "Remote gateway uses plaintext WebSocket");
+    }
+
+    [Fact]
+    public void BuildTopologyWarnings_WarnsWhenConfiguredTunnelIsDown()
+    {
+        var topology = GatewayTopologyClassifier.Classify("ws://127.0.0.1:18789", useSshTunnel: true, "mac-mini", 18789, 18789);
+        var tunnel = new TunnelCommandCenterInfo
+        {
+            Status = TunnelStatus.Failed,
+            LastError = "ssh exited"
+        };
+
+        var warnings = CommandCenterDiagnostics.BuildTopologyWarnings(topology, tunnel);
+
+        Assert.Contains(warnings, w =>
+            w.Category == "tunnel" &&
+            w.Title == "SSH tunnel failed" &&
+            w.Detail == "ssh exited");
+    }
 }
 
 public class SessionInfoAgeTextTests

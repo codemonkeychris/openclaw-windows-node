@@ -26,6 +26,42 @@
                 </StackPanel>
             </StackPanel>
 
+            <!-- Gateway Topology Section -->
+            <StackPanel x:Name="GatewayTopologySection" AutomationProperties.AutomationId="CommandCenterGatewayTopologySection" Spacing="8">
+                <TextBlock Text="GATEWAY TOPOLOGY" Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontWeight="Bold"/>
+                <Grid Padding="12" CornerRadius="8"
+                      Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                      ColumnSpacing="16" RowSpacing="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Kind:"/>
+                    <TextBlock x:Name="GatewayKindText" Grid.Row="0" Grid.Column="1"
+                               Text="Unknown" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="URL:"/>
+                    <TextBlock x:Name="GatewayUrlText" Grid.Row="1" Grid.Column="1"
+                               Text="n/a" TextWrapping="Wrap"/>
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Transport:"/>
+                    <TextBlock x:Name="GatewayTransportText" Grid.Row="2" Grid.Column="1"
+                               Text="unknown" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="TunnelLabelText" Grid.Row="3" Grid.Column="0" Text="Tunnel:" Visibility="Collapsed"/>
+                    <TextBlock x:Name="TunnelDetailText" Grid.Row="3" Grid.Column="1"
+                               Text="" TextWrapping="Wrap" Visibility="Collapsed"/>
+                </Grid>
+                <TextBlock x:Name="GatewayDetailText"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+
             <!-- Overview Section -->
             <StackPanel x:Name="OverviewSection" AutomationProperties.AutomationId="CommandCenterOverviewSection" Spacing="8">
                 <TextBlock Text="COMMAND CENTER" Style="{StaticResource CaptionTextBlockStyle}"

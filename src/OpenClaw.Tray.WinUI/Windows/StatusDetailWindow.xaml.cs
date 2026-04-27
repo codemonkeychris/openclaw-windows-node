@@ -53,6 +53,25 @@ public sealed partial class StatusDetailWindow : WindowEx
         StatusIcon.Glyph = glyph;
         StatusIcon.Foreground = new SolidColorBrush(color);
 
+        GatewayKindText.Text = state.Topology.DisplayName;
+        GatewayUrlText.Text = string.IsNullOrWhiteSpace(state.Topology.GatewayUrl)
+            ? "n/a"
+            : state.Topology.GatewayUrl;
+        GatewayTransportText.Text = state.Topology.Transport;
+        GatewayDetailText.Text = state.Topology.Detail;
+
+        if (state.Tunnel != null && state.Tunnel.Status != TunnelStatus.NotConfigured)
+        {
+            TunnelLabelText.Visibility = Visibility.Visible;
+            TunnelDetailText.Visibility = Visibility.Visible;
+            TunnelDetailText.Text = BuildTunnelDetail(state.Tunnel);
+        }
+        else
+        {
+            TunnelLabelText.Visibility = Visibility.Collapsed;
+            TunnelDetailText.Visibility = Visibility.Collapsed;
+        }
+
         OverviewChannelsText.Text = $"Channels: {state.Channels.Count(c => c.CanStop)}/{state.Channels.Count} ready";
         OverviewSessionsText.Text = $"Sessions: {state.Sessions.Count}";
         OverviewNodesText.Text = $"Nodes: {state.Nodes.Count(n => n.IsOnline)}/{state.Nodes.Count} online";
@@ -231,5 +250,24 @@ public sealed partial class StatusDetailWindow : WindowEx
         if (node.MissingMacParityCommands.Contains("browser.proxy", StringComparer.OrdinalIgnoreCase))
             parts.Add("missing browser.proxy");
         return parts.Count == 0 ? "no command details" : string.Join(" · ", parts);
+    }
+
+    private static string BuildTunnelDetail(TunnelCommandCenterInfo tunnel)
+    {
+        var parts = new List<string> { tunnel.Status.ToString() };
+        if (!string.IsNullOrWhiteSpace(tunnel.LocalEndpoint) &&
+            !string.IsNullOrWhiteSpace(tunnel.RemoteEndpoint))
+        {
+            parts.Add($"{tunnel.LocalEndpoint} -> {tunnel.RemoteEndpoint}");
+        }
+        if (tunnel.StartedAt.HasValue && tunnel.Status == TunnelStatus.Up)
+        {
+            parts.Add($"started {tunnel.StartedAt.Value.ToLocalTime():HH:mm:ss}");
+        }
+        if (!string.IsNullOrWhiteSpace(tunnel.LastError))
+        {
+            parts.Add(tunnel.LastError!);
+        }
+        return string.Join(" · ", parts);
     }
 }

@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Net;
 using System.Text.Json;
 
 namespace OpenClaw.Shared;
@@ -525,6 +526,51 @@ public enum GatewayDiagnosticSeverity
     Critical
 }
 
+public enum GatewayKind
+{
+    Unknown,
+    WindowsNative,
+    Wsl,
+    MacOverSsh,
+    Tailscale,
+    RemoteLan,
+    Remote
+}
+
+public enum TunnelStatus
+{
+    NotConfigured,
+    Stopped,
+    Starting,
+    Up,
+    Restarting,
+    Failed
+}
+
+public class GatewayTopologyInfo
+{
+    public GatewayKind DetectedKind { get; set; } = GatewayKind.Unknown;
+    public string DisplayName { get; set; } = "Unknown gateway";
+    public string GatewayUrl { get; set; } = "";
+    public string Host { get; set; } = "";
+    public string Transport { get; set; } = "unknown";
+    public string Detail { get; set; } = "Gateway topology has not been classified.";
+    public bool UsesSshTunnel { get; set; }
+    public bool IsLoopback { get; set; }
+    public bool IsPlaintextWebSocket { get; set; }
+}
+
+public class TunnelCommandCenterInfo
+{
+    public TunnelStatus Status { get; set; } = TunnelStatus.NotConfigured;
+    public string LocalEndpoint { get; set; } = "";
+    public string RemoteEndpoint { get; set; } = "";
+    public string? Host { get; set; }
+    public string? User { get; set; }
+    public string? LastError { get; set; }
+    public DateTime? StartedAt { get; set; }
+}
+
 public class GatewayDiagnosticWarning
 {
     public GatewayDiagnosticSeverity Severity { get; set; } = GatewayDiagnosticSeverity.Info;
@@ -637,6 +683,8 @@ public class GatewayCommandCenterState
 {
     public ConnectionStatus ConnectionStatus { get; set; } = ConnectionStatus.Disconnected;
     public DateTime LastRefresh { get; set; } = DateTime.UtcNow;
+    public GatewayTopologyInfo Topology { get; set; } = new();
+    public TunnelCommandCenterInfo? Tunnel { get; set; }
     public List<ChannelCommandCenterInfo> Channels { get; set; } = new();
     public List<SessionInfo> Sessions { get; set; } = new();
     public GatewayUsageInfo? Usage { get; set; }
@@ -746,6 +794,54 @@ public static class CommandCenterDiagnostics
         return false;
     }
 
+    public static List<GatewayDiagnosticWarning> BuildTopologyWarnings(
+        GatewayTopologyInfo topology,
+        TunnelCommandCenterInfo? tunnel)
+    {
+        var warnings = new List<GatewayDiagnosticWarning>();
+
+        if (topology.DetectedKind == GatewayKind.Unknown)
+        {
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Info,
+                Category = "topology",
+                Title = "Gateway topology is unknown",
+                Detail = "The gateway URL could not be classified. Check the configured gateway URL and tunnel settings."
+            });
+        }
+
+        if (topology.IsPlaintextWebSocket && !topology.IsLoopback)
+        {
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = GatewayDiagnosticSeverity.Warning,
+                Category = "topology",
+                Title = "Remote gateway uses plaintext WebSocket",
+                Detail = "Non-loopback ws:// gateway URLs should only be used on trusted local networks. Prefer wss:// or an SSH tunnel for remote gateways."
+            });
+        }
+
+        if (topology.UsesSshTunnel && tunnel is { Status: not TunnelStatus.Up })
+        {
+            warnings.Add(new GatewayDiagnosticWarning
+            {
+                Severity = tunnel.Status == TunnelStatus.Failed
+                    ? GatewayDiagnosticSeverity.Warning
+                    : GatewayDiagnosticSeverity.Info,
+                Category = "tunnel",
+                Title = tunnel.Status == TunnelStatus.Failed
+                    ? "SSH tunnel failed"
+                    : "SSH tunnel is not running",
+                Detail = string.IsNullOrWhiteSpace(tunnel.LastError)
+                    ? "Gateway settings require an SSH tunnel, but the tunnel is not currently up."
+                    : tunnel.LastError!
+            });
+        }
+
+        return warnings;
+    }
+
     public static List<GatewayDiagnosticWarning> BuildNodeWarnings(NodeCapabilityHealthInfo node)
     {
         var warnings = new List<GatewayDiagnosticWarning>();
@@ -835,6 +931,166 @@ public static class CommandCenterDiagnostics
 
         return warnings;
     }
+}
+
+public static class GatewayTopologyClassifier
+{
+    public static GatewayTopologyInfo Classify(
+        string? gatewayUrl,
+        bool useSshTunnel,
+        string? sshHost = null,
+        int sshLocalPort = 0,
+        int sshRemotePort = 0)
+    {
+        var normalized = GatewayUrlHelper.NormalizeForWebSocket(gatewayUrl);
+        Uri.TryCreate(normalized, UriKind.Absolute, out var uri);
+        var host = uri?.Host ?? "";
+        var isLoopback = IsLoopbackHost(host);
+        var isPlaintext = uri?.Scheme.Equals("ws", StringComparison.OrdinalIgnoreCase) == true;
+
+        if (useSshTunnel)
+        {
+            var tunnelHost = sshHost?.Trim() ?? "";
+            var detail = string.IsNullOrWhiteSpace(tunnelHost)
+                ? "SSH tunnel is enabled but the remote host is not configured."
+                : $"Local port {FormatPort(sshLocalPort)} forwards to {tunnelHost}:{FormatPort(sshRemotePort)}.";
+
+            return new GatewayTopologyInfo
+            {
+                DetectedKind = string.IsNullOrWhiteSpace(tunnelHost) ? GatewayKind.Unknown : GatewayKind.MacOverSsh,
+                DisplayName = string.IsNullOrWhiteSpace(tunnelHost) ? "SSH tunnel incomplete" : "Mac over SSH",
+                GatewayUrl = string.IsNullOrWhiteSpace(normalized) ? BuildLocalTunnelUrl(sshLocalPort) : GatewayUrlHelper.SanitizeForDisplay(normalized),
+                Host = string.IsNullOrWhiteSpace(host) ? "127.0.0.1" : host,
+                Transport = "ssh tunnel",
+                Detail = detail,
+                UsesSshTunnel = true,
+                IsLoopback = true,
+                IsPlaintextWebSocket = true
+            };
+        }
+
+        if (uri == null || string.IsNullOrWhiteSpace(host))
+        {
+            return new GatewayTopologyInfo
+            {
+                DetectedKind = GatewayKind.Unknown,
+                DisplayName = "Unknown gateway",
+                GatewayUrl = gatewayUrl?.Trim() ?? "",
+                Host = "",
+                Transport = "unknown",
+                Detail = "Gateway URL is missing or invalid.",
+                UsesSshTunnel = false,
+                IsLoopback = false,
+                IsPlaintextWebSocket = false
+            };
+        }
+
+        var kind = ClassifyHost(host, isLoopback);
+        return new GatewayTopologyInfo
+        {
+            DetectedKind = kind,
+            DisplayName = GetDisplayName(kind),
+            GatewayUrl = GatewayUrlHelper.SanitizeForDisplay(normalized),
+            Host = host,
+            Transport = GetTransport(kind, uri.Scheme),
+            Detail = BuildDetail(kind, host, uri.Scheme),
+            UsesSshTunnel = false,
+            IsLoopback = isLoopback,
+            IsPlaintextWebSocket = isPlaintext
+        };
+    }
+
+    private static GatewayKind ClassifyHost(string host, bool isLoopback)
+    {
+        if (isLoopback)
+            return GatewayKind.WindowsNative;
+
+        if (IsTailscaleHost(host))
+            return GatewayKind.Tailscale;
+
+        if (IsPrivateLanHost(host))
+            return GatewayKind.RemoteLan;
+
+        return GatewayKind.Remote;
+    }
+
+    private static bool IsLoopbackHost(string host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+            return false;
+
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address);
+    }
+
+    private static bool IsTailscaleHost(string host)
+    {
+        if (host.EndsWith(".ts.net", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (!IPAddress.TryParse(host, out var address))
+            return false;
+
+        var bytes = address.GetAddressBytes();
+        return address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork &&
+            bytes[0] == 100 &&
+            bytes[1] is >= 64 and <= 127;
+    }
+
+    private static bool IsPrivateLanHost(string host)
+    {
+        if (host.EndsWith(".local", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (!host.Contains('.', StringComparison.Ordinal) && !IPAddress.TryParse(host, out _))
+            return true;
+
+        if (!IPAddress.TryParse(host, out var address))
+            return false;
+
+        var bytes = address.GetAddressBytes();
+        if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+            return false;
+
+        return bytes[0] == 10 ||
+            (bytes[0] == 172 && bytes[1] is >= 16 and <= 31) ||
+            (bytes[0] == 192 && bytes[1] == 168);
+    }
+
+    private static string GetDisplayName(GatewayKind kind) => kind switch
+    {
+        GatewayKind.WindowsNative => "Windows native",
+        GatewayKind.Wsl => "WSL",
+        GatewayKind.MacOverSsh => "Mac over SSH",
+        GatewayKind.Tailscale => "Tailscale",
+        GatewayKind.RemoteLan => "Remote LAN",
+        GatewayKind.Remote => "Remote",
+        _ => "Unknown gateway"
+    };
+
+    private static string GetTransport(GatewayKind kind, string scheme) => kind switch
+    {
+        GatewayKind.Tailscale => $"{scheme} over tailnet",
+        GatewayKind.RemoteLan => $"{scheme} over LAN",
+        GatewayKind.Remote => $"{scheme} remote",
+        _ => scheme
+    };
+
+    private static string BuildDetail(GatewayKind kind, string host, string scheme) => kind switch
+    {
+        GatewayKind.WindowsNative => $"Loopback gateway at {host} using {scheme}. WSL detection will refine this later if needed.",
+        GatewayKind.Tailscale => $"Tailnet gateway at {host}.",
+        GatewayKind.RemoteLan => $"LAN/private gateway at {host}.",
+        GatewayKind.Remote => $"Remote gateway at {host}.",
+        _ => "Gateway topology has not been classified."
+    };
+
+    private static string BuildLocalTunnelUrl(int localPort) =>
+        localPort > 0 ? $"ws://127.0.0.1:{localPort}" : "ws://127.0.0.1";
+
+    private static string FormatPort(int port) => port > 0 ? port.ToString(CultureInfo.InvariantCulture) : "?";
 }
 
 /// <summary>Shared display-formatting helpers used by model classes.</summary>

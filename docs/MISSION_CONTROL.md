@@ -410,6 +410,8 @@ Deliverables:
 - Browser proxy disabled guidance: **implemented a specific Command Center warning/copy hint when `browser.proxy` is intentionally disabled in Settings**
 - Asymmetric SSH browser guidance: **fixed Command Center and `browser.proxy` invoke guidance so local `gateway+2` and remote `gateway+2` can differ**
 - SSH local browser-port source: **fixed Command Center browser diagnostics to derive the local browser-control port from the active tunnel local endpoint instead of stale saved gateway URLs**
+- Browser-control host runtime smoke: **verified the upstream browser-control host can listen locally on `127.0.0.1:{gateway+2}`, return HTTP 200 from `/` and `/tabs`, and appear in Command Center port diagnostics with owning PID/process**
+- Browser proxy auth guidance: **implemented warnings for QR/bootstrap-paired Windows nodes that advertise `browser.proxy` without a saved gateway shared token, and clarified invoke errors for missing versus mismatched browser-control auth**
 
 Risk: medium-high for kill/restart actions; start as read-only/copy actions.
 
@@ -420,7 +422,7 @@ Deliverables:
 - Verify and align canvas/screen/camera/location/system payload defaults and error tokens.
 - Verify push event names for exec.
 - Add missing base-hash concurrency semantics if needed: **implemented for remote exec approval policy edits**
-- Add `browser.proxy` feasibility prototype or explicit "not implemented" install guidance: **local browser-control bridge implemented**
+- Add `browser.proxy` feasibility prototype or explicit "not implemented" install guidance: **local browser-control bridge implemented; host runtime and Command Center listener detection smoke-tested; remaining end-to-end invoke blocker is matching operator/gateway auth for the active gateway**
 
 Risk: varies; `browser.proxy` is medium-high.
 

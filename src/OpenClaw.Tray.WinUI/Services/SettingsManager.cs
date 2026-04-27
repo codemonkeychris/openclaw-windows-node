@@ -108,18 +108,15 @@ public class SettingsManager
                     EnableMcpServer = loaded.EnableMcpServer;
                     // Legacy McpOnlyMode migration:
                     //   true  → node off (no gateway), MCP on
-                    //   false → MCP follows EnableNodeMode (old behavior: MCP started with node)
-                    if (loaded.McpOnlyMode is bool legacyMcpOnly)
+                    //   false → leave MCP off; the user has not opted in to a
+                    //           local HTTP server. Earlier dev builds tied MCP
+                    //           to EnableNodeMode silently — we deliberately
+                    //           do *not* re-enable MCP for those users on
+                    //           upgrade. They can flip the toggle in Settings.
+                    if (loaded.McpOnlyMode is bool legacyMcpOnly && legacyMcpOnly)
                     {
-                        if (legacyMcpOnly)
-                        {
-                            EnableMcpServer = true;
-                            EnableNodeMode = false;
-                        }
-                        else if (!loaded.EnableMcpServer)
-                        {
-                            EnableMcpServer = loaded.EnableNodeMode;
-                        }
+                        EnableMcpServer = true;
+                        EnableNodeMode = false;
                     }
                     HasSeenActivityStreamTip = loaded.HasSeenActivityStreamTip;
                     SkippedUpdateTag = loaded.SkippedUpdateTag ?? SkippedUpdateTag;

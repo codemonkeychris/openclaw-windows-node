@@ -57,6 +57,9 @@ public class McpToolBridge
         using (doc)
         {
             var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                return WriteError(null, JsonRpcErrorCode.InvalidRequest, "Request must be a JSON object");
+
             var idElement = root.TryGetProperty("id", out var idProp) ? idProp : (JsonElement?)null;
             var hasId = idElement.HasValue && idElement.Value.ValueKind != JsonValueKind.Null;
 
@@ -79,6 +82,11 @@ public class McpToolBridge
                     "notifications/initialized" => null,
                     "tools/list" => HandleToolsList(),
                     "tools/call" => await HandleToolsCallAsync(paramsElement),
+                    // Some clients (notably Cursor) probe these on startup. Returning
+                    // empty lists is friendlier than MethodNotFound — both feature sets
+                    // are deferred but compatible by being absent rather than failing.
+                    "resources/list" => new { resources = Array.Empty<object>() },
+                    "prompts/list" => new { prompts = Array.Empty<object>() },
                     _ => throw new McpMethodNotFoundException(method),
                 };
 
@@ -99,9 +107,11 @@ public class McpToolBridge
             }
             catch (Exception ex)
             {
-                _logger.Error($"[MCP] Handler error for {method}: {ex.Message}");
+                // Full exception with stack goes to the log; the wire response
+                // gets a generic message so we don't leak internals to clients.
+                _logger.Error($"[MCP] Handler error for {method}", ex);
                 return hasId
-                    ? WriteError(idElement, JsonRpcErrorCode.InternalError, ex.Message)
+                    ? WriteError(idElement, JsonRpcErrorCode.InternalError, "internal error")
                     : null;
             }
         }
@@ -154,7 +164,16 @@ public class McpToolBridge
             throw new McpToolException("Missing 'name'");
 
         var name = nameProp.GetString()!;
+        if (string.IsNullOrWhiteSpace(name))
+            throw new McpToolException("Empty tool name");
+
         var args = parameters.TryGetProperty("arguments", out var argsProp) ? argsProp : default;
+        if (args.ValueKind != JsonValueKind.Undefined
+            && args.ValueKind != JsonValueKind.Null
+            && args.ValueKind != JsonValueKind.Object)
+        {
+            throw new McpToolException("'arguments' must be a JSON object if present");
+        }
 
         var caps = _capabilityProvider();
         var capability = caps.FirstOrDefault(c => c.CanHandle(name));
@@ -245,7 +264,11 @@ public class McpToolBridge
         switch (id.Value.ValueKind)
         {
             case JsonValueKind.Number:
-                w.WriteNumberValue(id.Value.GetInt64());
+                // Preserve the original number form — fractional, big-int, etc.
+                // GetInt64 would throw on non-integer or out-of-range ids and
+                // strip the request id from the error response, breaking the
+                // client's response correlation.
+                w.WriteRawValue(id.Value.GetRawText(), skipInputValidation: true);
                 break;
             case JsonValueKind.String:
                 w.WriteStringValue(id.Value.GetString());

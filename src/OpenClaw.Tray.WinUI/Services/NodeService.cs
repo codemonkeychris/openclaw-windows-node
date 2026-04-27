@@ -48,6 +48,9 @@ public class NodeService : IDisposable
     private readonly List<INodeCapability> _capabilities = new();
 
     // Local MCP server — exposes the same capabilities to local MCP clients.
+    // TODO: when the port becomes user-configurable (see docs/MCP_MODE.md
+    // "Deferred"), McpServerUrl needs to read the live port off the running
+    // server, not the constant. Settings UI is the only consumer today.
     public const int McpDefaultPort = 8765;
     public static string McpServerUrl => $"http://127.0.0.1:{McpDefaultPort}/";
     private readonly bool _enableMcpServer;

@@ -172,4 +172,120 @@ public class McpToolBridgeTests
         using var doc = JsonDocument.Parse(resp!);
         Assert.Equal(-32700, doc.RootElement.GetProperty("error").GetProperty("code").GetInt32());
     }
+
+    [Fact]
+    public async Task NonObjectRoot_ReturnsInvalidRequest()
+    {
+        var bridge = CreateBridge(new List<INodeCapability>());
+        var resp = await bridge.HandleRequestAsync("[1,2,3]");
+        using var doc = JsonDocument.Parse(resp!);
+        Assert.Equal(-32600, doc.RootElement.GetProperty("error").GetProperty("code").GetInt32());
+    }
+
+    [Fact]
+    public async Task ToolsCall_MissingParams_ReturnsToolError()
+    {
+        var bridge = CreateBridge(new List<INodeCapability>());
+        var resp = await bridge.HandleRequestAsync(@"{""jsonrpc"":""2.0"",""id"":1,""method"":""tools/call""}");
+        using var doc = JsonDocument.Parse(resp!);
+        var result = doc.RootElement.GetProperty("result");
+        Assert.True(result.GetProperty("isError").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ToolsCall_NameNotString_ReturnsToolError()
+    {
+        var bridge = CreateBridge(new List<INodeCapability>());
+        var resp = await bridge.HandleRequestAsync(
+            @"{""jsonrpc"":""2.0"",""id"":1,""method"":""tools/call"",""params"":{""name"":42}}");
+        using var doc = JsonDocument.Parse(resp!);
+        var result = doc.RootElement.GetProperty("result");
+        Assert.True(result.GetProperty("isError").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ToolsCall_ArgumentsNotObject_ReturnsToolError()
+    {
+        var fake = new FakeCapability("alpha", "alpha.echo");
+        var bridge = CreateBridge(new List<INodeCapability> { fake });
+        var resp = await bridge.HandleRequestAsync(
+            @"{""jsonrpc"":""2.0"",""id"":1,""method"":""tools/call"",""params"":{""name"":""alpha.echo"",""arguments"":[1,2,3]}}");
+        using var doc = JsonDocument.Parse(resp!);
+        var result = doc.RootElement.GetProperty("result");
+        Assert.True(result.GetProperty("isError").GetBoolean());
+    }
+
+    [Fact]
+    public async Task NumericId_RoundtripsRawValue()
+    {
+        // Non-integer numeric id used to throw on GetInt64; verify it's preserved.
+        var bridge = CreateBridge(new List<INodeCapability>());
+        var resp = await bridge.HandleRequestAsync(
+            @"{""jsonrpc"":""2.0"",""id"":1.5,""method"":""ping""}");
+        using var doc = JsonDocument.Parse(resp!);
+        var id = doc.RootElement.GetProperty("id");
+        Assert.Equal(JsonValueKind.Number, id.ValueKind);
+        Assert.Equal(1.5, id.GetDouble());
+    }
+
+    [Fact]
+    public async Task LargeNumericId_RoundtripsRawValue()
+    {
+        var bridge = CreateBridge(new List<INodeCapability>());
+        var resp = await bridge.HandleRequestAsync(
+            @"{""jsonrpc"":""2.0"",""id"":99999999999999999999,""method"":""ping""}");
+        using var doc = JsonDocument.Parse(resp!);
+        var id = doc.RootElement.GetProperty("id");
+        Assert.Equal(JsonValueKind.Number, id.ValueKind);
+        Assert.Equal("99999999999999999999", id.GetRawText());
+    }
+
+    [Fact]
+    public async Task StringId_Roundtrips()
+    {
+        var bridge = CreateBridge(new List<INodeCapability>());
+        var resp = await bridge.HandleRequestAsync(
+            @"{""jsonrpc"":""2.0"",""id"":""abc-123"",""method"":""ping""}");
+        using var doc = JsonDocument.Parse(resp!);
+        Assert.Equal("abc-123", doc.RootElement.GetProperty("id").GetString());
+    }
+
+    [Fact]
+    public async Task ResourcesList_ReturnsEmptyForCompat()
+    {
+        // Cursor probes resources/list at startup; we want compat, not MethodNotFound.
+        var bridge = CreateBridge(new List<INodeCapability>());
+        var resp = await bridge.HandleRequestAsync(@"{""jsonrpc"":""2.0"",""id"":1,""method"":""resources/list""}");
+        using var doc = JsonDocument.Parse(resp!);
+        var resources = doc.RootElement.GetProperty("result").GetProperty("resources");
+        Assert.Equal(0, resources.GetArrayLength());
+    }
+
+    [Fact]
+    public async Task PromptsList_ReturnsEmptyForCompat()
+    {
+        var bridge = CreateBridge(new List<INodeCapability>());
+        var resp = await bridge.HandleRequestAsync(@"{""jsonrpc"":""2.0"",""id"":1,""method"":""prompts/list""}");
+        using var doc = JsonDocument.Parse(resp!);
+        var prompts = doc.RootElement.GetProperty("result").GetProperty("prompts");
+        Assert.Equal(0, prompts.GetArrayLength());
+    }
+
+    [Fact]
+    public async Task UnhandledException_ReturnsGenericInternalError_NotLeakingMessage()
+    {
+        var fake = new FakeCapability("alpha", "alpha.boom")
+        {
+            OnExecute = _ => throw new InvalidOperationException("secret-internal-detail"),
+        };
+        var bridge = CreateBridge(new List<INodeCapability> { fake });
+
+        var resp = await bridge.HandleRequestAsync(
+            @"{""jsonrpc"":""2.0"",""id"":1,""method"":""tools/call"",""params"":{""name"":""alpha.boom""}}");
+
+        using var doc = JsonDocument.Parse(resp!);
+        var error = doc.RootElement.GetProperty("error");
+        Assert.Equal(-32603, error.GetProperty("code").GetInt32());
+        Assert.DoesNotContain("secret-internal-detail", error.GetProperty("message").GetString());
+    }
 }

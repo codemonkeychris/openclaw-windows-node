@@ -1,10 +1,10 @@
 # Local MCP Mode
 
-**Status:** Implemented (initial cut). See `src/OpenClaw.Shared/Mcp/`, `src/OpenClaw.Tray.WinUI/Services/McpHttpServer.cs`, and the Settings UI MCP section.
+**Status:** Implemented (initial cut). See `src/OpenClaw.Shared/Mcp/`, `src/OpenClaw.Shared/Mcp/McpHttpServer.cs`, and the Settings UI MCP section.
 
 ## Summary
 
-The Windows tray app now ships a **local Model Context Protocol (MCP) server** alongside its existing OpenClaw gateway client. The same node capabilities the agent reaches over the OpenClaw gateway WebSocket — `system.run`, `screen.capture`, `screen.list`, `canvas.*`, `camera.list`, `camera.snap`, `system.notify`, `system.execApprovals.*` — are advertised, on the same machine, as MCP tools over `http://127.0.0.1:8765/`.
+The Windows tray app now ships a **local Model Context Protocol (MCP) server** alongside its existing OpenClaw gateway client. The same node capabilities the agent reaches over the OpenClaw gateway WebSocket — `system.run`, `screen.snapshot`, `canvas.*`, `camera.list`, `camera.snap`, `camera.clip`, `location.get`, `system.notify`, `system.execApprovals.*` — are advertised, on the same machine, as MCP tools over `http://127.0.0.1:8765/`.
 
 This means any local MCP client (Claude Desktop, Claude Code, Cursor, an MCP-aware CLI, a custom dev script) can reach into the running tray and drive Windows-native capabilities directly, without an OpenClaw gateway in the loop. The tray app can run in **MCP-only mode** with no gateway connection at all.
 
@@ -63,7 +63,7 @@ The capability list lives on `NodeService`, *not* on `WindowsNodeClient`. That s
 `OpenClaw.Shared/Mcp/McpToolBridge.cs` is transport-agnostic JSON-RPC 2.0. It implements:
 
 - `initialize` — protocol version `2024-11-05`, server info.
-- `tools/list` — flattens `_capabilities` into MCP tools. Tool name = command name (`"screen.capture"`); description = `"{category} capability: {command}"`; `inputSchema` is permissive.
+- `tools/list` — flattens `_capabilities` into MCP tools. Tool name = command name (`"screen.snapshot"`); description = `"{category} capability: {command}"`; `inputSchema` is permissive.
 - `tools/call` — finds the capability via `INodeCapability.CanHandle(name)`, builds a `NodeInvokeRequest` (the same struct the gateway path uses), calls `ExecuteAsync`, wraps the result as MCP `content[].text`. Tool failures come back as `result.isError = true`, not JSON-RPC errors (per MCP spec — JSON-RPC errors are reserved for protocol issues).
 - `ping`, `notifications/initialized` — protocol housekeeping.
 
@@ -71,7 +71,7 @@ The bridge takes a `Func<IReadOnlyList<INodeCapability>>` rather than a snapshot
 
 ### HTTP transport
 
-`OpenClaw.Tray.WinUI/Services/McpHttpServer.cs` is `System.Net.HttpListener` bound to `http://127.0.0.1:8765/`. Loopback-only by construction; not reachable from any other machine even with firewall holes. A defensive `IPAddress.IsLoopback` check on each request acts as belt-and-suspenders.
+`OpenClaw.Shared/Mcp/McpHttpServer.cs` is `System.Net.HttpListener` bound to `http://127.0.0.1:8765/`. Loopback-only by construction; not reachable from any other machine even with firewall holes. A defensive `IPAddress.IsLoopback` check on each request acts as belt-and-suspenders.
 
 `GET /` returns a friendly text probe. `POST /` is JSON-RPC. Anything else → `405`.
 
@@ -99,11 +99,11 @@ A legacy `McpOnlyMode` field is migrated automatically on load and never re-writ
 
 ### Testing
 
-The tray's most interesting code lives in capabilities — `system.run` (LocalCommandRunner + ExecApprovalPolicy), `screen.capture` (Windows.Graphics.Capture + GraphicsCapturePicker), `canvas.*` (WebView2 with trusted origin enforcement), `camera.snap` (MediaCapture + consent prompt). All of that has nontrivial Windows-only behavior and almost none of it is currently exercised end-to-end without first standing up a gateway and authenticating.
+The tray's most interesting code lives in capabilities — `system.run` (LocalCommandRunner + ExecApprovalPolicy), `screen.snapshot` (Windows.Graphics.Capture + GraphicsCapturePicker), `canvas.*` (WebView2 with trusted origin enforcement), `camera.snap`/`camera.clip` (MediaCapture + consent prompt), `location.get` (Windows.Devices.Geolocation). All of that has nontrivial Windows-only behavior and almost none of it is currently exercised end-to-end without first standing up a gateway and authenticating.
 
 Local MCP changes that. Concrete benefits:
 
-- **Manual smoke tests in seconds.** `curl -s -X POST http://127.0.0.1:8765/ -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"screen.list"}}'` validates that the capability dispatch path works, the WinUI dispatcher marshaling is correct, the result shape matches expectations. No gateway, no token, no SSH tunnel.
+- **Manual smoke tests in seconds.** `curl -s -X POST http://127.0.0.1:8765/ -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'` validates that the capability dispatch path works, the WinUI dispatcher marshaling is correct, the result shape matches expectations. No gateway, no token, no SSH tunnel.
 - **Reproducible bug reports.** A repro becomes a `tools/call` body the bug filer can paste verbatim. No "what was the gateway doing at the time."
 - **Integration tests against a real instance.** A future `tests/integration/` project can spin up the tray in MCP-only mode, fire JSON-RPC, assert results. The same test bodies a developer runs by hand are the same ones CI runs. (Harnessing WinUI itself in CI is harder, but the bridge logic — `McpToolBridge` — is already covered by `McpToolBridgeTests` with no UI involvement.)
 - **Coverage for the dispatch path itself.** `WindowsNodeClient`'s capability-routing logic (`CanHandle` → `ExecuteAsync`) was previously only exercised against a live gateway. The MCP server hits the same code paths, so any local MCP test is implicit coverage of the gateway dispatch.
@@ -126,7 +126,7 @@ The exact same node tools the OpenClaw gateway uses are now invocable by any loc
   }
   ```
 
-  The agent then sees `screen.capture`, `system.run`, `canvas.*`, etc. as tools, with whatever arguments the capability accepts.
+  The agent then sees `screen.snapshot`, `system.run`, `canvas.*`, etc. as tools, with whatever arguments the capability accepts.
 
 - **Claude Desktop.** Same config shape under MCP servers.
 - **Cursor.** Same.
@@ -165,12 +165,46 @@ It also reduces the cost of "speculative" capabilities. Today, adding a capabili
 
 ## Security model
 
-- **Loopback bind.** `HttpListener` is registered with the prefix `http://127.0.0.1:8765/`. The Windows kernel binds the listening socket to the loopback interface only — packets from other interfaces are not delivered to it. Firewall configuration is irrelevant.
-- **Defensive `IsLoopback` check.** Each incoming request validates `ctx.Request.RemoteEndPoint.Address`. In the unlikely case of a misconfigured prefix, requests from non-loopback addresses are rejected with `403`.
-- **No authentication.** Any local process with a TCP socket and the port number can drive any capability. This is the same trust boundary as anything that runs as the user — e.g., a malicious process on the box could already invoke arbitrary Win32 APIs without going through MCP. We don't try to stop user-context processes from talking to MCP.
-- **Capability-level controls remain in force.** `SystemCapability.SetApprovalPolicy(...)` (the exec approval policy) still gates `system.run`. Camera and screen capture still go through Windows consent flows. MCP doesn't bypass any of those.
+The server is built on **three** defensive layers, not just one. Loopback alone is *not* sufficient — a browser tab the user opens is also on the loopback interface, so a malicious page could otherwise reach `http://127.0.0.1:8765/` directly.
 
-The threat we *don't* defend against, intentionally for now: another local user account on the same machine, or a low-trust process, calling MCP. If that turns out to matter, the right answer is per-call bearer tokens issued by the tray (paired with a one-time copy-to-clipboard from the Settings UI), not URL ACLs or HTTPS — both of which add deployment pain without solving the actual problem. We will revisit when there's a concrete request.
+1. **Loopback bind.** `HttpListener` is registered with the prefix `http://127.0.0.1:8765/`. The Windows kernel binds the listening socket to the loopback interface only — packets from other interfaces are not delivered to it. Firewall configuration is irrelevant. Defends against: another machine on the network.
+2. **Defensive `IsLoopback` check.** Each incoming request validates `ctx.Request.RemoteEndPoint.Address`. Belt-and-suspenders for #1.
+3. **CSRF / browser gate.** Each request is rejected if any of the following holds:
+   - the request carries an `Origin` header (real MCP clients — Claude Desktop, Cursor, Claude Code, curl — never send `Origin`; browsers always do for cross-origin fetches);
+   - the `Host` header is anything other than `127.0.0.1[:port]` or `localhost[:port]` (defends against DNS-rebinding pivots);
+   - on `POST`, the `Content-Type` is anything other than `application/json` (forces a CORS preflight from a browser, which we never satisfy).
+   - the request body exceeds 4 MiB (DoS / OOM cap).
+
+   Together these three checks force a malicious cross-origin browser fetch into a CORS preflight that we deliberately do not honor (no `Access-Control-Allow-*` is ever emitted), so the actual call is blocked before reaching capability code.
+4. **Concurrency cap.** A semaphore limits in-flight handlers to 8. A misbehaving local client cannot pin every threadpool thread on long-running screen/camera calls.
+5. **Capability-level controls remain in force.** `SystemCapability.SetApprovalPolicy(...)` (the exec approval policy) still gates `system.run`. Camera and screen capture still go through Windows consent flows. MCP doesn't bypass any of those.
+
+**Still no authentication.** Any user-context local process with a TCP socket and the port number can drive any capability. This is the same trust boundary as anything that runs as the user — a malicious process on the box could already invoke arbitrary Win32 APIs without going through MCP. We don't try to stop user-context processes from talking to MCP. If that turns out to matter (multi-user shared boxes, low-trust local processes), the right answer is per-call bearer tokens issued by the tray (one-time copy-to-clipboard from the Settings UI), not URL ACLs or HTTPS — both add deployment pain without solving the actual problem.
+
+### Verifying the gate
+
+These should all be **rejected** with `403 Forbidden`:
+
+```powershell
+# Browser pretending to come from another origin
+curl -X POST http://127.0.0.1:8765/ -H "Origin: https://evil.com" -H "Content-Type: application/json" -d '{}'
+
+# DNS rebinding attempt
+curl -X POST http://127.0.0.1:8765/ -H "Host: evil.com" -H "Content-Type: application/json" -d '{}'
+```
+
+This should be **rejected** with `415`:
+
+```powershell
+curl -X POST http://127.0.0.1:8765/ -H "Content-Type: text/plain" --data '{"jsonrpc":"2.0","id":1,"method":"ping"}'
+```
+
+These should **succeed**:
+
+```powershell
+curl http://127.0.0.1:8765/   # GET probe
+curl -X POST http://127.0.0.1:8765/ -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"ping"}'
+```
 
 ## What's deliberately deferred
 
@@ -189,7 +223,7 @@ These are reasonable next steps but explicitly out of scope for the initial impl
 |---|---|
 | `src/OpenClaw.Shared/Mcp/McpToolBridge.cs` | Transport-agnostic JSON-RPC dispatcher. |
 | `src/OpenClaw.Shared/SettingsData.cs` | Settings JSON model. Adds `EnableMcpServer`; deprecates `McpOnlyMode`. |
-| `src/OpenClaw.Tray.WinUI/Services/McpHttpServer.cs` | `HttpListener`-based loopback HTTP transport. |
+| `src/OpenClaw.Shared/Mcp/McpHttpServer.cs` | `HttpListener`-based loopback HTTP transport. |
 | `src/OpenClaw.Tray.WinUI/Services/NodeService.cs` | Owns the capability list. Hosts the MCP server when enabled. |
 | `src/OpenClaw.Tray.WinUI/Services/SettingsManager.cs` | In-memory settings model + load/save. Migrates legacy `McpOnlyMode`. |
 | `src/OpenClaw.Tray.WinUI/Windows/SettingsWindow.xaml(.cs)` | UI toggle, endpoint URL, and live status. |
@@ -209,10 +243,10 @@ curl -s -X POST http://127.0.0.1:8765/ `
   -H "Content-Type: application/json" `
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 
-# List monitors
+# Take a screenshot of the primary monitor
 curl -s -X POST http://127.0.0.1:8765/ `
   -H "Content-Type: application/json" `
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"screen.list"}}'
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"screen.snapshot"}}'
 ```
 
 For Claude Code, drop this into `.mcp.json` at the repo root or `~/.claude.json`:

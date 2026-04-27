@@ -96,8 +96,14 @@ public sealed partial class SettingsWindow : WindowEx
     {
         var enabled = McpServerToggle.IsOn;
         var running = _nodeService?.IsMcpRunning == true;
+        var startupError = _nodeService?.McpStartupError;
+
         if (enabled && running)
             McpStatusText.Text = "Listening";
+        else if (enabled && !string.IsNullOrEmpty(startupError))
+            McpStatusText.Text = $"Failed to start: {startupError}";
+        else if (enabled && _nodeService != null && _nodeService.IsMcpRunning == false && _settings.EnableMcpServer)
+            McpStatusText.Text = "Failed to start (port may be in use)";
         else if (enabled)
             McpStatusText.Text = "Stopped — save and restart to start";
         else

@@ -1221,6 +1221,13 @@ public partial class App : Application
             return;
         }
 
+        // Surface gateway-disabled fallback so the user isn't surprised when
+        // they enabled both but only MCP comes up.
+        if (enableNode && !canRunGateway && enableMcp)
+        {
+            Logger.Warn("Node mode enabled but gateway prerequisites missing (token/tunnel) — running MCP-only.");
+        }
+
         try
         {
             _nodeService = new NodeService(
@@ -1250,7 +1257,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            Logger.Error($"Failed to initialize node service: {ex.Message}");
+            Logger.Error($"Failed to initialize node service: {ex}");
         }
     }
 

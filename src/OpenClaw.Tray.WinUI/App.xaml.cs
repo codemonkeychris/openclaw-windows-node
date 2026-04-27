@@ -1917,6 +1917,8 @@ public partial class App : Application
         if (_statusDetailWindow == null || _statusDetailWindow.IsClosed)
         {
             _statusDetailWindow = new StatusDetailWindow(BuildCommandCenterState());
+            _statusDetailWindow.RefreshRequested += async (s, e) => await RefreshCommandCenterAsync();
+            _statusDetailWindow.ActivityStreamRequested += (s, e) => ShowActivityStream();
             _statusDetailWindow.Closed += (s, e) => _statusDetailWindow = null;
         }
         else
@@ -1924,6 +1926,13 @@ public partial class App : Application
             _statusDetailWindow.UpdateStatus(BuildCommandCenterState());
         }
         _statusDetailWindow.Activate();
+    }
+
+    private async Task RefreshCommandCenterAsync()
+    {
+        await RunHealthCheckAsync(userInitiated: true);
+        await PollSessionsAsync();
+        UpdateStatusDetailWindow();
     }
 
     private void UpdateStatusDetailWindow()
@@ -2080,7 +2089,19 @@ public partial class App : Application
             UsageStatus = _lastUsageStatus,
             UsageCost = _lastUsageCost,
             Nodes = nodes,
-            Warnings = CommandCenterDiagnostics.SortAndDedupeWarnings(warnings)
+            Warnings = CommandCenterDiagnostics.SortAndDedupeWarnings(warnings),
+            RecentActivity = ActivityStreamService.GetItems(12)
+                .Select(item => new CommandCenterActivityInfo
+                {
+                    Timestamp = item.Timestamp,
+                    Category = item.Category,
+                    Title = item.Title,
+                    Details = item.Details,
+                    DashboardPath = item.DashboardPath,
+                    SessionKey = item.SessionKey,
+                    NodeId = item.NodeId
+                })
+                .ToList()
         };
     }
 

@@ -110,6 +110,24 @@ public class TrayMenuWindowMarkupTests
         Assert.Contains("30-DAY COST TREND", xaml);
     }
 
+    [Fact]
+    public void StatusDetailWindow_HasRecentActivitySummaryActions()
+    {
+        var xamlPath = Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "Windows",
+            "StatusDetailWindow.xaml");
+
+        var xaml = File.ReadAllText(xamlPath);
+
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterRecentActivitySection""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterRecentActivityList""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterOpenActivityStreamButton""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterCopyActivitySummaryButton""", xaml);
+    }
+
     private static string GetRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

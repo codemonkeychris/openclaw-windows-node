@@ -916,6 +916,18 @@ public class GatewayCommandCenterState
     public GatewayCostUsageInfo? UsageCost { get; set; }
     public List<NodeCapabilityHealthInfo> Nodes { get; set; } = new();
     public List<GatewayDiagnosticWarning> Warnings { get; set; } = new();
+    public List<CommandCenterActivityInfo> RecentActivity { get; set; } = new();
+}
+
+public class CommandCenterActivityInfo
+{
+    public DateTime Timestamp { get; set; } = DateTime.Now;
+    public string Category { get; set; } = "general";
+    public string Title { get; set; } = "";
+    public string Details { get; set; } = "";
+    public string? DashboardPath { get; set; }
+    public string? SessionKey { get; set; }
+    public string? NodeId { get; set; }
 }
 
 public static class CommandCenterCommandGroups

@@ -25,6 +25,7 @@ public sealed partial class StatusDetailWindow : WindowEx
     public bool IsClosed { get; private set; }
 
     public event EventHandler? RefreshRequested;
+    public event EventHandler? ActivityStreamRequested;
     private GatewayCommandCenterState _state;
 
     public StatusDetailWindow(GatewayCommandCenterState state)
@@ -245,6 +246,24 @@ public sealed partial class StatusDetailWindow : WindowEx
             NodesList.Visibility = Visibility.Collapsed;
             NoNodesText.Visibility = Visibility.Visible;
         }
+
+        if (state.RecentActivity.Count > 0)
+        {
+            RecentActivityList.ItemsSource = state.RecentActivity.Select(a => new ActivitySummaryViewModel
+            {
+                Title = a.Title,
+                DetailText = BuildActivityDetail(a),
+                TimeAgo = GetTimeAgo(a.Timestamp),
+                Category = a.Category
+            }).ToList();
+            RecentActivityList.Visibility = Visibility.Visible;
+            NoRecentActivityText.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            RecentActivityList.Visibility = Visibility.Collapsed;
+            NoRecentActivityText.Visibility = Visibility.Visible;
+        }
     }
 
     private void OnRefresh(object sender, RoutedEventArgs e)
@@ -281,6 +300,16 @@ public sealed partial class StatusDetailWindow : WindowEx
         }
 
         CopyText(summary, "[CommandCenter] Copied node summary");
+    }
+
+    private void OnOpenActivityStream(object sender, RoutedEventArgs e)
+    {
+        ActivityStreamRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnCopyActivitySummary(object sender, RoutedEventArgs e)
+    {
+        CopyText(BuildActivitySummary(_state.RecentActivity), "[CommandCenter] Copied activity summary");
     }
 
     private void OnOpenLogsFolder(object sender, RoutedEventArgs e)
@@ -379,6 +408,11 @@ public sealed partial class StatusDetailWindow : WindowEx
         {
             builder.AppendLine($"- {warning.Severity}: {warning.Title}");
         }
+        builder.AppendLine($"Recent activity: {state.RecentActivity.Count}");
+        foreach (var item in state.RecentActivity.Take(10))
+        {
+            builder.AppendLine($"- {item.Timestamp:O} [{item.Category}] {item.Title}");
+        }
         builder.AppendLine($"Ports: {state.PortDiagnostics.Count}");
         foreach (var port in state.PortDiagnostics)
         {
@@ -426,6 +460,14 @@ public sealed partial class StatusDetailWindow : WindowEx
         public string DateLabel { get; set; } = "";
         public double BarWidth { get; set; }
         public string DetailText { get; set; } = "";
+    }
+
+    private class ActivitySummaryViewModel
+    {
+        public string Title { get; set; } = "";
+        public string DetailText { get; set; } = "";
+        public string TimeAgo { get; set; } = "";
+        public string Category { get; set; } = "";
     }
 
     private class PortDiagnosticViewModel
@@ -537,6 +579,53 @@ public sealed partial class StatusDetailWindow : WindowEx
             out var parsed)
             ? parsed.ToString("MMM d", CultureInfo.CurrentCulture)
             : date;
+    }
+
+    private static string BuildActivityDetail(CommandCenterActivityInfo activity)
+    {
+        var details = new List<string>();
+        if (!string.IsNullOrWhiteSpace(activity.Details))
+            details.Add(activity.Details);
+        if (!string.IsNullOrWhiteSpace(activity.SessionKey))
+            details.Add($"session: {activity.SessionKey}");
+        if (!string.IsNullOrWhiteSpace(activity.NodeId))
+            details.Add($"node: {ShortId(activity.NodeId)}");
+        if (!string.IsNullOrWhiteSpace(activity.DashboardPath))
+            details.Add($"dashboard: {activity.DashboardPath}");
+
+        return details.Count == 0 ? activity.Category : string.Join(" · ", details);
+    }
+
+    private static string BuildActivitySummary(IReadOnlyCollection<CommandCenterActivityInfo> activity)
+    {
+        if (activity.Count == 0)
+            return "No recent OpenClaw tray activity.";
+
+        var builder = new StringBuilder();
+        builder.AppendLine("Recent OpenClaw tray activity");
+        foreach (var item in activity)
+        {
+            var details = BuildActivityDetail(item);
+            builder.AppendLine($"{item.Timestamp:O} [{item.Category}] {item.Title} - {details}");
+        }
+
+        return builder.ToString();
+    }
+
+    private static string GetTimeAgo(DateTime timestamp)
+    {
+        var diff = DateTime.Now - timestamp;
+        if (diff.TotalMinutes < 1) return LocalizationHelper.GetString("TimeAgo_JustNow");
+        if (diff.TotalMinutes < 60) return string.Format(LocalizationHelper.GetString("TimeAgo_MinutesFormat"), (int)diff.TotalMinutes);
+        if (diff.TotalHours < 24) return string.Format(LocalizationHelper.GetString("TimeAgo_HoursFormat"), (int)diff.TotalHours);
+        if (diff.TotalDays < 7) return string.Format(LocalizationHelper.GetString("TimeAgo_DaysFormat"), (int)diff.TotalDays);
+        return timestamp.ToString("MMM d, HH:mm", CultureInfo.CurrentCulture);
+    }
+
+    private static string ShortId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+        return value.Length <= 12 ? value : value[..12] + "...";
     }
 
     private static string BuildNodeCommandText(NodeCapabilityHealthInfo node)

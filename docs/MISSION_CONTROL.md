@@ -443,7 +443,7 @@ Deliverables:
 - Channel health summary and copyable context: **implemented first read-only summary**
 - Channel schema forms and QR login flows.
 - Skills/Cron settings.
-- Agent events ring expansion.
+- Agent events ring expansion: **implemented first Command Center recent-activity panel with copy/open-stream actions**
 - Hover HUD / richer tray tooltip: **implemented with topology, channel, node, warning, and activity summary**
 
 Risk: medium; mostly UI and gateway method plumbing.

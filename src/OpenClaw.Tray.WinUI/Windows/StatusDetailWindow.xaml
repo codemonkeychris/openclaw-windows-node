@@ -416,6 +416,67 @@
                            Visibility="Collapsed"/>
             </StackPanel>
 
+            <!-- Recent Activity Section -->
+            <StackPanel x:Name="RecentActivitySection"
+                        AutomationProperties.AutomationId="CommandCenterRecentActivitySection"
+                        Spacing="8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="RECENT ACTIVITY"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                               FontWeight="Bold"/>
+                    <Button Grid.Column="1"
+                            Content="Open Stream"
+                            Click="OnOpenActivityStream"
+                            AutomationProperties.AutomationId="CommandCenterOpenActivityStreamButton"/>
+                    <Button Grid.Column="2"
+                            Margin="8,0,0,0"
+                            Content="Copy"
+                            Click="OnCopyActivitySummary"
+                            AutomationProperties.AutomationId="CommandCenterCopyActivitySummaryButton"/>
+                </Grid>
+                <ItemsControl x:Name="RecentActivityList"
+                              AutomationProperties.AutomationId="CommandCenterRecentActivityList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Padding="8" Margin="0,2" CornerRadius="4"
+                                  Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding DetailText}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+                                    <TextBlock Text="{Binding TimeAgo}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <TextBlock Text="{Binding Category}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               HorizontalAlignment="Right"/>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock x:Name="NoRecentActivityText"
+                           Text="No recent activity"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           Visibility="Collapsed"/>
+            </StackPanel>
+
             <!-- Refresh Button -->
             <Button x:Name="RefreshButton" x:Uid="StatusRefreshButton" AutomationProperties.AutomationId="RefreshButton" Content="Refresh" Click="OnRefresh" HorizontalAlignment="Center"/>
             

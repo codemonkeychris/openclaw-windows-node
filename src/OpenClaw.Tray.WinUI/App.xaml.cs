@@ -1608,6 +1608,19 @@ public partial class App : Application
     {
         if (_gatewayClient == null)
         {
+            if (_settings?.EnableNodeMode == true && _nodeService?.IsConnected == true)
+            {
+                _lastCheckTime = DateTime.Now;
+                _dispatcherQueue?.TryEnqueue(UpdateStatusDetailWindow);
+                if (userInitiated)
+                {
+                    ShowToast(new ToastContentBuilder()
+                        .AddText(LocalizationHelper.GetString("Toast_HealthCheck"))
+                        .AddText("Node Mode is connected; gateway health is streaming."));
+                }
+                return;
+            }
+
             if (userInitiated)
             {
                 ShowToast(new ToastContentBuilder()

@@ -550,7 +550,7 @@ public class WindowsNodeClient : WebSocketClientBase
 
         if (!string.IsNullOrEmpty(_bootstrapToken))
         {
-            return (new Dictionary<string, string> { ["bootstrapToken"] = _bootstrapToken }, string.Empty);
+            return (new Dictionary<string, string> { ["bootstrapToken"] = _bootstrapToken }, _bootstrapToken);
         }
 
         return (new Dictionary<string, string> { ["token"] = _gatewayToken }, _gatewayToken);

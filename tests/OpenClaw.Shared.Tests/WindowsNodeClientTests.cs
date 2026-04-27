@@ -737,9 +737,11 @@ public class WindowsNodeClientTests
             var json = InvokeBuildNodeConnectMessage(client);
             using var doc = JsonDocument.Parse(json);
             var auth = doc.RootElement.GetProperty("params").GetProperty("auth");
+            var (_, tokenForSignature) = InvokeBuildConnectAuth(client);
 
             Assert.Equal("bootstrap-token-123", auth.GetProperty("bootstrapToken").GetString());
             Assert.False(auth.TryGetProperty("token", out _));
+            Assert.Equal("bootstrap-token-123", tokenForSignature);
         }
         finally
         {
@@ -772,9 +774,11 @@ public class WindowsNodeClientTests
             var json = InvokeBuildNodeConnectMessage(client);
             using var doc = JsonDocument.Parse(json);
             var auth = doc.RootElement.GetProperty("params").GetProperty("auth");
+            var (_, tokenForSignature) = InvokeBuildConnectAuth(client);
 
             Assert.Equal("stored-device-token", auth.GetProperty("token").GetString());
             Assert.False(auth.TryGetProperty("bootstrapToken", out _));
+            Assert.Equal("stored-device-token", tokenForSignature);
         }
         finally
         {
@@ -796,9 +800,11 @@ public class WindowsNodeClientTests
             var json = InvokeBuildNodeConnectMessage(client);
             using var doc = JsonDocument.Parse(json);
             var auth = doc.RootElement.GetProperty("params").GetProperty("auth");
+            var (_, tokenForSignature) = InvokeBuildConnectAuth(client);
 
             Assert.Equal("gateway-token", auth.GetProperty("token").GetString());
             Assert.False(auth.TryGetProperty("bootstrapToken", out _));
+            Assert.Equal("gateway-token", tokenForSignature);
         }
         finally
         {
@@ -1117,6 +1123,18 @@ public class WindowsNodeClientTests
         Assert.NotNull(method);
 
         return (string)method!.Invoke(client, ["nonce-123", 0L])!;
+    }
+
+    private static (Dictionary<string, string> Auth, string TokenForSignature) InvokeBuildConnectAuth(
+        WindowsNodeClient client)
+    {
+        var method = typeof(WindowsNodeClient).GetMethod(
+            "BuildConnectAuth",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(method);
+
+        var result = (ValueTuple<Dictionary<string, string>, string>)method!.Invoke(client, [])!;
+        return (result.Item1, result.Item2);
     }
 
     // ─── Command dispatch map tests ────────────────────────────────────────────

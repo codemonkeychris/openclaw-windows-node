@@ -105,6 +105,8 @@ public class TrayMenuWindowMarkupTests
         Assert.Contains("Setup Wizard", source);
         Assert.Contains(@"openclaw://healthcheck", source);
         Assert.Contains("Run Health Check", source);
+        Assert.Contains(@"openclaw://check-updates", source);
+        Assert.Contains("Check for Updates", source);
         Assert.Contains(@"openclaw://logs", source);
         Assert.Contains("Open Log File", source);
     }
@@ -149,6 +151,8 @@ public class TrayMenuWindowMarkupTests
         Assert.Contains("Open Config Folder", source);
         Assert.Contains(@"openclaw://diagnostics", source);
         Assert.Contains("Open Diagnostics Folder", source);
+        Assert.Contains(@"openclaw://check-updates", source);
+        Assert.Contains("Check for Updates", source);
         Assert.Contains(@"openclaw://support-context", source);
         Assert.Contains("Copy Support Context", source);
         Assert.Contains(@"openclaw://browser-setup", source);
@@ -205,6 +209,8 @@ public class TrayMenuWindowMarkupTests
 
         Assert.Contains(@"case ""healthcheck"":", source);
         Assert.Contains("RunHealthCheck", source);
+        Assert.Contains(@"case ""check-updates"":", source);
+        Assert.Contains("CheckForUpdates", source);
         Assert.Contains(@"case ""logs"":", source);
         Assert.Contains("OpenLogFile?.Invoke", source);
     }
@@ -313,6 +319,7 @@ public class TrayMenuWindowMarkupTests
         Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterOpenDiagnosticsButton""", xaml);
         Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterCopySupportContextButton""", xaml);
         Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterCopyBrowserSetupButton""", xaml);
+        Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterCheckUpdatesButton""", xaml);
         Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterRestartSshTunnelButton""", xaml);
         Assert.Contains(@"AutomationProperties.AutomationId=""CommandCenterUpdateStatusText""", xaml);
         Assert.Matches(
@@ -334,7 +341,19 @@ public class TrayMenuWindowMarkupTests
 
         Assert.Contains("RestartSshTunnelRequested", source);
         Assert.Contains("OnRestartSshTunnel", source);
+        Assert.Contains("CheckUpdatesRequested", source);
+        Assert.Contains("OnCheckUpdates", source);
         Assert.Contains("state.Tunnel != null", source);
+
+        var appSourcePath = Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "OpenClaw.Tray.WinUI",
+            "App.xaml.cs");
+        var appSource = File.ReadAllText(appSourcePath);
+
+        Assert.Contains(@"case ""checkupdates"":", appSource);
+        Assert.Contains("CheckForUpdatesUserInitiatedAsync", appSource);
     }
 
     [Fact]

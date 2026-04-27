@@ -552,6 +552,7 @@ public partial class App : Application
             case "history": ShowNotificationHistory(); break;
             case "activity": ShowActivityStream(); break;
             case "healthcheck": _ = RunHealthCheckAsync(userInitiated: true); break;
+            case "checkupdates": _ = CheckForUpdatesUserInitiatedAsync(); break;
             case "settings": ShowSettings(); break;
             case "setup": _ = ShowSetupWizardAsync(); break;
             case "autostart": ToggleAutoStart(); break;
@@ -957,6 +958,7 @@ public partial class App : Application
         menu.AddMenuItem(LocalizationHelper.GetString("Menu_ActivityStream"), "⚡", "activity");
         menu.AddMenuItem(LocalizationHelper.GetString("Menu_NotificationHistory"), "📋", "history");
         menu.AddMenuItem(LocalizationHelper.GetString("Menu_RunHealthCheck"), "🔄", "healthcheck");
+        menu.AddMenuItem("Check for Updates", "⬇️", "checkupdates");
 
         menu.AddSeparator();
 
@@ -1929,6 +1931,7 @@ public partial class App : Application
             _statusDetailWindow.ChannelToggleRequested += (s, channelName) => ToggleChannel(channelName);
             _statusDetailWindow.DashboardPathRequested += (s, dashboardPath) => OpenDashboard(dashboardPath);
             _statusDetailWindow.RestartSshTunnelRequested += (s, e) => RestartSshTunnel();
+            _statusDetailWindow.CheckUpdatesRequested += async (s, e) => await CheckForUpdatesUserInitiatedAsync();
             _statusDetailWindow.Closed += (s, e) => _statusDetailWindow = null;
         }
         else
@@ -2792,6 +2795,17 @@ public partial class App : Application
         }
     }
 
+    private async Task CheckForUpdatesUserInitiatedAsync()
+    {
+        Logger.Info("Manual update check requested");
+        var shouldContinue = await CheckForUpdatesAsync();
+        UpdateStatusDetailWindow();
+        if (!shouldContinue)
+        {
+            Exit();
+        }
+    }
+
     private async Task<bool> DownloadAndInstallUpdateAsync()
     {
         DownloadProgressDialog? progressDialog = null;
@@ -2871,6 +2885,7 @@ public partial class App : Application
             OpenSettings = ShowSettings,
             OpenSetup = () => _ = ShowSetupWizardAsync(),
             RunHealthCheck = () => RunHealthCheckAsync(userInitiated: true),
+            CheckForUpdates = CheckForUpdatesUserInitiatedAsync,
             OpenLogFile = OpenLogFile,
             OpenLogFolder = OpenLogFolder,
             OpenConfigFolder = OpenConfigFolder,

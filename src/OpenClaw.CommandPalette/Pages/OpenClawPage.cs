@@ -69,6 +69,11 @@ internal sealed partial class OpenClawPage : ListPage
                 Title = "🔄 Run Health Check",
                 Subtitle = "Refresh gateway or node connection health"
             },
+            new ListItem(new OpenUrlCommand("openclaw://check-updates"))
+            {
+                Title = "⬇️ Check for Updates",
+                Subtitle = "Run a manual GitHub Releases update check"
+            },
             new ListItem(new OpenUrlCommand("openclaw://activity"))
             {
                 Title = "⚡ Activity Stream",

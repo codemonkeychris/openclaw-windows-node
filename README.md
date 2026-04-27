@@ -305,6 +305,7 @@ OpenClaw registers the `openclaw://` URL scheme for automation and integration:
 | `openclaw://dashboard/skills` | Open Skills dashboard page |
 | `openclaw://dashboard/cron` | Open Cron dashboard page |
 | `openclaw://healthcheck` | Run a manual health check |
+| `openclaw://check-updates` | Run a manual update check |
 | `openclaw://logs` | Open the current tray log file |
 | `openclaw://log-folder` | Open the logs folder |
 | `openclaw://config` | Open the config folder |
@@ -332,6 +333,7 @@ PowerToys Command Palette extension for quick OpenClaw access.
 - **🧭 Setup Wizard** - Open pairing/setup
 - **🧭 Command Center** - Open diagnostics and support actions
 - **🔄 Run Health Check** - Refresh connection health
+- **⬇️ Check for Updates** - Run a manual GitHub Releases update check
 - **⚡ Activity Stream** - Open recent activity
 - **📋 Notification History** - Open notification history
 - **⚙️ Settings** - Open the OpenClaw Tray Settings dialog

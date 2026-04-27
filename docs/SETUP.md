@@ -85,6 +85,7 @@ OpenClaw Tray responds to `openclaw://` deep links, which can be invoked from a 
 | `openclaw://activity` | Open the Activity Stream |
 | `openclaw://history` | Open Notification History |
 | `openclaw://healthcheck` | Run a manual health check |
+| `openclaw://check-updates` | Run a manual update check |
 | `openclaw://logs` | Open the current tray log file |
 | `openclaw://log-folder` | Open the logs folder |
 | `openclaw://config` | Open the config folder |

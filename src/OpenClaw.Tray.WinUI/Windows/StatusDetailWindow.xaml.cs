@@ -30,6 +30,7 @@ public sealed partial class StatusDetailWindow : WindowEx
     public event EventHandler<string>? ChannelToggleRequested;
     public event EventHandler<string>? DashboardPathRequested;
     public event EventHandler? RestartSshTunnelRequested;
+    public event EventHandler? CheckUpdatesRequested;
     private GatewayCommandCenterState _state;
 
     public StatusDetailWindow(GatewayCommandCenterState state)
@@ -380,6 +381,11 @@ public sealed partial class StatusDetailWindow : WindowEx
     private void OnCopyBrowserSetup(object sender, RoutedEventArgs e)
     {
         CopyText(BuildBrowserSetupGuidance(_state), "[CommandCenter] Copied browser setup guidance");
+    }
+
+    private void OnCheckUpdates(object sender, RoutedEventArgs e)
+    {
+        CheckUpdatesRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnOpenLogsFolder(object sender, RoutedEventArgs e)

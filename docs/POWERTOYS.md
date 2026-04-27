@@ -44,6 +44,7 @@ Open Command Palette (`Win+Alt+Space`), type **"OpenClaw"** — you should see t
 | **🧭 Setup Wizard** | Opens QR, setup code, and manual gateway pairing |
 | **🧭 Command Center** | Opens gateway, tunnel, node, browser, and support diagnostics |
 | **🔄 Run Health Check** | Refreshes gateway or node connection health |
+| **⬇️ Check for Updates** | Runs a manual GitHub Releases update check |
 | **⚡ Activity Stream** | Opens recent tray activity and support bundle actions |
 | **📋 Notification History** | Opens recent OpenClaw tray notifications |
 | **⚙️ Settings** | Opens the OpenClaw Tray Settings dialog |
@@ -112,6 +113,7 @@ Get-AppxPackage -Name '*OpenClaw*' | Remove-AppxPackage
   | Setup Wizard | `openclaw://setup` |
   | Command Center | `openclaw://commandcenter` |
   | Run Health Check | `openclaw://healthcheck` |
+  | Check for Updates | `openclaw://check-updates` |
   | Activity Stream | `openclaw://activity` |
   | Notification History | `openclaw://history` |
   | Settings | `openclaw://settings` |

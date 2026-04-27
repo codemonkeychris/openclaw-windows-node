@@ -80,6 +80,16 @@ public static class DeepLinkHandler
                 }
                 break;
 
+            case "updates":
+            case "update":
+            case "check-updates":
+            case "update-check":
+                if (actions.CheckForUpdates != null)
+                {
+                    _ = actions.CheckForUpdates();
+                }
+                break;
+
             case "log":
             case "logs":
             case "log-file":
@@ -189,6 +199,7 @@ public class DeepLinkActions
     public Action? OpenSettings { get; set; }
     public Action? OpenSetup { get; set; }
     public Func<Task>? RunHealthCheck { get; set; }
+    public Func<Task>? CheckForUpdates { get; set; }
     public Action? OpenLogFile { get; set; }
     public Action? OpenLogFolder { get; set; }
     public Action? OpenConfigFolder { get; set; }

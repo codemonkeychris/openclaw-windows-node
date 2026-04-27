@@ -711,7 +711,7 @@ Requires .NET 10.0 SDK, Windows 10/11. For testing node protocol, you'll need a 
 
 ## Open Questions
 
-- [ ] Should dangerous command opt-ins be shown in the tray as a guided repair flow, a docs link, or both?
+- [x] Should dangerous command opt-ins be shown in the tray as a guided repair flow, a docs link, or both? Command Center now shows copyable safety guidance but intentionally avoids one-click dangerous repair commands.
 - [ ] How much channel management should live in the native tray versus opening the web dashboard?
 - [ ] Should Voice Mode land as a separate parity track after the open PR is reviewed against current Mac architecture?
 

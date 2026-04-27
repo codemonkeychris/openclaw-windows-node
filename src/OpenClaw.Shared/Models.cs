@@ -1009,6 +1009,24 @@ public static class CommandCenterDiagnostics
         return $"openclaw config set gateway.nodes.allowCommands '{json}'";
     }
 
+    public static string BuildDangerousCommandOptInGuidance(IEnumerable<string> commands)
+    {
+        var commandList = string.Join(", ", commands
+            .Where(command => !string.IsNullOrWhiteSpace(command))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase));
+        if (string.IsNullOrWhiteSpace(commandList))
+            commandList = "none";
+
+        return string.Join(Environment.NewLine, [
+            "Privacy-sensitive OpenClaw command opt-in guidance",
+            $"Commands: {commandList}",
+            "Leave these commands blocked unless you explicitly want the connected gateway to use this device's camera, microphone, or screen recording surfaces.",
+            "If you opt in, add only the exact commands you need to gateway.nodes.allowCommands, then re-approve or re-pair the node so the gateway refreshes its command snapshot.",
+            "Do not use wildcards for privacy-sensitive commands."
+        ]);
+    }
+
     public static bool TryGetCommandPermission(
         IReadOnlyDictionary<string, bool> permissions,
         string command,
@@ -1125,7 +1143,9 @@ public static class CommandCenterDiagnostics
                 Severity = GatewayDiagnosticSeverity.Info,
                 Category = "allowlist",
                 Title = "Privacy-sensitive commands require explicit opt-in",
-                Detail = string.Join(", ", node.DangerousDeclaredCommands) + " should only be available when explicitly allowed by gateway.nodes.allowCommands."
+                Detail = string.Join(", ", node.DangerousDeclaredCommands) + " should only be available when explicitly allowed by gateway.nodes.allowCommands.",
+                RepairAction = "Copy opt-in guidance",
+                CopyText = BuildDangerousCommandOptInGuidance(node.DangerousDeclaredCommands)
             });
         }
 
@@ -1137,7 +1157,9 @@ public static class CommandCenterDiagnostics
                 Severity = GatewayDiagnosticSeverity.Info,
                 Category = "allowlist",
                 Title = "Privacy-sensitive commands are currently blocked",
-                Detail = $"{blocked} {(node.MissingDangerousAllowlistCommands.Count == 1 ? "is" : "are")} declared but filtered by gateway policy. Leave blocked unless you explicitly want camera or screen recording access for this node."
+                Detail = $"{blocked} {(node.MissingDangerousAllowlistCommands.Count == 1 ? "is" : "are")} declared but filtered by gateway policy. Leave blocked unless you explicitly want camera or screen recording access for this node.",
+                RepairAction = "Copy opt-in guidance",
+                CopyText = BuildDangerousCommandOptInGuidance(node.MissingDangerousAllowlistCommands)
             });
         }
 

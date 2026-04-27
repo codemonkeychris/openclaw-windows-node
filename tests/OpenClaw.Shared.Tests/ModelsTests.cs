@@ -1040,7 +1040,14 @@ public class CommandCenterModelTests
             !w.CopyText.Contains("screen.record", StringComparison.Ordinal));
         Assert.Contains(info.Warnings, w =>
             w.Title == "Privacy-sensitive commands are currently blocked" &&
-            string.IsNullOrEmpty(w.CopyText));
+            w.CopyText != null &&
+            w.CopyText.Contains("screen.record", StringComparison.Ordinal) &&
+            w.CopyText.Contains("camera.snap", StringComparison.Ordinal) &&
+            !w.CopyText.Contains("openclaw config set", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(info.Warnings, w =>
+            w.Title == "Privacy-sensitive commands require explicit opt-in" &&
+            w.RepairAction == "Copy opt-in guidance" &&
+            !string.IsNullOrWhiteSpace(w.CopyText));
     }
 
     [Fact]
@@ -1050,6 +1057,17 @@ public class CommandCenterModelTests
             ["screen.snapshot", "canvas.present", "screen.snapshot"]);
 
         Assert.Equal("openclaw config set gateway.nodes.allowCommands '[\"canvas.present\",\"screen.snapshot\"]'", command);
+    }
+
+    [Fact]
+    public void BuildDangerousCommandOptInGuidance_IsStableAndDoesNotEmitRepairCommand()
+    {
+        var guidance = CommandCenterDiagnostics.BuildDangerousCommandOptInGuidance(
+            ["screen.record", "camera.snap", "screen.record"]);
+
+        Assert.Contains("camera.snap, screen.record", guidance);
+        Assert.Contains("Do not use wildcards", guidance);
+        Assert.DoesNotContain("openclaw config set", guidance, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -42,6 +42,12 @@ public sealed class RenderContext
     public required A2UITheme Theme { get; init; }
     public required Func<string, FrameworkElement?> BuildChild { get; init; }
     public required IDictionary<string, IDisposable> Subscriptions { get; init; }
+    /// <summary>
+    /// Surface-scoped set of JSON Pointer paths that hold sensitive values.
+    /// Populated by renderers (e.g., obscured TextField); consulted by
+    /// <see cref="BuildActionContext"/> and the surface dump path.
+    /// </summary>
+    public ISet<string>? SecretPaths { get; init; }
 
     /// <summary>
     /// Pull the named property from the component as an A2UI value (tagged
@@ -96,7 +102,11 @@ public sealed class RenderContext
     public void WatchValue(string componentId, string subKey, A2UIValue? value, Action update)
     {
         if (value == null || !value.HasPath) return;
-        var key = $"{componentId}::{subKey}";
+        // Use a delimiter that can't appear inside a JSON Pointer-derived
+        // componentId (nor inside subKeys we control). Previous "::" was
+        // collidable: component "x::label" + sub "value" hashed to the same
+        // bucket as "x" + "label::value". (L2 in unified review.)
+        var key = $"{componentId}{subKey}";
         if (Subscriptions.TryGetValue(key, out var prev))
         {
             try { prev.Dispose(); } catch { }
@@ -129,11 +139,35 @@ public sealed class RenderContext
         return null;
     }
 
-    /// <summary>Build the action context array → flat object payload.</summary>
-    public JsonObject? BuildActionContext(JsonNode? actionNode)
+    /// <summary>Mark a path as secret for the lifetime of the current render. No-op if no secret store is wired.</summary>
+    public void MarkSecretPath(string? path)
+    {
+        if (SecretPaths == null) return;
+        if (string.IsNullOrEmpty(path)) return;
+        SecretPaths.Add(NormalizePath(path));
+    }
+
+    /// <summary>True if <paramref name="path"/> is a secret path (registered or matches denylist).</summary>
+    public bool IsSecretPath(string? path)
+    {
+        if (SecretPaths == null) return SecretRedactor.IsSecret(path, EmptySet.Instance);
+        return SecretRedactor.IsSecret(path, (IReadOnlySet<string>)SecretPaths);
+    }
+
+    /// <summary>
+    /// Build the action context array → flat object payload, scoped to the
+    /// source component's declared <c>dataBinding</c> (or, in its absence,
+    /// the set of paths the component references in any other property).
+    /// Paths outside that scope are silently dropped to prevent unrelated
+    /// surface state from leaking into the agent envelope. Secret paths are
+    /// always dropped.
+    /// </summary>
+    public JsonObject? BuildActionContext(A2UIComponentDef sourceComponent, JsonNode? actionNode)
     {
         if (actionNode is not JsonObject actionObj) return null;
         if (actionObj["context"] is not JsonArray ctxArr) return null;
+
+        var (allowed, isExplicit) = CollectAllowedBindingPaths(sourceComponent);
         var result = new JsonObject();
         foreach (var item in ctxArr)
         {
@@ -145,8 +179,100 @@ public sealed class RenderContext
             if (val.LiteralString != null) result[key] = val.LiteralString;
             else if (val.LiteralNumber.HasValue) result[key] = val.LiteralNumber.Value;
             else if (val.LiteralBoolean.HasValue) result[key] = val.LiteralBoolean.Value;
-            else if (val.HasPath) result[key] = DataModel.Read(val.Path!)?.DeepClone();
+            else if (val.HasPath)
+            {
+                var path = val.Path!;
+                if (!IsAllowedPath(path, allowed)) continue;
+                // Secret paths require explicit dataBinding opt-in. The implicit
+                // walk over component properties is too generous to count as opt-in.
+                if (IsSecretPath(path) && !isExplicit) continue;
+                result[key] = DataModel.Read(path)?.DeepClone();
+            }
         }
         return result;
+    }
+
+    private static (HashSet<string> paths, bool isExplicit) CollectAllowedBindingPaths(A2UIComponentDef source)
+    {
+        var result = new HashSet<string>(StringComparer.Ordinal);
+        var props = source.Properties;
+
+        // Explicit declaration takes precedence: array of strings or {path: "..."} objects.
+        if (props["dataBinding"] is JsonArray db)
+        {
+            foreach (var item in db)
+            {
+                if (item is JsonValue jv && jv.TryGetValue<string>(out var s) && !string.IsNullOrEmpty(s))
+                    result.Add(NormalizePath(s));
+                else if (item is JsonObject obj && obj["path"] is JsonValue pv && pv.TryGetValue<string>(out var p) && !string.IsNullOrEmpty(p))
+                    result.Add(NormalizePath(p));
+            }
+            return (result, true);
+        }
+
+        // Implicit: any A2UIValue path that appears in the component's other properties.
+        // The action's own "context" array doesn't count — that's what we're scoping.
+        foreach (var kv in props)
+        {
+            if (kv.Key == "action" && kv.Value is JsonObject actionObj)
+            {
+                foreach (var ak in actionObj)
+                {
+                    if (ak.Key == "context") continue;
+                    CollectPaths(ak.Value, result);
+                }
+            }
+            else
+            {
+                CollectPaths(kv.Value, result);
+            }
+        }
+        return (result, false);
+    }
+
+    private static void CollectPaths(JsonNode? node, HashSet<string> result)
+    {
+        switch (node)
+        {
+            case JsonObject obj:
+                if (obj["path"] is JsonValue jv && jv.TryGetValue<string>(out var p) && !string.IsNullOrEmpty(p))
+                    result.Add(NormalizePath(p));
+                foreach (var kv in obj) CollectPaths(kv.Value, result);
+                break;
+            case JsonArray arr:
+                foreach (var item in arr) CollectPaths(item, result);
+                break;
+        }
+    }
+
+    private static bool IsAllowedPath(string path, HashSet<string> allowed)
+    {
+        if (allowed.Count == 0) return false;
+        var normalized = NormalizePath(path);
+        if (allowed.Contains(normalized)) return true;
+        foreach (var p in allowed)
+        {
+            if (p == "/") return true; // explicit root binding opts in to everything
+            if (normalized.StartsWith(p + "/", StringComparison.Ordinal)) return true;
+        }
+        return false;
+    }
+
+    private static string NormalizePath(string p) =>
+        string.IsNullOrEmpty(p) ? "/" : (p[0] == '/' ? p : "/" + p);
+
+    private sealed class EmptySet : IReadOnlySet<string>
+    {
+        public static readonly EmptySet Instance = new();
+        public int Count => 0;
+        public bool Contains(string item) => false;
+        public IEnumerator<string> GetEnumerator() { yield break; }
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        public bool IsProperSubsetOf(IEnumerable<string> other) => true;
+        public bool IsProperSupersetOf(IEnumerable<string> other) => false;
+        public bool IsSubsetOf(IEnumerable<string> other) => true;
+        public bool IsSupersetOf(IEnumerable<string> other) => false;
+        public bool Overlaps(IEnumerable<string> other) => false;
+        public bool SetEquals(IEnumerable<string> other) { foreach (var _ in other) return false; return true; }
     }
 }

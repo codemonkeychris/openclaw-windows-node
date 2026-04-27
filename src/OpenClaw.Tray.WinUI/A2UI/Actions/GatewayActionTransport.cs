@@ -25,6 +25,9 @@ public sealed class GatewayActionTransport : IA2UIActionTransport
 
     public Task DeliverAsync(Protocol.A2UIAction action)
     {
+        // Capture once: between IsAvailable and here the dispatcher may have
+        // disconnected/recreated the client, and a second call to the provider
+        // can return a different instance.
         var client = _clientProvider();
         if (client == null || !client.IsConnected)
             throw new InvalidOperationException("Gateway not connected");
@@ -41,12 +44,28 @@ public sealed class GatewayActionTransport : IA2UIActionTransport
 /// </summary>
 public sealed class LoggingActionTransport : IA2UIActionTransport
 {
+    /// <summary>
+    /// When true, log the full serialized envelope including action context.
+    /// Default false: context can carry user-typed form values that the spec
+    /// considers privacy-relevant (and the agent already sees over the wire).
+    /// </summary>
+    public bool LogFullEnvelope { get; set; }
+
     private readonly IOpenClawLogger _logger;
     public LoggingActionTransport(IOpenClawLogger logger) { _logger = logger; }
     public bool IsAvailable => true;
     public Task DeliverAsync(Protocol.A2UIAction action)
     {
-        _logger.Info($"[A2UI] action '{action.Name}' from {action.SourceComponentId ?? "?"} on surface '{action.SurfaceId}' (no remote sink): {A2UIActionEnvelope.Serialize(action)}");
+        if (LogFullEnvelope)
+        {
+            _logger.Info($"[A2UI] action '{action.Name}' from {action.SourceComponentId ?? "?"} on surface '{action.SurfaceId}' (no remote sink): {A2UIActionEnvelope.Serialize(action)}");
+        }
+        else
+        {
+            // Default: identifiers only — drops the action context payload that
+            // would otherwise carry form/PII data into the log file.
+            _logger.Info($"[A2UI] action '{action.Name}' from {action.SourceComponentId ?? "?"} on surface '{action.SurfaceId}' (no remote sink)");
+        }
         return Task.CompletedTask;
     }
 }

@@ -20,6 +20,13 @@ namespace OpenClawTray.A2UI.Hosting;
 /// </summary>
 public sealed class A2UIRouter
 {
+    /// <summary>
+    /// Cap on concurrent surfaces. v0.8 deployments stack a small number of
+    /// related surfaces per window; this bound keeps an adversarial agent from
+    /// driving the host to OOM by creating unique surface IDs in a loop.
+    /// </summary>
+    internal const int MaxSurfaces = 64;
+
     private readonly DispatcherQueue _dispatcher;
     private readonly DataModelStore _dataModel;
     private readonly ComponentRendererRegistry _registry;
@@ -45,12 +52,25 @@ public sealed class A2UIRouter
         _logger = logger;
     }
 
+    /// <summary>
+    /// Live view of the surfaces dictionary. Callers should NOT mutate or
+    /// enumerate concurrently with router activity; for stable iteration use
+    /// <see cref="SnapshotSurfaces"/>.
+    /// </summary>
     public IReadOnlyDictionary<string, SurfaceHost> Surfaces => _surfaces;
+
+    /// <summary>Stable snapshot of currently-known surfaces. Safe to enumerate.</summary>
+    public IReadOnlyList<KeyValuePair<string, SurfaceHost>> SnapshotSurfaces()
+    {
+        var copy = new List<KeyValuePair<string, SurfaceHost>>(_surfaces.Count);
+        foreach (var kv in _surfaces) copy.Add(kv);
+        return copy;
+    }
 
     /// <summary>Push a JSONL blob. Each line is parsed independently.</summary>
     public void Push(string jsonl)
     {
-        foreach (var msg in A2UIMessageParser.Parse(jsonl))
+        foreach (var msg in A2UIMessageParser.Parse(jsonl, _logger))
         {
             DispatchOnUI(msg);
         }
@@ -94,7 +114,7 @@ public sealed class A2UIRouter
             {
                 var host = GetOrCreateSurface(su.SurfaceId);
                 host.ApplyComponents(su.Components);
-                _logger.Info($"[A2UI] surfaceUpdate '{su.SurfaceId}' ({su.Components.Count} component(s))");
+                _logger.Info($"[A2UI] surfaceUpdate '{LogSafe(su.SurfaceId)}' ({su.Components.Count} component(s))");
                 break;
             }
 
@@ -103,14 +123,14 @@ public sealed class A2UIRouter
                 var host = GetOrCreateSurface(br.SurfaceId);
                 host.BeginRendering(br.Root, br.Styles);
                 SurfaceRendered?.Invoke(this, host);
-                _logger.Info($"[A2UI] beginRendering '{br.SurfaceId}' root='{br.Root}' (catalog={br.CatalogId ?? "default"})");
+                _logger.Info($"[A2UI] beginRendering '{LogSafe(br.SurfaceId)}' root='{LogSafe(br.Root)}' (catalog={LogSafe(br.CatalogId) ?? "default"})");
                 break;
             }
 
             case DataModelUpdateMessage dmu:
             {
                 _dataModel.ApplyDataModelUpdate(dmu.SurfaceId, dmu.Path, dmu.Contents);
-                _logger.Debug($"[A2UI] dataModelUpdate '{dmu.SurfaceId}' path='{dmu.Path ?? "/"}' ({dmu.Contents.Count} entry(ies))");
+                _logger.Debug($"[A2UI] dataModelUpdate '{LogSafe(dmu.SurfaceId)}' path='{LogSafe(dmu.Path) ?? "/"}' ({dmu.Contents.Count} entry(ies))");
                 break;
             }
 
@@ -122,13 +142,13 @@ public sealed class A2UIRouter
                     _surfaces.Remove(ds.SurfaceId);
                     _dataModel.Remove(ds.SurfaceId);
                     SurfaceDeleted?.Invoke(this, ds.SurfaceId);
-                    _logger.Info($"[A2UI] deleteSurface '{ds.SurfaceId}'");
+                    _logger.Info($"[A2UI] deleteSurface '{LogSafe(ds.SurfaceId)}'");
                 }
                 break;
             }
 
             case UnknownEnvelopeMessage ue:
-                _logger.Warn($"[A2UI] Unknown envelope kind '{ue.Kind}'; skipping");
+                _logger.Warn($"[A2UI] Unknown envelope kind '{LogSafe(ue.Kind)}'; skipping");
                 break;
         }
     }
@@ -136,11 +156,30 @@ public sealed class A2UIRouter
     private SurfaceHost GetOrCreateSurface(string surfaceId)
     {
         if (_surfaces.TryGetValue(surfaceId, out var existing)) return existing;
+        if (_surfaces.Count >= MaxSurfaces)
+        {
+            // Refuse to grow past the cap. Returning the most recently created
+            // surface keeps the router alive while signaling that something is
+            // misbehaving — the alternative (silently dropping) is worse for
+            // diagnostics. Sanitize the ID before logging (see L1).
+            _logger.Warn($"[A2UI] surface cap ({MaxSurfaces}) reached; ignoring new surface '{LogSafe(surfaceId)}'");
+            // Reuse the first existing surface as a degraded fallback so the
+            // caller still receives a host reference and the router stays
+            // internally consistent.
+            foreach (var kv in _surfaces) return kv.Value;
+        }
 
         var observable = _dataModel.GetOrCreate(surfaceId);
-        var host = new SurfaceHost(surfaceId, observable, _registry, _actions);
+        var host = new SurfaceHost(surfaceId, observable, _registry, _actions, _logger);
         _surfaces[surfaceId] = host;
         SurfaceCreated?.Invoke(this, host);
         return host;
+    }
+
+    private static string LogSafe(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return string.Empty;
+        var trimmed = s.Length > 64 ? s.Substring(0, 64) : s;
+        return trimmed.Replace('\r', ' ').Replace('\n', ' ').Replace('\t', ' ');
     }
 }

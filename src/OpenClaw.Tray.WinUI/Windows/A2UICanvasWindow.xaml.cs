@@ -152,7 +152,22 @@ public sealed partial class A2UICanvasWindow : WindowEx
             target = RootGrid;
 
         var rtb = new RenderTargetBitmap();
-        await rtb.RenderAsync(target);
+        try
+        {
+            await rtb.RenderAsync(target);
+        }
+        catch (System.Runtime.InteropServices.COMException ex)
+        {
+            // Common when the window is minimised or has not yet completed first
+            // layout. RenderTargetBitmap surfaces the underlying composition error
+            // as a COMException; surface a structured code rather than a stack
+            // trace through the snapshot pipeline.
+            throw new InvalidOperationException("CANVAS_SNAPSHOT_NOT_VISIBLE: window is not in a renderable state", ex);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new InvalidOperationException("CANVAS_SNAPSHOT_NOT_VISIBLE: target is not in a renderable state", ex);
+        }
         var pixelBuffer = await rtb.GetPixelsAsync();
         var pixels = pixelBuffer.ToArray();
 

@@ -26,12 +26,18 @@ public interface IActionSink
 /// </summary>
 public sealed class ActionDispatcher : IActionSink
 {
+    /// <summary>Cap for the debounce dictionary. Sweeps oldest entries past <see cref="DebounceWindow"/>.</summary>
+    internal const int MaxDebounceEntries = 256;
+    /// <summary>Cap for the fallback queue. Drops oldest on overflow so the newest action still ships.</summary>
+    internal const int MaxFallbackQueue = 200;
+
     private readonly IReadOnlyList<IA2UIActionTransport> _transports;
     private readonly IOpenClawLogger _logger;
     private readonly ConcurrentQueue<A2UIAction> _fallback = new();
     private readonly Dictionary<string, DateTimeOffset> _lastDelivery = new();
     private static readonly TimeSpan DebounceWindow = TimeSpan.FromMilliseconds(200);
     private readonly object _debounceLock = new();
+    private readonly System.Threading.SemaphoreSlim _sendGate = new(1, 1);
 
     public ActionDispatcher(IReadOnlyList<IA2UIActionTransport> transports, IOpenClawLogger logger)
     {
@@ -54,29 +60,65 @@ public sealed class ActionDispatcher : IActionSink
             if (_lastDelivery.TryGetValue(key, out var last) && (now - last) < DebounceWindow)
                 return true;
             _lastDelivery[key] = now;
+            // Sweep stale entries when the dict gets large. Keeps memory bounded
+            // even when the agent emits actions with constantly-changing keys.
+            if (_lastDelivery.Count > MaxDebounceEntries)
+            {
+                var cutoff = now - DebounceWindow;
+                var stale = new List<string>();
+                foreach (var kv in _lastDelivery)
+                    if (kv.Value < cutoff) stale.Add(kv.Key);
+                foreach (var k in stale) _lastDelivery.Remove(k);
+                // If sweep didn't reclaim enough, evict arbitrarily — this only
+                // affects debounce, not delivery semantics.
+                if (_lastDelivery.Count > MaxDebounceEntries)
+                {
+                    int over = _lastDelivery.Count - MaxDebounceEntries;
+                    var toRemove = new List<string>(over);
+                    foreach (var k in _lastDelivery.Keys) { toRemove.Add(k); if (toRemove.Count >= over) break; }
+                    foreach (var k in toRemove) _lastDelivery.Remove(k);
+                }
+            }
         }
         return false;
     }
 
     private async Task SendAsync(A2UIAction action)
     {
-        // Drain any backlog first so order is preserved.
-        while (_fallback.TryPeek(out var pending))
+        // Single-flight send loop. Without this, two concurrent Raise calls each
+        // try to drain _fallback, racing on TryPeek/TryDequeue and producing
+        // out-of-order delivery under contention. (Unified review M8.)
+        await _sendGate.WaitAsync().ConfigureAwait(false);
+        try
         {
-            if (await TryDeliverAsync(pending))
+            // Drain any backlog first so order is preserved.
+            while (_fallback.TryPeek(out var pending))
             {
-                _fallback.TryDequeue(out _);
+                if (await TryDeliverAsync(pending))
+                {
+                    _fallback.TryDequeue(out _);
+                }
+                else
+                {
+                    break;
+                }
             }
-            else
+
+            if (!await TryDeliverAsync(action))
             {
-                break;
+                if (_fallback.Count >= MaxFallbackQueue)
+                {
+                    // Drop the oldest queued action so the newest still has a slot.
+                    if (_fallback.TryDequeue(out var dropped))
+                        _logger.Warn($"[A2UI] fallback queue full; dropped oldest action '{dropped.Name}' on '{dropped.SurfaceId}'");
+                }
+                _logger.Warn($"[A2UI] No transport available; queued action '{action.Name}' for later delivery.");
+                _fallback.Enqueue(action);
             }
         }
-
-        if (!await TryDeliverAsync(action))
+        finally
         {
-            _logger.Warn($"[A2UI] No transport available; queued action '{action.Name}' for later delivery.");
-            _fallback.Enqueue(action);
+            _sendGate.Release();
         }
     }
 

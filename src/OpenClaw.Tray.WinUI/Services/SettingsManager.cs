@@ -66,6 +66,13 @@ public class SettingsManager
     public bool NodeBrowserProxyEnabled { get; set; } = true;
     // Local MCP HTTP server (independent of EnableNodeMode)
     public bool EnableMcpServer { get; set; } = false;
+    /// <summary>
+    /// Hostnames the A2UI image renderer is allowed to fetch over HTTPS.
+    /// Empty by default — agents can still ship inline data: images. The
+    /// runtime never bypasses this list, so it is the single switch keeping
+    /// agent JSON from issuing arbitrary outbound HTTP from the tray process.
+    /// </summary>
+    public List<string> A2UIImageHosts { get; set; } = new();
     public bool HasSeenActivityStreamTip { get; set; } = false;
     public string SkippedUpdateTag { get; set; } = "";
 
@@ -111,6 +118,7 @@ public class SettingsManager
                     NodeLocationEnabled = loaded.NodeLocationEnabled;
                     NodeBrowserProxyEnabled = loaded.NodeBrowserProxyEnabled;
                     EnableMcpServer = loaded.EnableMcpServer;
+                    A2UIImageHosts = loaded.A2UIImageHosts ?? new List<string>();
                     // Legacy McpOnlyMode migration:
                     //   true  → node off (no gateway), MCP on
                     //   false → leave MCP off; the user has not opted in to a
@@ -173,6 +181,7 @@ public class SettingsManager
                 NodeLocationEnabled = NodeLocationEnabled,
                 NodeBrowserProxyEnabled = NodeBrowserProxyEnabled,
                 EnableMcpServer = EnableMcpServer,
+                A2UIImageHosts = A2UIImageHosts.Count == 0 ? null : new List<string>(A2UIImageHosts),
                 // McpOnlyMode is legacy — never written; remains null in serialized output.
                 HasSeenActivityStreamTip = HasSeenActivityStreamTip,
                 SkippedUpdateTag = string.IsNullOrWhiteSpace(SkippedUpdateTag) ? null : SkippedUpdateTag,

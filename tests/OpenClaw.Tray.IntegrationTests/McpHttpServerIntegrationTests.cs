@@ -51,8 +51,8 @@ public class McpHttpServerIntegrationTests : IClassFixture<TrayAppFixture>
             "system.execApprovals.get", "system.execApprovals.set",
             "canvas.present", "canvas.hide", "canvas.navigate", "canvas.eval",
             "canvas.snapshot", "canvas.a2ui.push", "canvas.a2ui.reset",
-            "screen.capture", "screen.list",
-            "camera.list", "camera.snap",
+            "screen.snapshot", "screen.record",
+            "camera.list", "camera.snap", "camera.clip",
         };
         foreach (var cmd in expected)
         {
@@ -156,25 +156,17 @@ public class McpHttpServerIntegrationTests : IClassFixture<TrayAppFixture>
     }
 
     // ---- screen.* ----
+    // Canonical OpenClaw protocol: screen.snapshot + screen.record only.
+    // No screen.list / screen.capture (those were stale drift from the prior
+    // bridge description set).
 
     [IntegrationFact]
-    public async Task ScreenList_ReturnsAtLeastOneDisplay()
-    {
-        using var payload = await _fixture.Client.CallToolExpectSuccessAsync("screen.list");
-        var screens = payload.RootElement.GetProperty("screens");
-        Assert.True(screens.GetArrayLength() >= 1, "Expected at least one display");
-        var first = screens[0];
-        Assert.True(first.TryGetProperty("index", out _));
-        Assert.True(first.TryGetProperty("bounds", out _));
-    }
-
-    [IntegrationFact]
-    public async Task ScreenCapture_ReturnsImageOrWellFormedError()
+    public async Task ScreenSnapshot_ReturnsImageOrWellFormedError()
     {
         // On a real desktop session this returns a base64 image; on a locked
         // session or some VMs it can fail. Either way we want a well-formed
         // response — no transport errors.
-        var (isError, text) = await _fixture.Client.CallToolAcceptingFailureAsync("screen.capture", new
+        var (isError, text) = await _fixture.Client.CallToolAcceptingFailureAsync("screen.snapshot", new
         {
             format = "png",
             maxWidth = 320,

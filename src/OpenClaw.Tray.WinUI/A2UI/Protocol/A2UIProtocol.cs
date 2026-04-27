@@ -152,28 +152,71 @@ public sealed record A2UIAction
 
 /// <summary>
 /// Parses a JSONL stream into <see cref="A2UIMessage"/> records. Tolerant:
-/// malformed lines are skipped, unknown envelope keys yield
-/// <see cref="UnknownEnvelopeMessage"/> rather than throwing.
+/// malformed lines are skipped (logged when a logger is supplied), unknown
+/// envelope keys yield <see cref="UnknownEnvelopeMessage"/> rather than throwing.
 /// </summary>
 public static class A2UIMessageParser
 {
-    public static IEnumerable<A2UIMessage> Parse(string jsonl)
+    /// <summary>
+    /// Per-line cap. Single-line JSON envelopes above this are dropped to keep
+    /// a hostile/malformed payload from forcing the JSON DOM allocator into a
+    /// pathological state. Total stream size is bounded separately at the
+    /// transport / capability boundary.
+    /// </summary>
+    public const int MaxLineLength = 1 * 1024 * 1024;
+
+    public static IEnumerable<A2UIMessage> Parse(string jsonl) => Parse(jsonl, logger: null);
+
+    public static IEnumerable<A2UIMessage> Parse(string jsonl, OpenClaw.Shared.IOpenClawLogger? logger)
     {
         if (string.IsNullOrWhiteSpace(jsonl)) yield break;
 
-        var lines = jsonl.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
-        foreach (var line in lines)
+        // Stream-iterate without allocating a string[] for the whole blob.
+        int start = 0;
+        int len = jsonl.Length;
+        while (start < len)
         {
-            var trimmed = line.Trim();
-            if (trimmed.Length == 0) continue;
+            int end = jsonl.IndexOfAny(s_lineSeparators, start);
+            if (end < 0) end = len;
 
-            A2UIMessage? msg = null;
-            try { msg = ParseLine(trimmed); }
-            catch (JsonException) { /* skip malformed */ }
-            catch (FormatException) { /* skip malformed */ }
-            if (msg != null) yield return msg;
+            int lineLen = end - start;
+            if (lineLen > 0)
+            {
+                string line = jsonl.Substring(start, lineLen);
+                string trimmed = line.Trim();
+                if (trimmed.Length > 0)
+                {
+                    if (trimmed.Length > MaxLineLength)
+                    {
+                        logger?.Warn($"[A2UI] dropping oversize JSONL line ({trimmed.Length} > {MaxLineLength} chars)");
+                    }
+                    else
+                    {
+                        A2UIMessage? msg = null;
+                        try { msg = ParseLine(trimmed); }
+                        catch (JsonException ex)
+                        {
+                            logger?.Warn($"[A2UI] dropping malformed JSONL line: {Truncate(trimmed, 200)} — {ex.Message}");
+                        }
+                        catch (FormatException ex)
+                        {
+                            logger?.Warn($"[A2UI] dropping malformed JSONL line: {Truncate(trimmed, 200)} — {ex.Message}");
+                        }
+                        if (msg != null) yield return msg;
+                    }
+                }
+            }
+
+            // Skip any contiguous run of CR/LF before the next line.
+            start = end;
+            while (start < len && (jsonl[start] == '\r' || jsonl[start] == '\n')) start++;
         }
     }
+
+    private static readonly char[] s_lineSeparators = { '\r', '\n' };
+
+    private static string Truncate(string s, int max) =>
+        s.Length <= max ? s : s.Substring(0, max) + "…";
 
     public static A2UIMessage? ParseLine(string json)
     {

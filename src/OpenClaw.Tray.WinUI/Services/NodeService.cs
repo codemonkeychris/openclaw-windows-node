@@ -27,6 +27,10 @@ public class NodeService : IDisposable
     private readonly SettingsManager? _settings;
     private WindowsNodeClient? _nodeClient;
     private CanvasWindow? _canvasWindow;
+    // Invariant: _a2uiCanvasWindow is only read/written from the UI dispatcher
+    // (DispatcherQueue.TryEnqueue callbacks). Today's WinUI dispatcher serializes,
+    // so no memory barrier is needed — but introducing a non-dispatcher caller
+    // would silently see stale references. Stay on-thread or marshal.
     private A2UICanvasWindow? _a2uiCanvasWindow;
     private MediaResolver? _mediaResolver;
     private ActionDispatcher? _actionDispatcher;
@@ -302,7 +306,15 @@ public class NodeService : IDisposable
                 _logger,
                 serverName: "openclaw-tray-mcp",
                 serverVersion: typeof(NodeService).Assembly.GetName().Version?.ToString() ?? "0.0.0");
-            attempt = new McpHttpServer(bridge, McpPort, _logger);
+            // Bearer-token auth. Token is created on first start and persists
+            // alongside other OpenClawTray data (so OPENCLAW_TRAY_DATA_DIR
+            // isolation in tests scopes the token too); CLI/agent registration
+            // reads from the same path. Loopback bind + Origin/Host checks
+            // remain in front; this layer rejects untrusted local processes
+            // that could otherwise reach the predictable 127.0.0.1:port endpoint.
+            var tokenPath = System.IO.Path.Combine(SettingsManager.SettingsDirectoryPath, "mcp-token.txt");
+            var authToken = OpenClaw.Shared.Mcp.McpAuthToken.LoadOrCreate(tokenPath);
+            attempt = new McpHttpServer(bridge, McpPort, _logger, authToken);
             attempt.Start();
             _mcpServer = attempt;
             _mcpStartupError = null;
@@ -556,7 +568,7 @@ public class NodeService : IDisposable
 
     private async Task<string> OnCanvasEval(string script)
     {
-        var tcs = new TaskCompletionSource<string>();
+        var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         bool enqueued = _dispatcherQueue.TryEnqueue(async () =>
         {
@@ -565,24 +577,24 @@ public class NodeService : IDisposable
                 if (_canvasWindow != null && !_canvasWindow.IsClosed)
                 {
                     var result = await _canvasWindow.EvalAsync(script);
-                    tcs.SetResult(result);
+                    tcs.TrySetResult(result);
                 }
                 else if (_a2uiCanvasWindow != null && !_a2uiCanvasWindow.IsClosed)
                 {
                     // Native A2UI surface has no JS runtime; surface a structured error
                     // so callers can branch instead of pattern-matching free-text.
-                    tcs.SetException(new InvalidOperationException(
+                    tcs.TrySetException(new InvalidOperationException(
                         "CANVAS_EVAL_UNAVAILABLE: native A2UI renderer has no JS runtime; use canvas.a2ui.dump for state introspection"));
                 }
                 else
                 {
-                    tcs.SetException(new InvalidOperationException(
+                    tcs.TrySetException(new InvalidOperationException(
                         "CANVAS_NOT_OPEN: no canvas window is currently open"));
                 }
             }
             catch (Exception ex)
             {
-                tcs.SetException(ex);
+                tcs.TrySetException(ex);
             }
         });
         if (!enqueued)
@@ -593,7 +605,7 @@ public class NodeService : IDisposable
 
     private async Task<string> OnCanvasSnapshot(CanvasSnapshotArgs args)
     {
-        var tcs = new TaskCompletionSource<string>();
+        var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         bool enqueued = _dispatcherQueue.TryEnqueue(async () =>
         {
@@ -602,24 +614,24 @@ public class NodeService : IDisposable
                 if (_canvasWindow != null && !_canvasWindow.IsClosed)
                 {
                     var base64 = await _canvasWindow.CaptureSnapshotAsync(args.Format);
-                    tcs.SetResult(base64);
+                    tcs.TrySetResult(base64);
                 }
                 else if (_a2uiCanvasWindow != null && !_a2uiCanvasWindow.IsClosed)
                 {
                     // Render the native XAML surface to PNG/JPEG via RenderTargetBitmap
                     // so vision pipelines and regression diffs keep working post-cutover.
                     var base64 = await _a2uiCanvasWindow.CaptureSnapshotAsync(args.Format);
-                    tcs.SetResult(base64);
+                    tcs.TrySetResult(base64);
                 }
                 else
                 {
-                    tcs.SetException(new InvalidOperationException(
+                    tcs.TrySetException(new InvalidOperationException(
                         "CANVAS_NOT_OPEN: no canvas window is currently open"));
                 }
             }
             catch (Exception ex)
             {
-                tcs.SetException(ex);
+                tcs.TrySetException(ex);
             }
         });
         if (!enqueued)
@@ -630,14 +642,14 @@ public class NodeService : IDisposable
 
     private Task<string> OnCanvasA2UIDumpAsync()
     {
-        var tcs = new TaskCompletionSource<string>();
+        var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         bool enqueued = _dispatcherQueue.TryEnqueue(() =>
         {
             try
             {
                 if (_a2uiCanvasWindow == null || _a2uiCanvasWindow.IsClosed)
                 {
-                    tcs.SetResult(System.Text.Json.JsonSerializer.Serialize(new
+                    tcs.TrySetResult(System.Text.Json.JsonSerializer.Serialize(new
                     {
                         renderer = "none",
                         a2uiVersion = "0.8",
@@ -646,11 +658,11 @@ public class NodeService : IDisposable
                     }));
                     return;
                 }
-                tcs.SetResult(_a2uiCanvasWindow.GetStateSnapshot());
+                tcs.TrySetResult(_a2uiCanvasWindow.GetStateSnapshot());
             }
             catch (Exception ex)
             {
-                tcs.SetException(ex);
+                tcs.TrySetException(ex);
             }
         });
         if (!enqueued)
@@ -660,7 +672,7 @@ public class NodeService : IDisposable
 
     private Task<string> OnCanvasCapsAsync()
     {
-        var tcs = new TaskCompletionSource<string>();
+        var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         bool enqueued = _dispatcherQueue.TryEnqueue(() =>
         {
             try
@@ -681,11 +693,11 @@ public class NodeService : IDisposable
                         introspect = nativeOpen,
                     },
                 };
-                tcs.SetResult(System.Text.Json.JsonSerializer.Serialize(caps));
+                tcs.TrySetResult(System.Text.Json.JsonSerializer.Serialize(caps));
             }
             catch (Exception ex)
             {
-                tcs.SetException(ex);
+                tcs.TrySetException(ex);
             }
         });
         if (!enqueued)
@@ -726,6 +738,12 @@ public class NodeService : IDisposable
     {
         if (_mediaResolver != null) return _mediaResolver;
         _mediaResolver = new MediaResolver(_logger);
+        // Settings.A2UIImageHosts is the single source of truth for HTTPS image
+        // fetching. Empty list = inline data: only, which is the safe default.
+        if (_settings?.A2UIImageHosts is { Count: > 0 } hosts)
+        {
+            foreach (var host in hosts) _mediaResolver.AllowHost(host);
+        }
         return _mediaResolver;
     }
 

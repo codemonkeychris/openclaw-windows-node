@@ -926,9 +926,10 @@ public class WindowsNodeClient : WebSocketClientBase
     /// Method namespace is <c>canvas.a2ui.action</c> so the gateway can route
     /// it to the originating agent. Safe to call when not connected — drops.
     /// </summary>
-    public async Task SendCanvasA2UIActionAsync(object payload)
+    public async Task SendCanvasA2UIActionAsync(System.Text.Json.Nodes.JsonObject payload)
     {
         if (!_isConnected) return;
+        if (payload is null) throw new ArgumentNullException(nameof(payload));
 
         var msg = new
         {

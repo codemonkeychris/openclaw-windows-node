@@ -65,28 +65,96 @@ public sealed class ListRenderer : IComponentRenderer
             ? Orientation.Horizontal
             : Orientation.Vertical;
 
-        var stack = new StackPanel
+        // Virtualize via ItemsRepeater + ItemsRepeaterScrollHost. Building 10k
+        // FrameworkElements upfront — the previous StackPanel behavior — was
+        // fine for tiny lists but pinned the UI thread on large ones. The
+        // repeater realizes only the items in the viewport. (Spec §5 calls
+        // this out as the expected mapping for v1.)
+        var children = ctx.GetExplicitChildren(c);
+        var alignmentValue = c.Properties["alignment"]?.GetValue<string>();
+        var spacing = ctx.Theme.Spacing is { } sp ? sp : 6.0;
+
+        var layout = new StackLayout
         {
             Orientation = orientation,
-            Spacing = ctx.Theme.Spacing is { } s ? s : 6,
+            Spacing = spacing,
         };
-        ContainerHelpers.ApplyAlignment(stack, c.Properties["alignment"]?.GetValue<string>(), horizontal: orientation == Orientation.Horizontal);
 
-        foreach (var childId in ctx.GetExplicitChildren(c))
+        var repeater = new ItemsRepeater
         {
-            var built = ctx.BuildChild(childId);
-            if (built != null) stack.Children.Add(built);
-        }
+            Layout = layout,
+            ItemsSource = children,
+            ItemTemplate = new ChildIdTemplate(ctx),
+        };
 
-        // Wrap in a ScrollViewer so long lists don't blow out the surface.
-        return new ScrollViewer
+        var scrollViewer = new ScrollViewer
         {
             HorizontalScrollMode = orientation == Orientation.Horizontal ? ScrollMode.Auto : ScrollMode.Disabled,
             HorizontalScrollBarVisibility = orientation == Orientation.Horizontal ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled,
             VerticalScrollMode = orientation == Orientation.Vertical ? ScrollMode.Auto : ScrollMode.Disabled,
             VerticalScrollBarVisibility = orientation == Orientation.Vertical ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled,
-            Content = stack,
+            Content = repeater,
         };
+        // Cross-axis alignment lives on the scrollviewer; the repeater's layout
+        // governs main-axis flow.
+        if (alignmentValue != null)
+        {
+            if (orientation == Orientation.Horizontal)
+            {
+                scrollViewer.VerticalAlignment = alignmentValue switch
+                {
+                    "start" => VerticalAlignment.Top,
+                    "center" => VerticalAlignment.Center,
+                    "end" => VerticalAlignment.Bottom,
+                    "stretch" => VerticalAlignment.Stretch,
+                    _ => scrollViewer.VerticalAlignment,
+                };
+            }
+            else
+            {
+                scrollViewer.HorizontalAlignment = alignmentValue switch
+                {
+                    "start" => HorizontalAlignment.Left,
+                    "center" => HorizontalAlignment.Center,
+                    "end" => HorizontalAlignment.Right,
+                    "stretch" => HorizontalAlignment.Stretch,
+                    _ => scrollViewer.HorizontalAlignment,
+                };
+            }
+        }
+        return scrollViewer;
+    }
+
+    /// <summary>
+    /// Resolves each <c>children[i]</c> string-id back to its A2UI component on
+    /// realization. Caches by id so scrolling back to a previously-realized item
+    /// reuses the same instance and its bindings stay subscribed.
+    /// </summary>
+    private sealed class ChildIdTemplate : Microsoft.UI.Xaml.IElementFactory
+    {
+        private readonly RenderContext _ctx;
+        private readonly System.Collections.Generic.Dictionary<string, UIElement> _cache = new(StringComparer.Ordinal);
+        public ChildIdTemplate(RenderContext ctx) { _ctx = ctx; }
+
+        public UIElement GetElement(Microsoft.UI.Xaml.ElementFactoryGetArgs args)
+        {
+            if (args.Data is string id)
+            {
+                if (_cache.TryGetValue(id, out var existing))
+                    return existing;
+                var built = _ctx.BuildChild(id) ?? (UIElement)new ContentPresenter();
+                _cache[id] = built;
+                return built;
+            }
+            return new ContentPresenter();
+        }
+
+        public void RecycleElement(Microsoft.UI.Xaml.ElementFactoryRecycleArgs args)
+        {
+            // Keep the realized element in the cache so re-realization reuses it
+            // and its DataModel subscriptions stay live. Removing here would
+            // double-build on every scroll.
+        }
     }
 }
 
@@ -96,14 +164,19 @@ public sealed class CardRenderer : IComponentRenderer
 
     public FrameworkElement Render(A2UIComponentDef c, RenderContext ctx)
     {
+        // Honor theme.Spacing as the card's padding so a tighter / looser
+        // surface theme propagates down. Fallback 16 matches Fluent default.
+        var pad = ctx.Theme.Spacing is { } sp ? sp * 2 : 16;
         var border = new Border
         {
             CornerRadius = new CornerRadius(ctx.Theme.CornerRadius is { } r ? r : 8),
-            Padding = new Thickness(16),
+            Padding = new Thickness(pad),
             BorderThickness = new Thickness(1),
         };
-        try { border.Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"]; } catch { }
-        try { border.BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"]; } catch { }
+        if (Application.Current.Resources.TryGetValue("CardBackgroundFillColorDefaultBrush", out var bg) && bg is Brush bgBrush)
+            border.Background = bgBrush;
+        if (Application.Current.Resources.TryGetValue("CardStrokeColorDefaultBrush", out var bs) && bs is Brush bsBrush)
+            border.BorderBrush = bsBrush;
 
         var childId = ctx.GetSingleChild(c, "child");
         if (childId != null) border.Child = ctx.BuildChild(childId);
@@ -128,9 +201,10 @@ public sealed class TabsRenderer : IComponentRenderer
 
         if (c.Properties["tabItems"] is JsonArray arr)
         {
+            int tabIndex = 0;
             foreach (var node in arr)
             {
-                if (node is not JsonObject tabObj) continue;
+                if (node is not JsonObject tabObj) { tabIndex++; continue; }
                 var titleVal = A2UIValue.From(tabObj["title"]);
                 var titleText = ctx.ResolveString(titleVal) ?? "Tab";
                 var childId = tabObj["child"]?.GetValue<string>();
@@ -142,15 +216,18 @@ public sealed class TabsRenderer : IComponentRenderer
                     Content = childId != null ? ctx.BuildChild(childId) : null,
                 };
 
-                // Live-bind the title if it's path-bound.
+                // Live-bind the title if it's path-bound. Key by tab index — never
+                // Guid.NewGuid(), which leaked a subscription on every render and
+                // collided when two tabs had null childId.
                 if (titleVal?.HasPath == true)
                 {
-                    var subKey = $"tab::{childId ?? Guid.NewGuid().ToString()}::title";
+                    var subKey = $"tab::{tabIndex}::title";
                     void Update() => tab.Header = ctx.ResolveString(titleVal) ?? "Tab";
                     ctx.WatchValue(c.Id, subKey, titleVal, Update);
                 }
 
                 tabs.TabItems.Add(tab);
+                tabIndex++;
             }
         }
         return tabs;
@@ -201,9 +278,12 @@ public sealed class DividerRenderer : IComponentRenderer
             rect.HorizontalAlignment = HorizontalAlignment.Stretch;
             rect.VerticalAlignment = VerticalAlignment.Center;
         }
-        rect.Margin = new Thickness(0, 4, 0, 4);
-        try { rect.Fill = (Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"]; }
-        catch { rect.Fill = new SolidColorBrush(Microsoft.UI.Colors.Gray); }
+        var marginV = ctx.Theme.Spacing is { } sp ? sp / 2 : 4;
+        rect.Margin = new Thickness(0, marginV, 0, marginV);
+        if (Application.Current.Resources.TryGetValue("DividerStrokeColorDefaultBrush", out var divBrush) && divBrush is Brush b)
+            rect.Fill = b;
+        else
+            rect.Fill = new SolidColorBrush(Microsoft.UI.Colors.Gray);
         return rect;
     }
 }

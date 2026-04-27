@@ -76,7 +76,7 @@ public class McpToolBridgeTests
         {
             new FakeCapability("system", "system.notify"),
             new FakeCapability("canvas", "canvas.a2ui.push"),
-            new FakeCapability("screen", "screen.capture"),
+            new FakeCapability("screen", "screen.snapshot"),
             new FakeCapability("camera", "camera.snap"),
             new FakeCapability("custom", "custom.unknown"),
         };
@@ -93,7 +93,7 @@ public class McpToolBridgeTests
         // Curated descriptions should be specific, not the generic "{category} capability: {cmd}" stub.
         Assert.Contains("toast notification", byName["system.notify"]);
         Assert.Contains("A2UI v0.8", byName["canvas.a2ui.push"]);
-        Assert.Contains("screenshot", byName["screen.capture"]);
+        Assert.Contains("screenshot", byName["screen.snapshot"]);
         Assert.Contains("camera", byName["camera.snap"], System.StringComparison.OrdinalIgnoreCase);
 
         // Unknown commands keep the generic fallback so newly-added capabilities still render.

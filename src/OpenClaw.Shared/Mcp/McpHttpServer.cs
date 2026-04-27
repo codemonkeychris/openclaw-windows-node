@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -40,9 +41,13 @@ public sealed class McpHttpServer : IDisposable
 {
     private const long MaxRequestBodyBytes = 4L * 1024 * 1024; // 4 MiB
     private const int MaxConcurrentHandlers = 8;
-    // Generous enough to cover 60s camera.clip plus encoding/serialization
-    // overhead; tight enough to free handler slots if a tool wedges.
-    private const int RequestTimeoutMs = 90_000;
+    // Sized to cover the longest legitimate capability: screen.record up to
+    // 300s plus encoding + serialization. Earlier 90s deadline silently abort
+    // ed valid recording requests while the OS capture pipeline kept running
+    // unobserved (unified review H10). Cancellation now flows through the
+    // capability via INodeCapability.ExecuteAsync(NodeInvokeRequest, CT) so
+    // tools that opt in actually stop the underlying work.
+    private const int RequestTimeoutMs = 360_000;
     // How long Dispose waits for in-flight handlers to drain before forcing
     // tear-down. Past this point handlers may observe disposed services.
     private static readonly TimeSpan DrainTimeout = TimeSpan.FromSeconds(5);
@@ -51,21 +56,29 @@ public sealed class McpHttpServer : IDisposable
     private readonly int _port;
     private readonly IOpenClawLogger _logger;
     private readonly HttpListener _listener;
+    /// <summary>
+    /// Required bearer token for POST requests. Empty/null disables auth (the
+    /// pre-auth contract — kept so existing dev configs keep working). When set,
+    /// every POST must carry <c>Authorization: Bearer &lt;token&gt;</c>.
+    /// </summary>
+    private readonly string? _authToken;
     private readonly CancellationTokenSource _cts = new();
     private readonly SemaphoreSlim _handlerLimiter = new(MaxConcurrentHandlers, MaxConcurrentHandlers);
     private readonly object _activeLock = new();
     private readonly HashSet<Task> _activeHandlers = new();
     private Task? _acceptLoop;
     private int _disposed;
+    private int _stopping;
 
     public int Port => _port;
     public string Endpoint => $"http://127.0.0.1:{_port}/";
 
-    public McpHttpServer(McpToolBridge bridge, int port, IOpenClawLogger logger)
+    public McpHttpServer(McpToolBridge bridge, int port, IOpenClawLogger logger, string? authToken = null)
     {
         _bridge = bridge ?? throw new ArgumentNullException(nameof(bridge));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _port = port;
+        _authToken = string.IsNullOrEmpty(authToken) ? null : authToken;
         _listener = new HttpListener();
         // Loopback binding — not reachable from other machines.
         _listener.Prefixes.Add($"http://127.0.0.1:{port}/");
@@ -195,6 +208,17 @@ public sealed class McpHttpServer : IDisposable
                 return;
             }
 
+            // Bearer-token check. Defends against untrusted local processes
+            // (browser helpers, editor extensions) that share the loopback
+            // surface with the legitimate MCP client. Token lives in a
+            // user-only-readable file under %LOCALAPPDATA%; CLI/agent
+            // registration reads from there.
+            if (_authToken != null && !IsAuthorized(ctx.Request.Headers["Authorization"]))
+            {
+                Reject(ctx, HttpStatusCode.Unauthorized, "missing or invalid bearer token");
+                return;
+            }
+
             // Force application/json on POST. Combined with the Origin check,
             // this means a browser cross-origin fetch must use a non-simple
             // Content-Type and trigger a CORS preflight, which we don't honor.
@@ -262,6 +286,20 @@ public sealed class McpHttpServer : IDisposable
         }
     }
 
+    private bool IsAuthorized(string? authHeader)
+    {
+        if (_authToken == null) return true;
+        if (string.IsNullOrEmpty(authHeader)) return false;
+        // Accept "Bearer <token>" (RFC 6750) — case-insensitive scheme, exact token.
+        const string scheme = "Bearer ";
+        if (!authHeader.StartsWith(scheme, StringComparison.OrdinalIgnoreCase)) return false;
+        var presented = authHeader.Substring(scheme.Length).Trim();
+        // Constant-time compare; both strings already known length.
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(presented),
+            Encoding.UTF8.GetBytes(_authToken));
+    }
+
     private static bool IsHostAllowed(string? host)
     {
         if (string.IsNullOrEmpty(host)) return false;
@@ -315,10 +353,17 @@ public sealed class McpHttpServer : IDisposable
     /// Idempotent. Returns when it is safe to dispose downstream services
     /// (capabilities, capture services) without racing live handlers.
     /// </summary>
-    public async Task StopAsync(TimeSpan drainTimeout)
+    public Task StopAsync(TimeSpan drainTimeout)
     {
-        if (Volatile.Read(ref _disposed) != 0) return;
+        // Idempotence is governed by _stopping (not _disposed) so that Dispose
+        // can call the same drain path *after* setting _disposed=1. The previous
+        // code keyed on _disposed and silently skipped the drain in that flow.
+        if (Interlocked.Exchange(ref _stopping, 1) != 0) return Task.CompletedTask;
+        return StopCoreAsync(drainTimeout);
+    }
 
+    private async Task StopCoreAsync(TimeSpan drainTimeout)
+    {
         try { _cts.Cancel(); } catch { /* already cancelled or disposed */ }
         try { if (_listener.IsListening) _listener.Stop(); } catch { /* already stopped */ }
 
@@ -347,10 +392,30 @@ public sealed class McpHttpServer : IDisposable
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        // Drain in-flight handlers first so we don't pull the limiter out from
-        // under them. Block here — Dispose is the sync seam.
-        try { StopAsync(DrainTimeout).GetAwaiter().GetResult(); }
-        catch (Exception ex) { _logger.Warn($"[MCP] Drain error: {ex.Message}"); }
+        // Run the drain unconditionally on dispose. We can't go through the
+        // public StopAsync because a prior caller may already have set
+        // _stopping — we still need to wait for the drain to finish before
+        // tearing down the limiter and CTS.
+        if (Interlocked.Exchange(ref _stopping, 1) == 0)
+        {
+            try { StopCoreAsync(DrainTimeout).GetAwaiter().GetResult(); }
+            catch (Exception ex) { _logger.Warn($"[MCP] Drain error: {ex.Message}"); }
+        }
+        else
+        {
+            // A prior StopAsync is in flight; wait briefly for it to finish so
+            // we don't dispose the limiter while a handler is still inside it.
+            lock (_activeLock)
+            {
+                if (_activeHandlers.Count > 0)
+                {
+                    Task[] toAwait = new Task[_activeHandlers.Count];
+                    _activeHandlers.CopyTo(toAwait);
+                    try { Task.WhenAny(Task.WhenAll(toAwait), Task.Delay(DrainTimeout)).GetAwaiter().GetResult(); }
+                    catch { /* swallow — best-effort */ }
+                }
+            }
+        }
         try { _listener.Close(); } catch { /* already closed */ }
         _cts.Dispose();
         _handlerLimiter.Dispose();

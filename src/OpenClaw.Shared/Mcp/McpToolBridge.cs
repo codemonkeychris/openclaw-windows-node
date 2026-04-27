@@ -207,17 +207,22 @@ public class McpToolBridge
         ["canvas.a2ui.reset"] =
             "Reset the Canvas A2UI state, clearing any rendered surfaces.",
 
-        // screen.*
-        ["screen.capture"] =
+        // screen.* — names match the canonical OpenClaw protocol
+        // (apps/shared/OpenClawKit/Sources/OpenClawKit/ScreenCommands.swift).
+        // No screen.list or screen.capture exist in the protocol; previous
+        // drift advertised tools that didn't actually resolve.
+        ["screen.snapshot"] =
             "Capture a screenshot of the specified display. Args: format ('png'|'jpeg', default 'png'), maxWidth (int, default 1920), quality (int 1-100, default 80), monitor / screenIndex (int, default 0 = primary), includePointer (bool, default true). Returns { format, width, height, base64, image } where image is a data: URL.",
-        ["screen.list"] =
-            "List attached displays. Returns { screens: [{ index, name, primary, bounds: {x,y,width,height}, workingArea: {x,y,width,height} }, ...] }.",
+        ["screen.record"] =
+            "Record the specified display for a bounded duration. Args: durationMs (int, required, max 300000), format ('mp4'|'webm', default 'mp4'), monitor / screenIndex (int, default 0 = primary), maxWidth (int, default 1920), fps (int, default 30). Returns { format, durationMs, base64 }.",
 
         // camera.*
         ["camera.list"] =
             "List cameras attached to the Windows node. Returns { cameras: [{ deviceId, name, isDefault }, ...] }.",
         ["camera.snap"] =
             "Capture a still photo from a camera. Args: deviceId (string, optional — defaults to system default camera), format ('jpeg'|'png', default 'jpeg'), maxWidth (int, default 1280), quality (int 1-100, default 80). Returns { format, width, height, base64 }.",
+        ["camera.clip"] =
+            "Record a short clip from a camera. Args: deviceId (string, optional), durationMs (int, required, max 60000), format ('mp4'|'webm', default 'mp4'), maxWidth (int, default 1280). Returns { format, durationMs, base64 }.",
     };
 
     private async Task<object> HandleToolsCallAsync(JsonElement parameters, CancellationToken cancellationToken)
@@ -253,15 +258,15 @@ public class McpToolBridge
         };
 
         _logger.Debug($"[MCP] tools/call {name}");
-        // INodeCapability does not yet take a CancellationToken (changing it
-        // would touch every gateway capability). WaitAsync gives the bridge a
-        // hard deadline: when the request CT fires we abandon waiting and
-        // return a tool error to free the handler slot. The capability's
-        // underlying work may continue but cannot pin the MCP server.
+        // Pass the cancellation token through. Capabilities that override the
+        // CT-aware overload (long-running screen/camera capture) will stop
+        // their underlying pipeline on timeout; legacy capabilities fall back
+        // to the no-CT signature and still benefit from WaitAsync freeing the
+        // bridge's handler slot.
         NodeInvokeResponse response;
         try
         {
-            response = await capability.ExecuteAsync(request).WaitAsync(cancellationToken);
+            response = await capability.ExecuteAsync(request, cancellationToken).WaitAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

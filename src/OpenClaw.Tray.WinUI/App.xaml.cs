@@ -246,9 +246,17 @@ public partial class App : Application
         // Single instance check - keep mutex alive for app lifetime.
         // When running with an isolated data dir (tests), suffix the mutex name so
         // the test instance does not collide with the user's regular tray app.
-        var mutexName = DataDirOverride is null
-            ? "OpenClawTray"
-            : $"OpenClawTray-{Math.Abs(DataDirOverride.GetHashCode()):X8}";
+        // String.GetHashCode() is randomized per process since .NET Core 2.1, so
+        // two test runs against the same data dir would otherwise pick different
+        // mutex names — and `Math.Abs(int.MinValue)` overflows. Use a stable
+        // SHA-256 prefix instead.
+        var mutexName = "OpenClawTray";
+        if (DataDirOverride is not null)
+        {
+            var hash = System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(DataDirOverride));
+            mutexName = $"OpenClawTray-{Convert.ToHexString(hash, 0, 4)}";
+        }
         _mutex = new Mutex(true, mutexName, out bool createdNew);
         if (!createdNew)
         {

@@ -12,6 +12,14 @@ namespace OpenClawTray.A2UI.DataModel;
 /// </summary>
 public sealed class DataModelStore
 {
+    // Per-update caps. Bounded so an adversarial dataModelUpdate can't drive the
+    // UI thread into an OOM or a million-entry loop. Sized to dwarf realistic
+    // catalogs while still rejecting obvious abuse.
+    internal const int MaxEntriesPerUpdate = 1024;
+    internal const int MaxValueMapDepth = 32;
+    internal const int MaxKeyLength = 256;
+    internal const int MaxStringValueLength = 64 * 1024;
+
     private readonly object _lock = new();
     private readonly Dictionary<string, SurfaceModel> _surfaces = new(StringComparer.Ordinal);
     private readonly DispatcherQueue _dispatcher;
@@ -68,6 +76,11 @@ public sealed class DataModelStore
     /// </summary>
     public void ApplyDataModelUpdate(string surfaceId, string? basePath, IReadOnlyList<Protocol.DataModelEntry> entries)
     {
+        // Drop oversize batches at the boundary. Smaller-than-cap batches still
+        // get per-entry sanity checks below.
+        if (entries.Count > MaxEntriesPerUpdate)
+            return;
+
         SurfaceModel model;
         lock (_lock)
         {
@@ -85,11 +98,18 @@ public sealed class DataModelStore
 
         foreach (var entry in entries)
         {
+            // Per-entry caps: drop the entry rather than aborting the whole batch
+            // (consistent with the existing "skip bad pointer" tolerance).
+            if (entry.Key.Length > MaxKeyLength) continue;
+            if (entry.ValueString != null && entry.ValueString.Length > MaxStringValueLength) continue;
+            if (!IsWithinDepth(entry.ValueMap, depth: 1, max: MaxValueMapDepth)) continue;
+
             try
             {
                 var pointer = string.IsNullOrEmpty(entry.Key)
                     ? (string.IsNullOrEmpty(prefix) ? "/" : prefix)
                     : prefix + "/" + EncodePointerToken(entry.Key);
+                // SetByPointer takes the SurfaceModel.Sync lock internally.
                 model.SetByPointer(pointer, entry.ToJsonNode());
                 changed.Add(NormalizePath(pointer));
             }
@@ -101,6 +121,15 @@ public sealed class DataModelStore
 
         if (changed.Count > 0)
             new DataModelObservable(model, _dispatcher).NotifyPaths(changed);
+    }
+
+    private static bool IsWithinDepth(IReadOnlyList<Protocol.DataModelEntry>? map, int depth, int max)
+    {
+        if (map == null) return true;
+        if (depth > max) return false;
+        foreach (var e in map)
+            if (!IsWithinDepth(e.ValueMap, depth + 1, max)) return false;
+        return true;
     }
 
     private static string EncodePointerToken(string key) =>
@@ -122,42 +151,66 @@ public sealed class DataModelStore
     /// <summary>Internal mutable holder; shared between observable views.</summary>
     internal sealed class SurfaceModel
     {
+        // Per-model lock guarding Root and any traversal/mutation. JsonObject
+        // and JsonArray are not thread-safe, so every read AND every write must
+        // go through this lock — including the deep-clone in canvas.a2ui.dump.
+        public readonly object Sync = new();
         // Single dictionary keyed by normalized pointer path → list of subscribers.
         public readonly Dictionary<string, List<Action>> Subscribers = new(StringComparer.Ordinal);
         public JsonObject Root { get; private set; }
 
         public SurfaceModel(JsonObject root) { Root = root; }
 
-        public void Replace(JsonObject newRoot) { Root = newRoot; }
+        public void Replace(JsonObject newRoot) { lock (Sync) { Root = newRoot; } }
 
         public JsonNode? GetByPointer(string pointer)
         {
-            if (string.IsNullOrEmpty(pointer) || pointer == "/" || pointer == "")
-                return Root;
-            var (parent, key, isIndex, idx) = Resolve(pointer, createMissing: false);
-            if (parent == null) return null;
-            if (parent is JsonObject po) return po[key!];
-            if (parent is JsonArray pa) return isIndex && idx >= 0 && idx < pa.Count ? pa[idx] : null;
-            return null;
+            lock (Sync)
+            {
+                if (string.IsNullOrEmpty(pointer) || pointer == "/" || pointer == "")
+                    return Root;
+                var (parent, key, isIndex, idx) = Resolve(pointer, createMissing: false);
+                if (parent == null) return null;
+                if (parent is JsonObject po) return po[key!];
+                if (parent is JsonArray pa) return isIndex && idx >= 0 && idx < pa.Count ? pa[idx] : null;
+                return null;
+            }
         }
 
         public void SetByPointer(string pointer, JsonNode? value)
         {
-            if (string.IsNullOrEmpty(pointer) || pointer == "/")
+            lock (Sync)
             {
-                if (value is JsonObject obj) Root = obj;
-                return;
+                if (string.IsNullOrEmpty(pointer) || pointer == "/")
+                {
+                    if (value is JsonObject obj) Root = obj;
+                    else if (value != null)
+                    {
+                        // Whole-tree replace requires an object root. Coerce a
+                        // scalar/array into { "value": <scalar> } rather than
+                        // silently dropping the write — the previous no-op
+                        // behaviour masked agent bugs.
+                        Root = new JsonObject { ["value"] = value.DeepClone() };
+                    }
+                    return;
+                }
+                var (parent, key, isIndex, idx) = Resolve(pointer, createMissing: true);
+                if (parent is JsonObject po)
+                {
+                    po[key!] = value;
+                }
+                else if (parent is JsonArray pa)
+                {
+                    while (pa.Count <= idx) pa.Add(null);
+                    pa[idx] = value;
+                }
             }
-            var (parent, key, isIndex, idx) = Resolve(pointer, createMissing: true);
-            if (parent is JsonObject po)
-            {
-                po[key!] = value;
-            }
-            else if (parent is JsonArray pa)
-            {
-                while (pa.Count <= idx) pa.Add(null);
-                pa[idx] = value;
-            }
+        }
+
+        /// <summary>Atomic deep-clone of the root JsonObject. Required for snapshot/dump consumers.</summary>
+        public JsonObject CloneRoot()
+        {
+            lock (Sync) { return (JsonObject)Root.DeepClone(); }
         }
 
         private (JsonNode? parent, string? key, bool isIndex, int idx) Resolve(string pointer, bool createMissing)
@@ -225,7 +278,15 @@ public sealed class DataModelObservable
         _dispatcher = dispatcher;
     }
 
+    /// <summary>
+    /// Direct reference to the root object. Callers MUST NOT mutate or
+    /// enumerate concurrently with writes; prefer <see cref="CloneRoot"/> for
+    /// any consumer that needs a stable view.
+    /// </summary>
     public JsonObject Root => _model.Root;
+
+    /// <summary>Atomic deep-clone of the root object. Safe to enumerate off-dispatcher.</summary>
+    public JsonObject CloneRoot() => _model.CloneRoot();
 
     public JsonNode? Read(string pointer) => _model.GetByPointer(pointer);
 

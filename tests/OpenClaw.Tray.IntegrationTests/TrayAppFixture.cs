@@ -22,7 +22,7 @@ public sealed class TrayAppFixture : IAsyncLifetime
     public string DataDir { get; }
     public int McpPort { get; }
     public string McpEndpoint => $"http://127.0.0.1:{McpPort}/mcp";
-    public McpClient Client { get; }
+    public McpClient Client { get; private set; }
 
     private readonly string _exePath;
     private readonly Process _process;
@@ -39,6 +39,8 @@ public sealed class TrayAppFixture : IAsyncLifetime
         _exePath = LocateTrayExe();
         _process = SpawnTray();
 
+        // Note: token doesn't exist until the tray starts the MCP server.
+        // We reset Client.Authorization once the file appears in InitializeAsync.
         Client = new McpClient(McpEndpoint);
     }
 
@@ -61,7 +63,19 @@ public sealed class TrayAppFixture : IAsyncLifetime
             try
             {
                 var resp = await http.GetAsync($"http://127.0.0.1:{McpPort}/").ConfigureAwait(false);
-                if (resp.StatusCode == HttpStatusCode.OK) return;
+                if (resp.StatusCode == HttpStatusCode.OK)
+                {
+                    // Server is up; pick up the bearer token the tray wrote and
+                    // re-issue Client with it so subsequent POSTs are authorized.
+                    var tokenPath = Path.Combine(DataDir, "mcp-token.txt");
+                    if (File.Exists(tokenPath))
+                    {
+                        var token = (await File.ReadAllTextAsync(tokenPath).ConfigureAwait(false)).Trim();
+                        Client.Dispose();
+                        Client = new McpClient(McpEndpoint, token);
+                    }
+                    return;
+                }
             }
             catch (Exception ex)
             {

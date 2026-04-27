@@ -23,7 +23,8 @@ public sealed class ButtonRenderer : IComponentRenderer
         var primary = c.Properties["primary"]?.GetValue<bool>() ?? false;
         if (primary)
         {
-            try { btn.Style = (Style)Application.Current.Resources["AccentButtonStyle"]; } catch { }
+            if (Application.Current.Resources.TryGetValue("AccentButtonStyle", out var accentStyle) && accentStyle is Style s)
+                btn.Style = s;
         }
 
         var actionNode = c.Properties["action"];
@@ -37,9 +38,16 @@ public sealed class ButtonRenderer : IComponentRenderer
                 Name = actionName,
                 SurfaceId = ctx.SurfaceId,
                 SourceComponentId = c.Id,
-                Context = ctx.BuildActionContext(actionNode),
+                Context = ctx.BuildActionContext(c, actionNode),
             });
         };
+
+        // Accessibility: an icon-only button has no text Content, so Narrator
+        // would announce it as "button". Pull A2UI label/description; fall back
+        // to the action name when neither is provided.
+        AutomationHelpers.Apply(btn, c, ctx);
+        if (string.IsNullOrEmpty(Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(btn)))
+            AutomationHelpers.SetName(btn, actionName);
         return btn;
     }
 }
@@ -82,6 +90,7 @@ public sealed class CheckBoxRenderer : IComponentRenderer
                 ctx.DataModel.Write(valVal.Path!, JsonValue.Create(false));
             };
         }
+        AutomationHelpers.Apply(cb, c, ctx);
         return cb;
     }
 }
@@ -128,6 +137,14 @@ public sealed class TextFieldRenderer : IComponentRenderer
         ctx.WatchValue(c.Id, "label", labelVal, LabelUpdate);
 
         var textVal = ctx.GetValue(c, "text");
+
+        // Obscured fields are sensitive: register the bound path so dump/action-context
+        // redact it (canvas.a2ui.dump is the loudest exfil channel). The value still
+        // round-trips through the data model so a Submit button can read it via an
+        // explicit dataBinding opt-in — but every other read path drops it.
+        if (obscured && textVal?.HasPath == true)
+            ctx.MarkSecretPath(textVal.Path);
+
         bool inProgrammatic = false;
         void TextUpdate()
         {
@@ -163,6 +180,7 @@ public sealed class TextFieldRenderer : IComponentRenderer
             }
         }
 
+        AutomationHelpers.Apply(element, c, ctx);
         return element;
     }
 
@@ -234,14 +252,26 @@ public sealed class DateTimeInputRenderer : IComponentRenderer
                 var t = timePicker?.Time ?? d.TimeOfDay;
                 var combined = new DateTimeOffset(d.Year, d.Month, d.Day,
                     t.Hours, t.Minutes, t.Seconds, d.Offset);
-                var formatted = !string.IsNullOrEmpty(outputFormat)
-                    ? combined.ToString(outputFormat, CultureInfo.InvariantCulture)
-                    : combined.ToString("o");
+                string formatted;
+                try
+                {
+                    formatted = !string.IsNullOrEmpty(outputFormat)
+                        ? combined.ToString(outputFormat, CultureInfo.InvariantCulture)
+                        : combined.ToString("o");
+                }
+                catch (FormatException)
+                {
+                    // Bogus agent-supplied format. Fall back to ISO-8601 so the
+                    // surface keeps working — without this, every keystroke
+                    // throws and the tab re-renders as the unknown placeholder.
+                    formatted = combined.ToString("o");
+                }
                 ctx.DataModel.Write(valVal.Path!, JsonValue.Create(formatted));
             }
             if (datePicker != null) datePicker.DateChanged += (_, _) => Push();
             if (timePicker != null) timePicker.TimeChanged += (_, _) => Push();
         }
+        AutomationHelpers.Apply(sp, c, ctx);
         return sp;
     }
 }
@@ -296,6 +326,7 @@ public sealed class MultipleChoiceRenderer : IComponentRenderer
                     ctx.DataModel.Write(selVal.Path!, arr);
                 };
             }
+            AutomationHelpers.Apply(combo, c, ctx);
             return combo;
         }
         else
@@ -341,6 +372,7 @@ public sealed class MultipleChoiceRenderer : IComponentRenderer
                     ctx.DataModel.Write(selVal.Path!, arr);
                 };
             }
+            AutomationHelpers.Apply(list, c, ctx);
             return list;
         }
     }
@@ -428,6 +460,14 @@ public sealed class SliderRenderer : IComponentRenderer
                 ctx.DataModel.Write(valVal.Path!, JsonValue.Create(e.NewValue));
             };
         }
+
+        // Wire step / stepSize → StepFrequency. Default 1, matching WinUI.
+        var step = c.Properties["step"] is JsonValue jvs && jvs.TryGetValue<double>(out var s1) ? s1
+                 : c.Properties["stepSize"] is JsonValue jvs2 && jvs2.TryGetValue<double>(out var s2) ? s2
+                 : 1.0;
+        if (step > 0) slider.StepFrequency = step;
+
+        AutomationHelpers.Apply(slider, c, ctx);
         return slider;
     }
 }

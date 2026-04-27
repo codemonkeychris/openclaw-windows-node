@@ -83,6 +83,12 @@ public class CanvasCapability : NodeCapabilityBase
     private const int MinQuality = 1;
     private const int MaxQuality = 100;
 
+    // A2UI push caps. Inline transport in McpHttpServer caps at 4 MiB; jsonlPath
+    // bypasses that, so re-enforce here. The line-count cap protects the UI thread
+    // from a single push that explodes into thousands of dispatcher posts.
+    internal const long MaxA2UIJsonlBytes = 4L * 1024 * 1024;
+    internal const int MaxA2UIJsonlLines = 4096;
+
     private Task<NodeInvokeResponse> HandlePresentAsync(NodeInvokeRequest request)
     {
         var url = GetStringArg(request.Args, "url");
@@ -195,19 +201,40 @@ public class CanvasCapability : NodeCapabilityBase
         var jsonl = GetStringArg(request.Args, "jsonl");
         var jsonlPath = GetStringArg(request.Args, "jsonlPath");
         var props = request.Args.TryGetProperty("props", out var propsEl) ? propsEl : default;
-        
+
         if (string.IsNullOrWhiteSpace(jsonl) && !string.IsNullOrWhiteSpace(jsonlPath))
         {
             // Validate jsonlPath to prevent arbitrary file reads.
-            // Resolve to absolute path and reject traversal or suspicious paths.
+            // Resolve to absolute path, follow reparse points, and reject anything
+            // that doesn't ultimately live inside the system temp directory.
+            string fullPath;
+            FileInfo fi;
             try
             {
-                var fullPath = Path.GetFullPath(jsonlPath);
+                fullPath = Path.GetFullPath(jsonlPath);
+                fi = new FileInfo(fullPath);
+                // Resolve symlinks/junctions where possible: a junction inside temp
+                // pointing at a user-writable folder elsewhere would otherwise pass
+                // the StartsWith check below. (M5 in the unified review.) For
+                // non-existent or non-link entries this is a no-op or returns null.
+                try
+                {
+                    var resolved = fi.ResolveLinkTarget(returnFinalTarget: true);
+                    if (resolved != null) fullPath = resolved.FullName;
+                }
+                catch { /* non-link, non-existent, or insufficient permission — fall back to the raw path */ }
+
                 var tempRoot = Path.GetFullPath(Path.GetTempPath());
                 if (!fullPath.StartsWith(tempRoot, StringComparison.OrdinalIgnoreCase))
                 {
                     Logger.Warn($"{request.Command}: jsonlPath outside temp directory: {fullPath}");
                     return Error("jsonlPath must be within the system temp directory");
+                }
+
+                if (fi.Exists && fi.Length > MaxA2UIJsonlBytes)
+                {
+                    Logger.Warn($"{request.Command}: jsonlPath file too large ({fi.Length} > {MaxA2UIJsonlBytes})");
+                    return Error($"jsonlPath exceeds maximum size of {MaxA2UIJsonlBytes} bytes");
                 }
             }
             catch (Exception ex)
@@ -217,7 +244,7 @@ public class CanvasCapability : NodeCapabilityBase
 
             try
             {
-                jsonl = File.ReadAllText(jsonlPath);
+                jsonl = File.ReadAllText(fullPath);
             }
             catch (Exception ex)
             {
@@ -225,22 +252,61 @@ public class CanvasCapability : NodeCapabilityBase
                 return Error($"Failed to read jsonlPath: {ex.Message}");
             }
         }
-        
+
         if (string.IsNullOrWhiteSpace(jsonl))
         {
             return Error("Missing jsonl or jsonlPath parameter");
         }
-        
-        Logger.Info($"{request.Command}: {jsonl.Length} chars");
-        
+
+        // Inline-jsonl size cap. Encoding.UTF8.GetByteCount streams over chars
+        // without allocating, so this is cheap.
+        long byteCount = System.Text.Encoding.UTF8.GetByteCount(jsonl);
+        if (byteCount > MaxA2UIJsonlBytes)
+        {
+            Logger.Warn($"{request.Command}: jsonl payload too large ({byteCount} > {MaxA2UIJsonlBytes})");
+            return Error($"jsonl exceeds maximum size of {MaxA2UIJsonlBytes} bytes");
+        }
+
+        // Line-count cap. A push that fans out to thousands of UI-thread
+        // dispatches has DoS potential even if individually small.
+        int lineCount = CountLines(jsonl);
+        if (lineCount > MaxA2UIJsonlLines)
+        {
+            Logger.Warn($"{request.Command}: jsonl line count too high ({lineCount} > {MaxA2UIJsonlLines})");
+            return Error($"jsonl exceeds maximum of {MaxA2UIJsonlLines} lines");
+        }
+
+        Logger.Info($"{request.Command}: {byteCount} bytes, {lineCount} lines");
+
         A2UIPushRequested?.Invoke(this, new CanvasA2UIArgs
         {
             Jsonl = jsonl,
             JsonlPath = jsonlPath,
             Props = props.ValueKind != default ? props.GetRawText() : "{}"
         });
-        
+
         return Success(new { pushed = true });
+    }
+
+    private static int CountLines(string s)
+    {
+        // Count non-empty newline-delimited lines without allocating an array.
+        int count = 0;
+        bool inLine = false;
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = s[i];
+            if (c == '\n' || c == '\r')
+            {
+                if (inLine) { count++; inLine = false; }
+            }
+            else if (!char.IsWhiteSpace(c))
+            {
+                inLine = true;
+            }
+        }
+        if (inLine) count++;
+        return count;
     }
     
     private NodeInvokeResponse HandleA2UIReset(NodeInvokeRequest request)

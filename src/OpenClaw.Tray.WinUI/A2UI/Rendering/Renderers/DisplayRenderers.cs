@@ -37,11 +37,13 @@ public sealed class TextRenderer : IComponentRenderer
             null => "BodyTextBlockStyle",
             _ => "BodyTextBlockStyle",
         };
-        try { tb.Style = (Style)Application.Current.Resources[resourceKey]; } catch { }
+        if (Application.Current.Resources.TryGetValue(resourceKey, out var styleObj) && styleObj is Style s)
+            tb.Style = s;
         // Some style keys don't exist on every WinUI version; fall back gracefully.
-        if (tb.Style == null && hint != null)
+        if (tb.Style == null && hint != null
+            && Application.Current.Resources.TryGetValue("BodyTextBlockStyle", out var fallback) && fallback is Style fb)
         {
-            try { tb.Style = (Style)Application.Current.Resources["BodyTextBlockStyle"]; } catch { }
+            tb.Style = fb;
         }
     }
 }
@@ -55,24 +57,58 @@ public sealed class ImageRenderer : IComponentRenderer
     public FrameworkElement Render(A2UIComponentDef c, RenderContext ctx)
     {
         var image = new Image();
+        var usageHint = c.Properties["usageHint"]?.GetValue<string>();
         ApplyFit(image, c.Properties["fit"]?.GetValue<string>());
-        ApplyUsageHint(image, c.Properties["usageHint"]?.GetValue<string>());
+        ApplyUsageHint(image, usageHint);
 
+        // Single counter per image; each load takes a snapshot and only assigns
+        // the bitmap if no later load has started. Stops a slow first response
+        // from clobbering a faster second one when the URL flips quickly.
+        var generation = new int[] { 0 };
         var urlVal = ctx.GetValue(c, "url");
         void Update()
         {
             var url = ctx.ResolveString(urlVal);
-            if (!string.IsNullOrEmpty(url)) _ = LoadAsync(image, url);
+            if (string.IsNullOrEmpty(url))
+            {
+                System.Threading.Interlocked.Increment(ref generation[0]);
+                image.Source = null;
+                return;
+            }
+            int token = System.Threading.Interlocked.Increment(ref generation[0]);
+            _ = LoadAsync(image, url, generation, token);
         }
         Update();
         ctx.WatchValue(c.Id, "url", urlVal, Update);
+        // A2UI carries alt text in `description` (preferred) or `label` for images.
+        AutomationHelpers.Apply(image, c, ctx);
+
+        // Avatar usageHint: clip to a circle. Wrapping in a Border with rounded
+        // CornerRadius is the simplest WinUI3-friendly approach (PersonPicture
+        // gives us full Fluent parity but doesn't accept arbitrary BitmapImage
+        // sources without templating).
+        if (string.Equals(usageHint, "avatar", StringComparison.OrdinalIgnoreCase))
+        {
+            var diameter = image.Width > 0 ? image.Width : 40;
+            return new Border
+            {
+                Width = diameter,
+                Height = diameter,
+                CornerRadius = new CornerRadius(diameter / 2),
+                Child = image,
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
+        }
         return image;
     }
 
-    private async Task LoadAsync(Image target, string url)
+    private async Task LoadAsync(Image target, string url, int[] generation, int token)
     {
-        var bmp = await _media.LoadImageAsync(url);
-        if (bmp != null) target.Source = bmp;
+        var bmp = await _media.LoadImageAsync(url).ConfigureAwait(true);
+        // Only commit if our token is still current. Volatile read is sufficient
+        // — UI thread is the only writer and we're awaited back onto it.
+        if (bmp != null && System.Threading.Volatile.Read(ref generation[0]) == token)
+            target.Source = bmp;
     }
 
     private static void ApplyFit(Image image, string? fit)
@@ -132,6 +168,10 @@ public sealed class IconRenderer : IComponentRenderer
         void Update() => fontIcon.Glyph = MapName(ctx.ResolveString(nameVal));
         Update();
         ctx.WatchValue(c.Id, "name", nameVal, Update);
+        // The icon name is the natural automation label when no explicit one is set.
+        AutomationHelpers.Apply(fontIcon, c, ctx);
+        if (string.IsNullOrEmpty(Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(fontIcon)))
+            AutomationHelpers.SetName(fontIcon, ctx.ResolveString(nameVal));
         return fontIcon;
     }
 
@@ -223,6 +263,7 @@ public sealed class VideoRenderer : IComponentRenderer
         }
         Update();
         ctx.WatchValue(c.Id, "url", urlVal, Update);
+        AutomationHelpers.Apply(player, c, ctx);
         return player;
     }
 }
@@ -241,7 +282,8 @@ public sealed class AudioPlayerRenderer : IComponentRenderer
         void DescUpdate() => description.Text = ctx.ResolveString(descVal) ?? string.Empty;
         DescUpdate();
         ctx.WatchValue(c.Id, "description", descVal, DescUpdate);
-        try { description.Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"]; } catch { }
+        if (Application.Current.Resources.TryGetValue("CaptionTextBlockStyle", out var capStyle) && capStyle is Style cs)
+            description.Style = cs;
 
         var player = new MediaPlayerElement
         {
@@ -262,6 +304,7 @@ public sealed class AudioPlayerRenderer : IComponentRenderer
 
         if (!string.IsNullOrEmpty(description.Text)) stack.Children.Add(description);
         stack.Children.Add(player);
+        AutomationHelpers.Apply(stack, c, ctx);
         return stack;
     }
 }

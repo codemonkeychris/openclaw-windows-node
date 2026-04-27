@@ -18,10 +18,17 @@ public sealed class McpClient : IDisposable
     private readonly string _endpoint;
     private int _id;
 
-    public McpClient(string endpoint)
+    public McpClient(string endpoint) : this(endpoint, authToken: null) { }
+
+    public McpClient(string endpoint, string? authToken)
     {
         _endpoint = endpoint;
         _http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        if (!string.IsNullOrEmpty(authToken))
+        {
+            _http.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authToken);
+        }
     }
 
     public Task<JsonDocument> InitializeAsync()

@@ -191,6 +191,7 @@ public sealed partial class StatusDetailWindow : WindowEx
         }
 
         // Channels
+        ChannelSummaryText.Text = BuildChannelSummary(state.Channels);
         ChannelsList.ItemsSource = state.Channels.Select(c =>
         {
             var (icon, brush) = ChannelHealth.IsHealthyStatus(c.Status)
@@ -216,7 +217,8 @@ public sealed partial class StatusDetailWindow : WindowEx
                 StatusIcon = n.IsOnline ? "🟢" : "⚪",
                 Name = string.IsNullOrWhiteSpace(n.DisplayName) ? n.NodeId : n.DisplayName,
                 DetailText = $"{n.Platform ?? "unknown"} · {n.Capabilities.Count} cap · {n.Commands.Count} cmd",
-                CommandText = BuildNodeCommandText(n)
+                CommandText = BuildNodeCommandText(n),
+                SummaryText = BuildNodeSummary(n)
             }).ToList();
             NodesList.Visibility = Visibility.Visible;
             NoNodesText.Visibility = Visibility.Collapsed;
@@ -246,6 +248,22 @@ public sealed partial class StatusDetailWindow : WindowEx
         package.SetText(copyText);
         Clipboard.SetContent(package);
         Logger.Info("[CommandCenter] Copied diagnostic repair text");
+    }
+
+    private void OnCopyChannelSummary(object sender, RoutedEventArgs e)
+    {
+        CopyText(BuildChannelSummaryText(_state.Channels), "[CommandCenter] Copied channel summary");
+    }
+
+    private void OnCopyNodeSummary(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Microsoft.UI.Xaml.Controls.Button { Tag: string summary } ||
+            string.IsNullOrWhiteSpace(summary))
+        {
+            return;
+        }
+
+        CopyText(summary, "[CommandCenter] Copied node summary");
     }
 
     private void OnOpenLogsFolder(object sender, RoutedEventArgs e)
@@ -383,6 +401,7 @@ public sealed partial class StatusDetailWindow : WindowEx
         public string Name { get; set; } = "";
         public string DetailText { get; set; } = "";
         public string CommandText { get; set; } = "";
+        public string SummaryText { get; set; } = "";
     }
 
     private class PortDiagnosticViewModel
@@ -417,6 +436,29 @@ public sealed partial class StatusDetailWindow : WindowEx
         return parts.Count == 0 ? "no details" : string.Join(" · ", parts);
     }
 
+    private static string BuildChannelSummary(IReadOnlyCollection<ChannelCommandCenterInfo> channels)
+    {
+        if (channels.Count == 0)
+            return "No channels reported by gateway health.";
+
+        var running = channels.Count(c => c.CanStop);
+        var startable = channels.Count(c => c.CanStart);
+        var errors = channels.Count(c => string.Equals(c.Status, "error", StringComparison.OrdinalIgnoreCase));
+        return $"{running}/{channels.Count} running · {startable} startable · {errors} error";
+    }
+
+    private static string BuildChannelSummaryText(IReadOnlyCollection<ChannelCommandCenterInfo> channels)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine($"Channels: {BuildChannelSummary(channels)}");
+        foreach (var channel in channels.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            builder.AppendLine($"- {channel.Name}: {channel.Status ?? "unknown"} ({BuildChannelDetail(channel)})");
+        }
+
+        return builder.ToString();
+    }
+
     private static string BuildNodeCommandText(NodeCapabilityHealthInfo node)
     {
         var parts = new List<string>();
@@ -429,6 +471,35 @@ public sealed partial class StatusDetailWindow : WindowEx
         if (node.MissingMacParityCommands.Contains("browser.proxy", StringComparer.OrdinalIgnoreCase))
             parts.Add("missing browser.proxy");
         return parts.Count == 0 ? "no command details" : string.Join(" · ", parts);
+    }
+
+    private static string BuildNodeSummary(NodeCapabilityHealthInfo node)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine(string.IsNullOrWhiteSpace(node.DisplayName) ? node.NodeId : node.DisplayName);
+        builder.AppendLine($"Node ID: {node.NodeId}");
+        builder.AppendLine($"Platform: {node.Platform ?? "unknown"}");
+        builder.AppendLine($"Status: {(node.IsOnline ? "online" : "offline")}");
+        builder.AppendLine($"Capabilities: {string.Join(", ", node.Capabilities.OrderBy(c => c, StringComparer.OrdinalIgnoreCase))}");
+        builder.AppendLine($"Commands: {string.Join(", ", node.Commands.OrderBy(c => c, StringComparer.OrdinalIgnoreCase))}");
+        if (node.Warnings.Count > 0)
+        {
+            builder.AppendLine("Warnings:");
+            foreach (var warning in node.Warnings)
+            {
+                builder.AppendLine($"- {warning.Title}: {warning.Detail}");
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    private static void CopyText(string text, string logMessage)
+    {
+        var package = new DataPackage();
+        package.SetText(text);
+        Clipboard.SetContent(package);
+        Logger.Info(logMessage);
     }
 
     private static string BuildTunnelDetail(TunnelCommandCenterInfo tunnel)

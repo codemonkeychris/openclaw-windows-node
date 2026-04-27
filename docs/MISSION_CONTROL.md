@@ -439,11 +439,12 @@ Deliverables:
 
 - Session previews with thinking/verbose controls.
 - Cost 30-day bars.
-- Node copy submenus.
+- Node copy submenus / summaries: **implemented first Command Center copy action**
+- Channel health summary and copyable context: **implemented first read-only summary**
 - Channel schema forms and QR login flows.
 - Skills/Cron settings.
 - Agent events ring expansion.
-- Hover HUD / richer tray tooltip.
+- Hover HUD / richer tray tooltip: **implemented with topology, channel, node, warning, and activity summary**
 
 Risk: medium; mostly UI and gateway method plumbing.
 

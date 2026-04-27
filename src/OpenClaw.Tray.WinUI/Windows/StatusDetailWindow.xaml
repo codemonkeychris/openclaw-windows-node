@@ -294,8 +294,23 @@
 
             <!-- Channels Section -->
             <StackPanel x:Name="ChannelsSection" AutomationProperties.AutomationId="CommandCenterChannelsSection" Spacing="8">
-                <TextBlock x:Uid="StatusChannelsHeader" Text="CHANNELS" Style="{StaticResource CaptionTextBlockStyle}"
-                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontWeight="Bold"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Uid="StatusChannelsHeader" Text="CHANNELS" Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" FontWeight="Bold"/>
+                    <Button Grid.Column="1"
+                            Content="Copy"
+                            Click="OnCopyChannelSummary"
+                            AutomationProperties.AutomationId="CommandCenterCopyChannelSummaryButton"/>
+                </Grid>
+                <TextBlock x:Name="ChannelSummaryText"
+                           AutomationProperties.AutomationId="CommandCenterChannelSummaryText"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap"/>
                 
                 <ItemsControl x:Name="ChannelsList" AutomationProperties.AutomationId="CommandCenterChannelsList">
                     <ItemsControl.ItemTemplate>
@@ -334,6 +349,7 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{Binding StatusIcon}" Grid.Column="0" Margin="0,0,8,0"/>
                                 <StackPanel Grid.Column="1">
@@ -347,6 +363,11 @@
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                TextWrapping="Wrap"/>
                                 </StackPanel>
+                                <Button Grid.Column="2"
+                                        Content="Copy"
+                                        Tag="{Binding SummaryText}"
+                                        Click="OnCopyNodeSummary"
+                                        AutomationProperties.AutomationId="CommandCenterCopyNodeSummaryButton"/>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

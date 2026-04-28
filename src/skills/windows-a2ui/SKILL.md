@@ -96,7 +96,7 @@ Children are referenced by **id**, not nested in place. Build the surface as a f
 | Component | Properties |
 |---|---|
 | **Text** | `text`: A2UIValue; `usageHint`: `h1`/`h2`/`h3`/`h4`/`h5`/`body` (default) /`caption`. Maps to WinUI text styles (`TitleLargeTextBlockStyle` etc.). Wraps. |
-| **Image** | `url`: A2UIValue; `fit`: `contain`/`cover`/`fill`/`none`/`scale-down` (defaults to `contain`); `usageHint`: `icon` (24 px square), `avatar` (40 px square), `smallFeature` (h=80), `mediumFeature` (h=160), `largeFeature` (h=240), `header` (stretch). `description` or `label` is used as the automation/alt name. Subject to MediaResolver allowlist. |
+| **Image** | `url`: A2UIValue; `fit`: `contain`/`cover`/`fill`/`none`/`scale-down` (defaults to `contain`); `usageHint`: `icon` (24 px square), `avatar` (40 px square), `smallFeature` (h=80), `mediumFeature` (h=160), `largeFeature` (h=240), `header` (stretch). `description` or `label` is used as the automation/alt name. Subject to MediaResolver allowlist. SVG is supported via the same `url` slot. Accepted as `data:image/svg+xml;base64,…` (≤ 2 MiB) or as `https://allowed-host/…svg` (host must be in `Settings.A2UIImageHosts`). The renderer uses Direct2D's static SVG 1.1 subset — no scripts, no animation, no `<foreignObject>`, no external references. Self-contained SVGs only. |
 | **Icon** | `name`: A2UIValue resolving to an entry in the icon enum below. |
 | **Video** | `url`: A2UIValue. Renders as `MediaPlayerElement` with transport controls. URL must pass MediaResolver allowlist. |
 | **AudioPlayer** | `url`: A2UIValue; optional `description`: A2UIValue (caption above the player). |
@@ -196,6 +196,39 @@ Notes on the example:
 - The Button declares `dataBinding: ["/form"]` so both `/form/email` and `/form/password` are in scope. Without that, `/form/password` would be dropped from `action.context` because the `obscured` TextField marks it as secret and the implicit scope refuses to include secrets.
 - Each child is declared as a top-level component and referenced by id; do not nest component objects inline.
 - `beginRendering.root` is sent last, after all component and data-model state is in place.
+
+## Prefer generated SVG over external raster URLs
+
+The Windows node's image pipeline is **closed by default for HTTPS hosts** — `Settings.A2UIImageHosts` is empty until the operator adds entries. That means `<Image>` components pointing at arbitrary `https://cdn.example.com/icon.png` URLs will almost always render as a broken-image placeholder on a fresh install. Don't assume any specific image host is reachable.
+
+**Default to inline-generated SVG via `data:image/svg+xml;…`.** SVG is small in bytes, expressive enough for icons, charts, badges, status glyphs, sparklines, simple diagrams, and arbitrary vector illustration, and works on every Windows node without any operator configuration. The 2 MiB data-URL cap is generous — text SVG compresses well, and 2 MiB holds a substantial amount of geometry.
+
+When to use which:
+
+- **Inline SVG (`data:image/svg+xml;…`)** — first choice for anything you can author from primitives: icons not in the v0.8 icon enum, status indicators, progress bars beyond `<Slider>`, simple charts, color swatches, ASCII-style diagrams as vector, decorative dividers, signature/handwriting, geometry the agent computed.
+- **Inline data-URL raster (`data:image/png;…`, `data:image/jpeg;…`, `data:image/webp;…`)** — when the agent already has raster bytes (e.g., from a screenshot tool or a generated image). Same 2 MiB cap.
+- **Allowlisted `https://`** — only when you have specific reason to believe the host is on `Settings.A2UIImageHosts` (e.g., the user previously confirmed it, or you're writing a surface for a known operator deployment with a known image CDN). Otherwise, prefer one of the two above.
+
+Authoring guidance for SVG:
+
+- Always include `xmlns="http://www.w3.org/2000/svg"` on the root `<svg>` element.
+- Set an explicit `viewBox` (e.g. `viewBox="0 0 24 24"` for icons) and let `fit` on the `<Image>` component handle scaling. Don't bake fixed `width`/`height` into the SVG.
+- Use `<rect>`, `<circle>`, `<ellipse>`, `<line>`, `<polyline>`, `<polygon>`, `<path>`, `<g>`, `<text>` — these are well-supported by the static SVG 1.1 subset.
+- Avoid `<script>`, event-handler attributes (`onload`, etc.), `<animate>`/SMIL, `<foreignObject>`, `<image href="https://…">`, `<use href="https://…">`. They will be silently ignored — the renderer is a static subset — but emitting them is a tell that the SVG was poorly authored, and at minimum wastes data-URL budget.
+- Encoding: prefer raw `data:image/svg+xml;utf8,<svg…>` (URL-encode the `<`, `>`, `#`, and `"` characters) for small SVGs to keep them human-readable; switch to `data:image/svg+xml;base64,…` once the payload exceeds a few hundred bytes.
+- Keep payloads well below the 2 MiB cap. Aim for "small icons under 1 KB, complex illustrations under 100 KB, charts under 500 KB." If a single image needs more than that, the right answer is probably to compose multiple A2UI components rather than ship one giant SVG.
+
+Example — inline SVG icon used in place of a raster URL:
+
+```json
+{"id":"checkIcon","component":{"Image":{
+  "url":{"literalString":"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 12l4 4 10-10' stroke='currentColor' stroke-width='2' fill='none'/></svg>"},
+  "fit":"contain",
+  "usageHint":"icon"
+}}}
+```
+
+The single biggest UX difference between a Windows-node A2UI surface that "just works" and one that's full of broken-image placeholders is whether the agent reaches for inline SVG or external raster URLs. Reach for SVG.
 
 ## Things to avoid
 

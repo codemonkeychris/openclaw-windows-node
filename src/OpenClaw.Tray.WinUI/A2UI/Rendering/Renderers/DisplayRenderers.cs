@@ -104,11 +104,12 @@ public sealed class ImageRenderer : IComponentRenderer
 
     private async Task LoadAsync(Image target, string url, int[] generation, int token)
     {
-        var bmp = await _media.LoadImageAsync(url).ConfigureAwait(true);
+        // ImageSource is the common base of BitmapImage (raster) and SvgImageSource — Image.Source accepts either.
+        var src = await _media.LoadImageAsync(url).ConfigureAwait(true);
         // Only commit if our token is still current. Volatile read is sufficient
         // — UI thread is the only writer and we're awaited back onto it.
-        if (bmp != null && System.Threading.Volatile.Read(ref generation[0]) == token)
-            target.Source = bmp;
+        if (src != null && System.Threading.Volatile.Read(ref generation[0]) == token)
+            target.Source = src;
     }
 
     private static void ApplyFit(Image image, string? fit)

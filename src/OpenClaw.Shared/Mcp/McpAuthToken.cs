@@ -7,19 +7,36 @@ namespace OpenClaw.Shared.Mcp;
 /// <summary>
 /// Manages the MCP server's bearer token.
 ///
-/// The token lives in <c>%LOCALAPPDATA%\OpenClaw\mcp-token.txt</c>. Local CLIs
-/// (the planned `openclaw` CLI) and per-user agent registrations read it from
-/// that path so registration is a single mechanical step rather than a config
-/// mutation. The file inherits the LocalAppData ACL — by default only the
-/// current user (and SYSTEM/Administrators) can read it. Plus the loopback
-/// bind keeps the server invisible to other machines, and the Origin/Host
-/// checks block browser cross-origin attacks.
+/// The token lives next to the rest of the tray's settings, at
+/// <c>%APPDATA%\OpenClawTray\mcp-token.txt</c> (the exact path is composed by
+/// the tray from <c>SettingsManager.SettingsDirectoryPath</c> and surfaced as
+/// <c>NodeService.McpTokenPath</c> — that's the source of truth, not anything
+/// in this file). Co-locating with settings means the test-suite override
+/// <c>OPENCLAW_TRAY_DATA_DIR</c> isolates the token file too.
+///
+/// The token is **created lazily on first MCP server start** (i.e. the first
+/// time the user enables Local MCP Server in Settings — until then the file
+/// does not exist) and then **persists across tray restarts**. Local CLIs and
+/// per-user agent registrations read the file and send the contents on every
+/// request as <c>Authorization: Bearer &lt;contents&gt;</c>.
+///
+/// Defense in depth: the file inherits the parent directory's ACL — by default
+/// only the current user (and SYSTEM/Administrators) can read it; the listener
+/// is bound to loopback so the endpoint is invisible to other machines; and
+/// Origin/Host checks block browser cross-origin attacks. The bearer is the
+/// last line of defense against an untrusted local process on the same box.
 /// </summary>
 public static class McpAuthToken
 {
     private const string FileName = "mcp-token.txt";
 
-    /// <summary>Default path under the user's LocalAppData. Created on first read.</summary>
+    /// <summary>
+    /// Fallback path used only when a caller doesn't supply one. The tray itself
+    /// passes a path computed from <c>SettingsManager.SettingsDirectoryPath</c>
+    /// (exposed as <c>NodeService.McpTokenPath</c>) so this constant is **not**
+    /// the live location for OpenClaw Tray installations — it's only a default
+    /// for non-tray consumers (CLIs, tests) that don't want to compute one.
+    /// </summary>
     public static string DefaultPath
     {
         get
@@ -66,9 +83,9 @@ public static class McpAuthToken
         catch { return null; }
     }
 
+    /// <summary>32 bytes (256 bits) of CSPRNG → base64url → 43 ASCII chars (no padding).</summary>
     private static string Generate()
     {
-        // 32 bytes ≈ 256 bits, base64url so it's URL/header safe.
         Span<byte> raw = stackalloc byte[32];
         RandomNumberGenerator.Fill(raw);
         return Convert.ToBase64String(raw)

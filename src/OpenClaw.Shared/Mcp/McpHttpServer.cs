@@ -26,9 +26,14 @@ namespace OpenClaw.Shared.Mcp;
 ///      satisfy (no Access-Control-Allow-Origin), so the cross-origin call
 ///      fails before reaching capability code.
 ///
-/// No bearer-token auth yet — local user-context processes are intentionally
-/// in-scope of trust (they can already call Win32 directly). Browser pages and
-/// other-machine attackers are not.
+/// Bearer-token auth in front of the JSON-RPC body. Required on every POST when
+/// constructed with a non-null token (the tray always passes one — see
+/// <c>NodeService.McpTokenPath</c> / <c>McpAuthToken.LoadOrCreate</c>; legacy
+/// callers that pass null disable the check, kept for in-process tests). The
+/// token defends against untrusted local processes that could otherwise reach
+/// the predictable 127.0.0.1:port endpoint — a process running as the same
+/// user on the same box can read the token file and would defeat this layer,
+/// but anything sandboxed away from <c>%APPDATA%\OpenClawTray\</c> cannot.
 ///
 /// Stability defenses (CR-003/CR-005):
 ///   - Per-request hard deadline (RequestTimeoutMs) bounds body-read and

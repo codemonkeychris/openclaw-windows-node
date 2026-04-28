@@ -73,6 +73,14 @@ public class NodeService : IDisposable
             ? p
             : McpDefaultPort;
     public static string McpServerUrl => $"http://127.0.0.1:{McpPort}/";
+    /// <summary>
+    /// Path of the MCP bearer-token file. The file is created on first MCP server
+    /// start and persists across restarts; the same string is sent on every POST
+    /// as <c>Authorization: Bearer &lt;contents&gt;</c>. Surfaced by Settings UI so
+    /// users can hand the value off to local agents/CLIs without spelunking.
+    /// </summary>
+    public static string McpTokenPath =>
+        System.IO.Path.Combine(SettingsManager.SettingsDirectoryPath, "mcp-token.txt");
     private readonly bool _enableMcpServer;
     private McpHttpServer? _mcpServer;
     private string? _mcpStartupError;
@@ -312,8 +320,7 @@ public class NodeService : IDisposable
             // reads from the same path. Loopback bind + Origin/Host checks
             // remain in front; this layer rejects untrusted local processes
             // that could otherwise reach the predictable 127.0.0.1:port endpoint.
-            var tokenPath = System.IO.Path.Combine(SettingsManager.SettingsDirectoryPath, "mcp-token.txt");
-            var authToken = OpenClaw.Shared.Mcp.McpAuthToken.LoadOrCreate(tokenPath);
+            var authToken = OpenClaw.Shared.Mcp.McpAuthToken.LoadOrCreate(McpTokenPath);
             attempt = new McpHttpServer(bridge, McpPort, _logger, authToken);
             attempt.Start();
             _mcpServer = attempt;

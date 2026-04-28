@@ -90,6 +90,54 @@ public sealed partial class SettingsWindow : WindowEx
         McpUrlTextBox.Text = NodeService.McpServerUrl;
         McpServerToggle.Toggled += (_, _) => UpdateMcpStatus();
         UpdateMcpStatus();
+        UpdateMcpTokenDisplay();
+    }
+
+    // Bearer-token display state. Token is masked by default — first click of Reveal
+    // shows it, second click hides again. Copy always copies the unmasked value.
+    private bool _mcpTokenRevealed;
+
+    private void UpdateMcpTokenDisplay()
+    {
+        var token = OpenClaw.Shared.Mcp.McpAuthToken.TryLoad(NodeService.McpTokenPath);
+        var path = NodeService.McpTokenPath;
+        if (token == null)
+        {
+            // File hasn't been generated yet — only happens before the first MCP server start.
+            McpTokenTextBox.Text = "(not generated — enable MCP server and click Save)";
+            McpTokenRevealButton.IsEnabled = false;
+            McpTokenCopyButton.IsEnabled = false;
+            McpTokenHintText.Text = $"Stored at {path}";
+            return;
+        }
+        McpTokenRevealButton.IsEnabled = true;
+        McpTokenCopyButton.IsEnabled = true;
+        McpTokenTextBox.Text = _mcpTokenRevealed ? token : new string('•', token.Length);
+        McpTokenRevealButton.Content = _mcpTokenRevealed ? "Hide" : "Reveal";
+        McpTokenHintText.Text =
+            $"Send as 'Authorization: Bearer <token>' on every request. Stored at {path}.";
+    }
+
+    private void OnRevealMcpToken(object sender, RoutedEventArgs e)
+    {
+        _mcpTokenRevealed = !_mcpTokenRevealed;
+        UpdateMcpTokenDisplay();
+    }
+
+    private void OnCopyMcpToken(object sender, RoutedEventArgs e)
+    {
+        var token = OpenClaw.Shared.Mcp.McpAuthToken.TryLoad(NodeService.McpTokenPath);
+        if (string.IsNullOrEmpty(token)) return;
+        try
+        {
+            var pkg = new global::Windows.ApplicationModel.DataTransfer.DataPackage();
+            pkg.SetText(token);
+            global::Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(pkg);
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"[Settings] Failed to copy MCP bearer token: {ex.Message}");
+        }
     }
 
     private void UpdateMcpStatus()

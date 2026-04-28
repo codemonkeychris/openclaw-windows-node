@@ -66,10 +66,17 @@ public sealed class SurfaceHost : IDisposable
 
     /// <summary>
     /// Add or replace components in the definition table. If a root has
-    /// already been declared, rebuild the visual tree.
+    /// already been declared, rebuild the visual tree — but only if the
+    /// incoming defs actually change something. A surfaceUpdate that re-sends
+    /// already-known components verbatim no-ops; this preserves caret / scroll
+    /// / tab selection for agents that re-emit the full surface as their
+    /// "update" mechanism. Spec §3.3 calls for full structural diffing
+    /// (M1 in unified review); this is a partial down payment that catches
+    /// the most common case without per-component XAML element tracking.
     /// </summary>
     public void ApplyComponents(IReadOnlyList<A2UIComponentDef> components)
     {
+        bool anyChanged = false;
         foreach (var def in components)
         {
             if (_defs.Count >= MaxComponentsPerSurface && !_defs.ContainsKey(def.Id))
@@ -80,9 +87,25 @@ public sealed class SurfaceHost : IDisposable
                 _logger.Warn($"[A2UI] component cap ({MaxComponentsPerSurface}) on surface '{SurfaceId}'; dropping '{LogSafe(def.Id)}'");
                 continue;
             }
-            _defs[def.Id] = def;
+            if (!_defs.TryGetValue(def.Id, out var existing) || !ComponentsEqual(existing, def))
+            {
+                _defs[def.Id] = def;
+                anyChanged = true;
+            }
         }
-        if (_rootId != null) Rebuild();
+        if (anyChanged && _rootId != null) Rebuild();
+    }
+
+    private static bool ComponentsEqual(A2UIComponentDef a, A2UIComponentDef b)
+    {
+        if (!string.Equals(a.ComponentName, b.ComponentName, StringComparison.Ordinal)) return false;
+        if (a.Weight != b.Weight) return false;
+        // JsonObject equality: serialize and compare. Properties are small
+        // (per-component < a few KiB after the M5 size caps) so the cost is
+        // negligible compared to the XAML rebuild it might avoid.
+        var sa = a.Properties.ToJsonString();
+        var sb = b.Properties.ToJsonString();
+        return string.Equals(sa, sb, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -200,6 +223,7 @@ public sealed class SurfaceHost : IDisposable
                 BuildChild = BuildElement,
                 Subscriptions = _subscriptions,
                 SecretPaths = _secretPaths,
+                Logger = _logger,
             };
 
             try { return renderer.Render(def, ctx); }

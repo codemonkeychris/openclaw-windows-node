@@ -277,11 +277,18 @@ Mirror what `CanvasCapability` already logs:
 
 ## 14. Open questions
 
-1. **Window count.** One A2UI window with tabs for multiple surfaces, or one window per surface? Lit version uses one host with multiple stacked surfaces — propose mirroring that.
-2. **Component overrides.** Should we expose a hook for downstream apps (e.g., a future enterprise OpenClaw fork) to swap in custom renderers? Catalog-strict v1 says no, but the seam is cheap to add.
-3. **Theme negotiation.** Should the agent be told "I'm a native WinUI client, prefer Fluent tokens" via `clientCapabilities`? Useful if the agent is generating themes — and is the v0.8 mechanism for this (`a2ui_client_capabilities_schema.json`).
-4. **Animation budget.** A2UI doesn't specify transitions. Define a small set (fade, slide) and apply automatically on `updateComponents`, or stay still and let the agent ask?
-5. **Image caching.** Per-surface, per-process, or persistent? Persistent risks staleness; per-surface risks repeated fetches.
+> Resolved 2026-04-27 — see decisions below; previous wording preserved for context.
+
+1. **Window count.** One A2UI window with tabs for multiple surfaces, or one window per surface? Lit version uses one host with multiple stacked surfaces.
+   **Decision:** stay with the Lit-compatible single-window-with-tabs layout. Multiple windows is out of scope for v1.
+2. **Component overrides.** Should we expose a hook for downstream apps to swap in custom renderers?
+   **Decision:** stay catalog-strict for v1. No extension seam yet — easy to add later if a real customer asks.
+3. **Theme negotiation.** Should the agent be told "I'm a native WinUI client, prefer Fluent tokens" via `clientCapabilities`?
+   **Decision:** yes — advertise Fluent token preference in `clientCapabilities`. (Tracking task: wire this into the capability summary returned by `canvas.caps`.)
+4. **Animation budget.** Define a small transition set (fade, slide) and apply automatically, or stay still?
+   **Decision:** stay still until the agent asks. No automatic transitions in v1.
+5. **Image caching.** Per-surface, per-process, or persistent?
+   **Decision:** per-process LRU. Avoids the repeated-fetch cost of per-surface and the staleness risk of persistent disk caching.
 
 ## 15. References
 

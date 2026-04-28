@@ -240,21 +240,46 @@ public sealed class ModalRenderer : IComponentRenderer
 
     public FrameworkElement Render(A2UIComponentDef c, RenderContext ctx)
     {
-        // v1: render as inline Expander showing the entry-point child as the
-        // header and the content child as the body. A real Window-level dialog
-        // is preferred long-term but requires XAML-root threading we don't yet
-        // have plumbed for arbitrary surface trees.
+        // Render as a real ContentDialog launched from the entry-point child.
+        // The entry-point is shown inline; clicking it shows the dialog with
+        // the content-child as its body. Falls back to Expander when no
+        // XamlRoot can be resolved (e.g. surface not yet attached to a window).
         var entryId = ctx.GetSingleChild(c, "entryPointChild");
         var contentId = ctx.GetSingleChild(c, "contentChild");
 
-        var expander = new Expander
+        var entryElement = entryId != null ? ctx.BuildChild(entryId) : null;
+        var contentElement = contentId != null ? ctx.BuildChild(contentId) : null;
+
+        // Wrap the entry in a Button so we have a uniform click target.
+        // (A2UI entry-point may itself be a Button, but it may also be a Card/Text.)
+        var trigger = new Button
         {
+            Content = entryElement,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(0),
         };
-        if (entryId != null) expander.Header = ctx.BuildChild(entryId);
-        if (contentId != null) expander.Content = ctx.BuildChild(contentId);
-        return expander;
+
+        var titleVal = ctx.GetValue(c, "title");
+        var titleText = ctx.ResolveString(titleVal);
+
+        trigger.Click += async (_, _) =>
+        {
+            if (trigger.XamlRoot is null) return; // not yet in tree
+            var dialog = new ContentDialog
+            {
+                XamlRoot = trigger.XamlRoot,
+                Title = titleText ?? string.Empty,
+                Content = contentElement,
+                CloseButtonText = "Close",
+            };
+            try { await dialog.ShowAsync(); }
+            catch { /* ContentDialog throws if another dialog is open; swallow */ }
+        };
+        AutomationHelpers.Apply(trigger, c, ctx);
+        return trigger;
     }
 }
 

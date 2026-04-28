@@ -8,9 +8,16 @@ namespace OpenClawTray.Services;
 /// </summary>
 public static class Logger
 {
+    private const long RotateThresholdBytes = 5 * 1024 * 1024;
+    // Sample the file size every N writes instead of every write — File.Length on
+    // Windows requires a metadata round-trip that's heavy at high log volume, and
+    // we don't need byte-precise rotation.
+    private const int RotateCheckInterval = 64;
+
     private static readonly object _lock = new();
     private static readonly string _logDirectory;
     private static readonly string _logFilePath;
+    private static int _writesSinceRotateCheck;
 
     static Logger()
     {
@@ -20,22 +27,13 @@ public static class Logger
             : Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "OpenClawTray");
-        
+
         Directory.CreateDirectory(_logDirectory);
         _logFilePath = Path.Combine(_logDirectory, "openclaw-tray.log");
-        
-        // Rotate log if too large (> 5MB)
-        try
-        {
-            var fileInfo = new FileInfo(_logFilePath);
-            if (fileInfo.Exists && fileInfo.Length > 5 * 1024 * 1024)
-            {
-                var backupPath = Path.Combine(_logDirectory, "openclaw-tray.log.old");
-                if (File.Exists(backupPath)) File.Delete(backupPath);
-                File.Move(_logFilePath, backupPath);
-            }
-        }
-        catch { }
+
+        // Initial rotation pass picks up anything left from a previous run that
+        // exceeded the threshold. The append path also rotates periodically.
+        TryRotate();
     }
 
     public static string LogFilePath => _logFilePath;
@@ -54,6 +52,11 @@ public static class Logger
         {
             try
             {
+                if (++_writesSinceRotateCheck >= RotateCheckInterval)
+                {
+                    _writesSinceRotateCheck = 0;
+                    TryRotate();
+                }
                 File.AppendAllText(_logFilePath, line + Environment.NewLine);
             }
             catch { }
@@ -62,5 +65,20 @@ public static class Logger
 #if DEBUG
         System.Diagnostics.Debug.WriteLine(line);
 #endif
+    }
+
+    private static void TryRotate()
+    {
+        try
+        {
+            var fileInfo = new FileInfo(_logFilePath);
+            if (fileInfo.Exists && fileInfo.Length > RotateThresholdBytes)
+            {
+                var backupPath = Path.Combine(_logDirectory, "openclaw-tray.log.old");
+                if (File.Exists(backupPath)) File.Delete(backupPath);
+                File.Move(_logFilePath, backupPath);
+            }
+        }
+        catch { }
     }
 }

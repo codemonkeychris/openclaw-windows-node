@@ -57,6 +57,7 @@ public sealed partial class A2UICanvasWindow : WindowEx
         InitializeComponent();
         this.SetIcon("Assets\\openclaw.ico");
         Closed += (_, _) => IsClosed = true;
+        WaitingForContentText.Text = OpenClawTray.Helpers.LocalizationHelper.GetString("Canvas_WaitingForContent");
 
         _dispatcher = DispatcherQueue.GetForCurrentThread();
         _dataModel = new DataModelStore(_dispatcher);
@@ -86,6 +87,10 @@ public sealed partial class A2UICanvasWindow : WindowEx
         UpdateLayout();
     }
 
+    // SurfaceId → existing TabViewItem, so add/remove diffs can preserve the
+    // user's selected tab and avoid re-templating unchanged surfaces (M15).
+    private readonly Dictionary<string, TabViewItem> _surfaceTabs = new(StringComparer.Ordinal);
+
     private void UpdateLayout()
     {
         var surfaces = new List<SurfaceHost>(_router.Surfaces.Values);
@@ -96,7 +101,8 @@ public sealed partial class A2UICanvasWindow : WindowEx
             MultiSurfaceTabs.Visibility = Visibility.Collapsed;
             SingleSurfaceHost.Content = null;
             MultiSurfaceTabs.TabItems.Clear();
-            Title = "Canvas";
+            _surfaceTabs.Clear();
+            Title = OpenClawTray.Helpers.LocalizationHelper.GetString("A2UI_CanvasTitle");
             return;
         }
 
@@ -109,26 +115,74 @@ public sealed partial class A2UICanvasWindow : WindowEx
             MultiSurfaceTabs.Visibility = Visibility.Collapsed;
             SingleSurfaceHost.Content = s.RootElement;
             MultiSurfaceTabs.TabItems.Clear();
-            Title = string.IsNullOrWhiteSpace(s.Title) ? "Canvas" : s.Title!;
+            _surfaceTabs.Clear();
+            Title = string.IsNullOrWhiteSpace(s.Title)
+                ? OpenClawTray.Helpers.LocalizationHelper.GetString("A2UI_CanvasTitle")
+                : s.Title!;
+            return;
         }
-        else
+
+        SingleSurfaceHost.Visibility = Visibility.Collapsed;
+        MultiSurfaceTabs.Visibility = Visibility.Visible;
+        SingleSurfaceHost.Content = null;
+
+        // Diff incrementally so a third surface added doesn't reset the user's
+        // selected tab. Algorithm:
+        //   1. Track the currently selected surface id (if any) so we can restore it.
+        //   2. Remove tabs whose surfaceId no longer exists.
+        //   3. For each surface: reuse the cached TabViewItem (refresh header) or create.
+        //   4. Reorder TabItems to match the surface list.
+        var selectedId = (MultiSurfaceTabs.SelectedItem as TabViewItem)?.Tag as string;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var s in surfaces) seen.Add(s.SurfaceId);
+
+        // Pass 1: drop stale.
+        var stale = new List<string>();
+        foreach (var kv in _surfaceTabs)
+            if (!seen.Contains(kv.Key)) stale.Add(kv.Key);
+        foreach (var id in stale)
         {
-            SingleSurfaceHost.Visibility = Visibility.Collapsed;
-            MultiSurfaceTabs.Visibility = Visibility.Visible;
-            SingleSurfaceHost.Content = null;
-            MultiSurfaceTabs.TabItems.Clear();
-            foreach (var s in surfaces)
+            if (_surfaceTabs.Remove(id, out var oldTab))
+                MultiSurfaceTabs.TabItems.Remove(oldTab);
+        }
+
+        // Pass 2: ensure each surface has a tab and the visual ordering matches.
+        for (int i = 0; i < surfaces.Count; i++)
+        {
+            var s = surfaces[i];
+            var header = string.IsNullOrWhiteSpace(s.Title) ? s.SurfaceId : s.Title!;
+            if (!_surfaceTabs.TryGetValue(s.SurfaceId, out var tab))
             {
-                var tab = new TabViewItem
+                tab = new TabViewItem
                 {
-                    Header = string.IsNullOrWhiteSpace(s.Title) ? s.SurfaceId : s.Title!,
+                    Header = header,
                     Content = s.RootElement,
                     IsClosable = false,
+                    Tag = s.SurfaceId,
                 };
-                MultiSurfaceTabs.TabItems.Add(tab);
+                _surfaceTabs[s.SurfaceId] = tab;
+                MultiSurfaceTabs.TabItems.Insert(i, tab);
             }
-            Title = "Canvas";
+            else
+            {
+                if (!Equals(tab.Header, header)) tab.Header = header;
+                if (!ReferenceEquals(tab.Content, s.RootElement)) tab.Content = s.RootElement;
+                int currentIndex = MultiSurfaceTabs.TabItems.IndexOf(tab);
+                if (currentIndex != i)
+                {
+                    MultiSurfaceTabs.TabItems.RemoveAt(currentIndex);
+                    MultiSurfaceTabs.TabItems.Insert(i, tab);
+                }
+            }
         }
+
+        // Restore selection by surfaceId. WinUI auto-selects index 0 when items
+        // are inserted into an empty TabView; re-select the previously-selected
+        // surface if it still exists.
+        if (selectedId != null && _surfaceTabs.TryGetValue(selectedId, out var stillSelected))
+            MultiSurfaceTabs.SelectedItem = stillSelected;
+
+        Title = OpenClawTray.Helpers.LocalizationHelper.GetString("A2UI_CanvasTitle");
     }
 
     /// <summary>

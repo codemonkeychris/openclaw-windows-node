@@ -41,7 +41,15 @@ public sealed class RenderContext
     public required IActionSink Actions { get; init; }
     public required A2UITheme Theme { get; init; }
     public required Func<string, FrameworkElement?> BuildChild { get; init; }
+    /// <summary>
+    /// Surface-scoped subscription store. Renderers should not access this
+    /// dictionary directly — use <see cref="WatchValue"/> (or
+    /// <see cref="RegisterSubscription"/> for non-value subs). Exposed here for
+    /// the surface host's lifecycle management.
+    /// </summary>
     public required IDictionary<string, IDisposable> Subscriptions { get; init; }
+    /// <summary>Surface-scoped logger; <c>null</c> if the host did not supply one.</summary>
+    public OpenClaw.Shared.IOpenClawLogger? Logger { get; init; }
     /// <summary>
     /// Surface-scoped set of JSON Pointer paths that hold sensitive values.
     /// Populated by renderers (e.g., obscured TextField); consulted by
@@ -102,6 +110,16 @@ public sealed class RenderContext
     public void WatchValue(string componentId, string subKey, A2UIValue? value, Action update)
     {
         if (value == null || !value.HasPath) return;
+        RegisterSubscription(componentId, subKey, DataModel.Subscribe(value.Path!, update));
+    }
+
+    /// <summary>
+    /// Register an arbitrary disposable subscription scoped to (componentId, subKey).
+    /// Replaces any prior subscription under the same key (the prior one is disposed).
+    /// The host disposes all registered subscriptions on rebuild.
+    /// </summary>
+    public void RegisterSubscription(string componentId, string subKey, IDisposable subscription)
+    {
         // Use a delimiter that can't appear inside a JSON Pointer-derived
         // componentId (nor inside subKeys we control). Previous "::" was
         // collidable: component "x::label" + sub "value" hashed to the same
@@ -112,7 +130,7 @@ public sealed class RenderContext
             try { prev.Dispose(); } catch { }
             Subscriptions.Remove(key);
         }
-        Subscriptions[key] = DataModel.Subscribe(value.Path!, update);
+        Subscriptions[key] = subscription;
     }
 
     /// <summary>

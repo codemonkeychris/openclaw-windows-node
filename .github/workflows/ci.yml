@@ -48,8 +48,9 @@ jobs:
     - name: Build Tests
       run: |
         dotnet build tests/OpenClaw.Shared.Tests -c Debug --no-restore
-        dotnet build tests/OpenClaw.Tray.Tests -c Debug --no-restore
-        dotnet build tests/OpenClaw.Tray.IntegrationTests -c Debug --no-restore
+        dotnet build tests/OpenClaw.Tray.Tests -c Debug -r win-x64 --no-restore
+        dotnet build tests/OpenClaw.Tray.IntegrationTests -c Debug -r win-x64 --no-restore
+        dotnet build tests/OpenClaw.Tray.UITests -c Debug -r win-x64 --no-restore
 
     - name: Run Shared Tests
       env:
@@ -68,10 +69,41 @@ jobs:
         dotnet test tests/OpenClaw.Tray.Tests
         --no-build
         -c Debug
+        -r win-x64
         --verbosity normal
         --collect:"XPlat Code Coverage"
         --results-directory TestResults\Tray
         --logger "trx;LogFileName=OpenClaw.Tray.Tests.trx"
+
+    # Tray integration tests gate on OPENCLAW_RUN_INTEGRATION; set it so the
+    # MCP-server / capability tests actually run. M3 (tool-name drift) and
+    # similar would have been caught here if these had ever been wired.
+    - name: Run Tray Integration Tests
+      env:
+        OPENCLAW_RUN_INTEGRATION: 1
+      run: >
+        dotnet test tests/OpenClaw.Tray.IntegrationTests
+        --no-build
+        -c Debug
+        -r win-x64
+        --verbosity normal
+        --collect:"XPlat Code Coverage"
+        --results-directory TestResults\TrayIntegration
+        --logger "trx;LogFileName=OpenClaw.Tray.IntegrationTests.trx"
+
+    # UI tests need a real visual tree; on the GitHub windows-latest runner this
+    # is a Window Station with WindowsAppSDK available, which is enough for
+    # WinUI 3 UI tests. Failures here block PRs.
+    - name: Run Tray UI Tests
+      run: >
+        dotnet test tests/OpenClaw.Tray.UITests
+        --no-build
+        -c Debug
+        -r win-x64
+        --verbosity normal
+        --collect:"XPlat Code Coverage"
+        --results-directory TestResults\TrayUI
+        --logger "trx;LogFileName=OpenClaw.Tray.UITests.trx"
 
     - name: Upload Test Results
       if: always()

@@ -12,7 +12,11 @@ namespace OpenClawTray.Windows;
 public sealed partial class SettingsWindow : WindowEx
 {
     private readonly SettingsManager _settings;
-    private readonly NodeService? _nodeService;
+    // Delegate (not captured instance) so the window always reads the current
+    // node service — the tray disposes & recreates NodeService in
+    // App.OnSettingsSaved, and the previous reference would otherwise go stale
+    // and show "Stopped" / "Failed to start" forever.
+    private readonly Func<NodeService?> _nodeServiceProvider;
     private string _manualGatewayUrl = "";
     public bool IsClosed { get; private set; }
 
@@ -20,9 +24,14 @@ public sealed partial class SettingsWindow : WindowEx
     public event EventHandler? CommandCenterRequested;
 
     public SettingsWindow(SettingsManager settings, NodeService? nodeService = null)
+        : this(settings, nodeService != null ? () => nodeService : (Func<NodeService?>)(() => null))
+    {
+    }
+
+    public SettingsWindow(SettingsManager settings, Func<NodeService?> nodeServiceProvider)
     {
         _settings = settings;
-        _nodeService = nodeService;
+        _nodeServiceProvider = nodeServiceProvider;
         InitializeComponent();
         
         Title = LocalizationHelper.GetString("WindowTitle_Settings");
@@ -140,12 +149,28 @@ public sealed partial class SettingsWindow : WindowEx
         }
     }
 
+    /// <summary>
+    /// Public refresh hook called by the host after it tears down and rebuilds
+    /// the NodeService (e.g. App.OnSettingsSaved). Re-reads the running/error
+    /// state from the current node service and refreshes the status text.
+    /// </summary>
+    public void RefreshMcpStatus()
+    {
+        try
+        {
+            UpdateMcpStatus();
+            UpdateMcpTokenDisplay();
+        }
+        catch { /* best-effort UI refresh */ }
+    }
+
     private void UpdateMcpStatus()
     {
         var toggleOn = McpServerToggle.IsOn;
         var savedOn = _settings.EnableMcpServer;
-        var running = _nodeService?.IsMcpRunning == true;
-        var startupError = _nodeService?.McpStartupError;
+        var nodeService = _nodeServiceProvider();
+        var running = nodeService?.IsMcpRunning == true;
+        var startupError = nodeService?.McpStartupError;
 
         if (!toggleOn)
         {

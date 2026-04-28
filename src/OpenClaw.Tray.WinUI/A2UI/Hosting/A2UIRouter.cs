@@ -6,6 +6,7 @@ using OpenClawTray.A2UI.Actions;
 using OpenClawTray.A2UI.DataModel;
 using OpenClawTray.A2UI.Protocol;
 using OpenClawTray.A2UI.Rendering;
+using OpenClawTray.A2UI.Telemetry;
 using OpenClawTray.A2UI.Theming;
 
 namespace OpenClawTray.A2UI.Hosting;
@@ -32,6 +33,7 @@ public sealed class A2UIRouter
     private readonly ComponentRendererRegistry _registry;
     private readonly IActionSink _actions;
     private readonly IOpenClawLogger _logger;
+    private readonly IA2UITelemetry _telemetry;
     private readonly Dictionary<string, SurfaceHost> _surfaces = new(StringComparer.Ordinal);
 
     public event EventHandler<SurfaceHost>? SurfaceCreated;
@@ -43,13 +45,15 @@ public sealed class A2UIRouter
         DataModelStore dataModel,
         ComponentRendererRegistry registry,
         IActionSink actions,
-        IOpenClawLogger logger)
+        IOpenClawLogger logger,
+        IA2UITelemetry? telemetry = null)
     {
         _dispatcher = dispatcher;
         _dataModel = dataModel;
         _registry = registry;
         _actions = actions;
         _logger = logger;
+        _telemetry = telemetry ?? NullA2UITelemetry.Instance;
     }
 
     /// <summary>
@@ -115,6 +119,7 @@ public sealed class A2UIRouter
                 var host = GetOrCreateSurface(su.SurfaceId);
                 host.ApplyComponents(su.Components);
                 _logger.Info($"[A2UI] surfaceUpdate '{LogSafe(su.SurfaceId)}' ({su.Components.Count} component(s))");
+                _telemetry.Push(su.SurfaceId, "surfaceUpdate", su.Components.Count);
                 break;
             }
 
@@ -124,6 +129,7 @@ public sealed class A2UIRouter
                 host.BeginRendering(br.Root, br.Styles);
                 SurfaceRendered?.Invoke(this, host);
                 _logger.Info($"[A2UI] beginRendering '{LogSafe(br.SurfaceId)}' root='{LogSafe(br.Root)}' (catalog={LogSafe(br.CatalogId) ?? "default"})");
+                _telemetry.Push(br.SurfaceId, "beginRendering", 1);
                 break;
             }
 
@@ -131,6 +137,7 @@ public sealed class A2UIRouter
             {
                 _dataModel.ApplyDataModelUpdate(dmu.SurfaceId, dmu.Path, dmu.Contents);
                 _logger.Debug($"[A2UI] dataModelUpdate '{LogSafe(dmu.SurfaceId)}' path='{LogSafe(dmu.Path) ?? "/"}' ({dmu.Contents.Count} entry(ies))");
+                _telemetry.Push(dmu.SurfaceId, "dataModelUpdate", dmu.Contents.Count);
                 break;
             }
 
@@ -143,6 +150,7 @@ public sealed class A2UIRouter
                     _dataModel.Remove(ds.SurfaceId);
                     SurfaceDeleted?.Invoke(this, ds.SurfaceId);
                     _logger.Info($"[A2UI] deleteSurface '{LogSafe(ds.SurfaceId)}'");
+                    _telemetry.Push(ds.SurfaceId, "deleteSurface", 1);
                 }
                 break;
             }

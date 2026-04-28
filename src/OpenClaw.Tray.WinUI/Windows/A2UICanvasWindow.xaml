@@ -21,7 +21,7 @@
                     Padding="32"
                     Visibility="Visible">
             <FontIcon Glyph="&#xE71B;" FontSize="32" Opacity="0.55"/>
-            <TextBlock Text="Waiting for content..."
+            <TextBlock x:Name="WaitingForContentText"
                        Style="{StaticResource SubtitleTextBlockStyle}"
                        Opacity="0.7"
                        HorizontalAlignment="Center"/>

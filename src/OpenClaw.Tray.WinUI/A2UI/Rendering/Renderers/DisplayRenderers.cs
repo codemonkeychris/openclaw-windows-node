@@ -157,6 +157,9 @@ public sealed class ImageRenderer : IComponentRenderer
 public sealed class IconRenderer : IComponentRenderer
 {
     public string ComponentName => "Icon";
+    // Emit at most one info log per name-with-known-fidelity-issue, per process.
+    // Cheap signal that lets us judge whether to invest in a better glyph.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> s_loggedFidelity = new();
 
     public FrameworkElement Render(A2UIComponentDef c, RenderContext ctx)
     {
@@ -166,7 +169,16 @@ public sealed class IconRenderer : IComponentRenderer
             FontSize = 16,
         };
         var nameVal = ctx.GetValue(c, "name");
-        void Update() => fontIcon.Glyph = MapName(ctx.ResolveString(nameVal));
+        void Update()
+        {
+            var name = ctx.ResolveString(nameVal);
+            fontIcon.Glyph = MapName(name);
+            // moreHoriz currently reuses moreVert's glyph (no canonical horizontal
+            // ellipsis in MDL2). Log once so we can tell whether real surfaces
+            // ask for it before swapping in a custom font.
+            if (name == "moreHoriz" && s_loggedFidelity.TryAdd("moreHoriz", 1))
+                ctx.Logger?.Info("[A2UI] icon 'moreHoriz' is rendered with the moreVert glyph (no canonical horizontal in Segoe Fluent Icons).");
+        }
         Update();
         ctx.WatchValue(c.Id, "name", nameVal, Update);
         // The icon name is the natural automation label when no explicit one is set.

@@ -31,9 +31,10 @@ public sealed class UnknownRenderer : IComponentRenderer
             Glyph = "", // outlined warning
             FontFamily = new FontFamily("Segoe Fluent Icons"),
         });
+        var template = OpenClawTray.Helpers.LocalizationHelper.GetString("A2UI_UnsupportedComponent");
         stack.Children.Add(new TextBlock
         {
-            Text = $"Unsupported component: {component.ComponentName}",
+            Text = string.Format(System.Globalization.CultureInfo.CurrentCulture, template, component.ComponentName),
             VerticalAlignment = VerticalAlignment.Center,
         });
         return stack;

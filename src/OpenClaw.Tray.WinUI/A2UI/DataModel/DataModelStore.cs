@@ -132,6 +132,13 @@ public sealed class DataModelStore
         return true;
     }
 
+    /// <summary>
+    /// RFC 6901 token escape: <c>~</c> → <c>~0</c>, <c>/</c> → <c>~1</c>. The
+    /// caller's <c>entry.Key</c> is treated as a single pointer reference token,
+    /// so a key like <c>"users/0/name"</c> escapes to one segment
+    /// <c>users~10~1name</c> — it does NOT split into nested path segments.
+    /// Use <c>basePath</c> to traverse into nested objects.
+    /// </summary>
     private static string EncodePointerToken(string key) =>
         key.Replace("~", "~0").Replace("/", "~1");
 

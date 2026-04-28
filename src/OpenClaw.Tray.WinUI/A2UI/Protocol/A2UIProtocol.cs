@@ -17,34 +17,47 @@ public abstract record A2UIMessage;
 /// surface is implicitly created on first surfaceUpdate — there is no
 /// separate createSurface envelope in v0.8.
 /// </summary>
-public sealed record SurfaceUpdateMessage(
-    string SurfaceId,
-    IReadOnlyList<A2UIComponentDef> Components) : A2UIMessage;
+public sealed record SurfaceUpdateMessage : A2UIMessage
+{
+    public required string SurfaceId { get; init; }
+    public required IReadOnlyList<A2UIComponentDef> Components { get; init; }
+}
 
 /// <summary>
 /// beginRendering: tells the client which component is the root for the
 /// surface, and applies optional surface-level styles. Sent after the
 /// surfaceUpdate that introduces the components.
 /// </summary>
-public sealed record BeginRenderingMessage(
-    string SurfaceId,
-    string Root,
-    string? CatalogId,
-    JsonObject? Styles) : A2UIMessage;
+public sealed record BeginRenderingMessage : A2UIMessage
+{
+    public required string SurfaceId { get; init; }
+    public required string Root { get; init; }
+    public string? CatalogId { get; init; }
+    public JsonObject? Styles { get; init; }
+}
 
 /// <summary>
 /// dataModelUpdate: writes one or more entries into the surface's data
 /// model. Each entry is a (key, typed value) pair; <c>path</c> scopes the
 /// keys (omitted/"/" replaces the entire data model).
 /// </summary>
-public sealed record DataModelUpdateMessage(
-    string SurfaceId,
-    string? Path,
-    IReadOnlyList<DataModelEntry> Contents) : A2UIMessage;
+public sealed record DataModelUpdateMessage : A2UIMessage
+{
+    public required string SurfaceId { get; init; }
+    public string? Path { get; init; }
+    public required IReadOnlyList<DataModelEntry> Contents { get; init; }
+}
 
-public sealed record DeleteSurfaceMessage(string SurfaceId) : A2UIMessage;
+public sealed record DeleteSurfaceMessage : A2UIMessage
+{
+    public required string SurfaceId { get; init; }
+}
 
-public sealed record UnknownEnvelopeMessage(string Kind, JsonObject Body) : A2UIMessage;
+public sealed record UnknownEnvelopeMessage : A2UIMessage
+{
+    public required string Kind { get; init; }
+    public required JsonObject Body { get; init; }
+}
 
 /// <summary>
 /// One component as carried in <c>surfaceUpdate.components</c>.
@@ -237,7 +250,7 @@ public static class A2UIMessageParser
                     if (def != null) components.Add(def);
                 }
             }
-            return new SurfaceUpdateMessage(surfaceId, components);
+            return new SurfaceUpdateMessage { SurfaceId = surfaceId, Components = components };
         }
 
         // beginRendering
@@ -247,7 +260,7 @@ public static class A2UIMessageParser
             var rootId = RequireString(br, "root");
             var catalogId = OptionalString(br, "catalogId");
             var styles = br["styles"] as JsonObject;
-            return new BeginRenderingMessage(surfaceId, rootId, catalogId, styles);
+            return new BeginRenderingMessage { SurfaceId = surfaceId, Root = rootId, CatalogId = catalogId, Styles = styles };
         }
 
         // dataModelUpdate
@@ -265,18 +278,18 @@ public static class A2UIMessageParser
                     if (entry != null) contents.Add(entry);
                 }
             }
-            return new DataModelUpdateMessage(surfaceId, path, contents);
+            return new DataModelUpdateMessage { SurfaceId = surfaceId, Path = path, Contents = contents };
         }
 
         // deleteSurface
         if (root["deleteSurface"] is JsonObject ds)
         {
-            return new DeleteSurfaceMessage(RequireString(ds, "surfaceId"));
+            return new DeleteSurfaceMessage { SurfaceId = RequireString(ds, "surfaceId") };
         }
 
         var kind = string.Empty;
         foreach (var kv in root) { kind = kv.Key; break; }
-        return new UnknownEnvelopeMessage(kind, root);
+        return new UnknownEnvelopeMessage { Kind = kind, Body = root };
     }
 
     private static A2UIComponentDef? ParseComponent(JsonObject co)

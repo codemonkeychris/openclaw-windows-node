@@ -32,14 +32,49 @@ public class CanvasCapability : NodeCapabilityBase
     public event EventHandler<CanvasPresentArgs>? PresentRequested;
     public event EventHandler? HideRequested;
     public event EventHandler<string>? NavigateRequested;
-    public event Func<string, Task<string>>? EvalRequested;
-    public event Func<CanvasSnapshotArgs, Task<string>>? SnapshotRequested;
+    // Func-based "events" are inherently single-handler — multi-subscribe to a
+    // Delegate.Combine'd Func silently invokes only the last subscriber's
+    // return value, hiding the others. Expose them as single-subscriber events
+    // that throw on a second subscribe so this is loud.
+    private Func<string, Task<string>>? _evalRequested;
+    public event Func<string, Task<string>> EvalRequested
+    {
+        add => SetSingleHandler(ref _evalRequested, value, nameof(EvalRequested));
+        remove => ClearSingleHandler(ref _evalRequested, value);
+    }
+    private Func<CanvasSnapshotArgs, Task<string>>? _snapshotRequested;
+    public event Func<CanvasSnapshotArgs, Task<string>> SnapshotRequested
+    {
+        add => SetSingleHandler(ref _snapshotRequested, value, nameof(SnapshotRequested));
+        remove => ClearSingleHandler(ref _snapshotRequested, value);
+    }
     public event EventHandler<CanvasA2UIArgs>? A2UIPushRequested;
     public event EventHandler? A2UIResetRequested;
     /// <summary>Returns a JSON state dump of the native A2UI surface graph.</summary>
-    public event Func<Task<string>>? A2UIDumpRequested;
+    private Func<Task<string>>? _a2uiDumpRequested;
+    public event Func<Task<string>> A2UIDumpRequested
+    {
+        add => SetSingleHandler(ref _a2uiDumpRequested, value, nameof(A2UIDumpRequested));
+        remove => ClearSingleHandler(ref _a2uiDumpRequested, value);
+    }
     /// <summary>Returns a JSON capability summary describing which canvas operations are supported.</summary>
-    public event Func<Task<string>>? CapsRequested;
+    private Func<Task<string>>? _capsRequested;
+    public event Func<Task<string>> CapsRequested
+    {
+        add => SetSingleHandler(ref _capsRequested, value, nameof(CapsRequested));
+        remove => ClearSingleHandler(ref _capsRequested, value);
+    }
+
+    private static void SetSingleHandler<T>(ref T? slot, T value, string name) where T : Delegate
+    {
+        if (slot != null && !ReferenceEquals(slot, value))
+            throw new InvalidOperationException($"{name} accepts only one subscriber. Detach the previous handler first.");
+        slot = value;
+    }
+    private static void ClearSingleHandler<T>(ref T? slot, T value) where T : Delegate
+    {
+        if (ReferenceEquals(slot, value)) slot = null;
+    }
     
     public CanvasCapability(IOpenClawLogger logger) : base(logger)
     {
@@ -150,14 +185,15 @@ public class CanvasCapability : NodeCapabilityBase
         
         Logger.Info($"canvas.eval: {script[..Math.Min(50, script.Length)]}...");
         
-        if (EvalRequested == null)
+        var evalHandler = _evalRequested;
+        if (evalHandler == null)
         {
             return Error("Canvas not available");
         }
-        
+
         try
         {
-            var result = await EvalRequested(script);
+            var result = await evalHandler(script);
             return Success(new { result });
         }
         catch (Exception ex)
@@ -174,14 +210,15 @@ public class CanvasCapability : NodeCapabilityBase
         
         Logger.Info($"canvas.snapshot: format={format}, maxWidth={maxWidth}");
         
-        if (SnapshotRequested == null)
+        var snapshotHandler = _snapshotRequested;
+        if (snapshotHandler == null)
         {
             return Error("Canvas not available");
         }
-        
+
         try
         {
-            var base64 = await SnapshotRequested(new CanvasSnapshotArgs
+            var base64 = await snapshotHandler(new CanvasSnapshotArgs
             {
                 Format = format ?? "png",
                 MaxWidth = maxWidth,
@@ -319,11 +356,12 @@ public class CanvasCapability : NodeCapabilityBase
     private async Task<NodeInvokeResponse> HandleA2UIDumpAsync()
     {
         Logger.Info("canvas.a2ui.dump");
-        if (A2UIDumpRequested == null)
+        var dumpHandler = _a2uiDumpRequested;
+        if (dumpHandler == null)
             return Error("CANVAS_NOT_OPEN: no A2UI canvas is currently active");
         try
         {
-            var json = await A2UIDumpRequested();
+            var json = await dumpHandler();
             // Pass through as a JSON-typed payload so MCP clients see structured data,
             // not a quoted string.
             using var doc = System.Text.Json.JsonDocument.Parse(json);
@@ -337,7 +375,8 @@ public class CanvasCapability : NodeCapabilityBase
 
     private async Task<NodeInvokeResponse> HandleCapsAsync()
     {
-        if (CapsRequested == null)
+        var capsHandler = _capsRequested;
+        if (capsHandler == null)
         {
             return Success(new
             {
@@ -350,7 +389,7 @@ public class CanvasCapability : NodeCapabilityBase
         }
         try
         {
-            var json = await CapsRequested();
+            var json = await capsHandler();
             using var doc = System.Text.Json.JsonDocument.Parse(json);
             return Success(System.Text.Json.JsonSerializer.Deserialize<object>(doc.RootElement.GetRawText()));
         }

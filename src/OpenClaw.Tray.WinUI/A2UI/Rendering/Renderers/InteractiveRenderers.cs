@@ -321,9 +321,12 @@ public sealed class MultipleChoiceRenderer : IComponentRenderer
                 {
                     if (inProgrammatic) return;
                     var tag = (combo.SelectedItem as ComboBoxItem)?.Tag as string;
-                    var arr = new JsonArray();
-                    if (tag != null) arr.Add(JsonValue.Create(tag));
-                    ctx.DataModel.Write(selVal.Path!, arr);
+                    // Single-mode writes a scalar string (or null), not a one-element array.
+                    // Other components binding to the same path expect a string in single
+                    // mode; the previous JsonArray round-tripped as a stringified "[\"x\"]".
+                    // ResolveSingle still tolerates either shape on read for back-compat.
+                    JsonNode? value = tag != null ? JsonValue.Create(tag) : null;
+                    ctx.DataModel.Write(selVal.Path!, value);
                 };
             }
             AutomationHelpers.Apply(combo, c, ctx);

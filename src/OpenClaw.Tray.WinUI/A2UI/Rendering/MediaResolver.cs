@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml.Media;
@@ -24,19 +26,107 @@ public sealed class MediaResolver
 {
     private readonly IOpenClawLogger _logger;
     private readonly HashSet<string> _hostAllowlist = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly HttpClient s_http = new()
-    {
-        Timeout = TimeSpan.FromSeconds(15),
-    };
+    private readonly HttpClient _http;
     private const long DataUrlMaxBytes = 2L * 1024 * 1024;
     /// <summary>Hard cap on remote image bytes. Sized to dwarf realistic UI imagery while still preventing OOM from a hostile/compromised allowlisted host.</summary>
     internal const long RemoteImageMaxBytes = 8L * 1024 * 1024;
     /// <summary>Bound on SVG SetSourceAsync. SVG render time isn't bounded by the byte cap (a 1 MiB path expression can be pathologically expensive), so cap wall time here.</summary>
     internal static readonly TimeSpan SvgRenderTimeout = TimeSpan.FromSeconds(8);
 
-    public MediaResolver(IOpenClawLogger logger)
+    public MediaResolver(IOpenClawLogger logger) : this(logger, handler: null) { }
+
+    /// <summary>
+    /// Test seam: pass a custom <see cref="HttpMessageHandler"/> to stub the
+    /// network. Production callers use the parameterless overload.
+    /// </summary>
+    public MediaResolver(IOpenClawLogger logger, HttpMessageHandler? handler)
     {
         _logger = logger;
+        _http = handler != null
+            ? new HttpClient(handler, disposeHandler: false) { Timeout = TimeSpan.FromSeconds(15) }
+            : new HttpClient(BuildSafeHandler(logger), disposeHandler: true) { Timeout = TimeSpan.FromSeconds(15) };
+    }
+
+    /// <summary>
+    /// Builds a SocketsHttpHandler whose ConnectCallback resolves DNS once and
+    /// rejects the connection if any resolved address is private/loopback/
+    /// link-local/multicast. Defends against DNS rebinding (TOCTOU between
+    /// allowlist hostname check and the actual TCP connect: a hostile DNS
+    /// server could otherwise return an internal IP for an allowlisted name).
+    /// </summary>
+    private static SocketsHttpHandler BuildSafeHandler(IOpenClawLogger logger)
+    {
+        return new SocketsHttpHandler
+        {
+            // Disable connection pooling so a host's resolution can't be cached
+            // across requests in a way that bypasses revalidation.
+            PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+            ConnectCallback = async (ctx, ct) =>
+            {
+                var addresses = await Dns.GetHostAddressesAsync(ctx.DnsEndPoint.Host, ct).ConfigureAwait(false);
+                if (addresses.Length == 0)
+                    throw new HttpRequestException($"DNS returned no addresses for '{ctx.DnsEndPoint.Host}'");
+                // Reject the entire connection if ANY resolved address is
+                // unsafe — DNS round-robin must not let a partially-internal
+                // record slip through.
+                foreach (var ip in addresses)
+                {
+                    if (!IsPublicAddress(ip))
+                    {
+                        logger.Warn($"[A2UI] Refusing to connect to '{ctx.DnsEndPoint.Host}': resolved to non-public address {ip}");
+                        throw new HttpRequestException($"Refusing to connect to non-public address {ip} for host '{ctx.DnsEndPoint.Host}'");
+                    }
+                }
+                // Connect to the resolved IP directly so the TCP target matches
+                // exactly what we validated (no second DNS lookup downstream).
+                var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+                try
+                {
+                    await socket.ConnectAsync(addresses[0], ctx.DnsEndPoint.Port, ct).ConfigureAwait(false);
+                    return new NetworkStream(socket, ownsSocket: true);
+                }
+                catch
+                {
+                    socket.Dispose();
+                    throw;
+                }
+            },
+        };
+    }
+
+    private static bool IsPublicAddress(IPAddress ip)
+    {
+        if (IPAddress.IsLoopback(ip)) return false;
+        if (ip.AddressFamily == AddressFamily.InterNetwork)
+        {
+            var b = ip.GetAddressBytes();
+            // 0.0.0.0/8 (this network), 10.0.0.0/8 (private), 100.64.0.0/10 (CGNAT),
+            // 127.0.0.0/8 (loopback), 169.254.0.0/16 (link-local),
+            // 172.16.0.0/12 (private), 192.168.0.0/16 (private), 224.0.0.0/4 (multicast),
+            // 240.0.0.0/4 (reserved/broadcast).
+            if (b[0] == 0) return false;
+            if (b[0] == 10) return false;
+            if (b[0] == 100 && (b[1] & 0xC0) == 64) return false;
+            if (b[0] == 127) return false;
+            if (b[0] == 169 && b[1] == 254) return false;
+            if (b[0] == 172 && b[1] >= 16 && b[1] <= 31) return false;
+            if (b[0] == 192 && b[1] == 168) return false;
+            if (b[0] >= 224) return false;
+            return true;
+        }
+        if (ip.AddressFamily == AddressFamily.InterNetworkV6)
+        {
+            if (ip.IsIPv6LinkLocal) return false;
+            if (ip.IsIPv6SiteLocal) return false;
+            if (ip.IsIPv6Multicast) return false;
+            // fc00::/7 (unique local).
+            var b = ip.GetAddressBytes();
+            if ((b[0] & 0xFE) == 0xFC) return false;
+            // ::1 (loopback already caught), ::ffff:0:0/96 (IPv4-mapped) treated as v4.
+            if (ip.IsIPv4MappedToIPv6) return IsPublicAddress(ip.MapToIPv4());
+            return true;
+        }
+        return false;
     }
 
     public void AllowHost(string host)
@@ -166,7 +256,7 @@ public sealed class MediaResolver
     private async Task<(byte[] Bytes, string? ContentType)?> FetchBoundedAsync(string url, CancellationToken cancellationToken)
     {
         // ResponseHeadersRead lets us reject by Content-Length before buffering the body.
-        using var resp = await s_http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+        using var resp = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
         if (!resp.IsSuccessStatusCode)
         {

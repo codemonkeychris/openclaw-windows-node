@@ -633,6 +633,12 @@
   <data name="Canvas_WaitingForContent" xml:space="preserve">
     <value>等待內容...</value>
   </data>
+  <data name="A2UI_CanvasTitle" xml:space="preserve">
+    <value>畫布</value>
+  </data>
+  <data name="A2UI_UnsupportedComponent" xml:space="preserve">
+    <value>不支援的元件: {0}</value>
+  </data>
 
   <!-- ==================== WebChatWindow.xaml ==================== -->
 

@@ -633,6 +633,12 @@
   <data name="Canvas_WaitingForContent" xml:space="preserve">
     <value>En attente de contenu...</value>
   </data>
+  <data name="A2UI_CanvasTitle" xml:space="preserve">
+    <value>Canvas</value>
+  </data>
+  <data name="A2UI_UnsupportedComponent" xml:space="preserve">
+    <value>Composant non pris en charge : {0}</value>
+  </data>
 
   <!-- ==================== WebChatWindow.xaml ==================== -->
 

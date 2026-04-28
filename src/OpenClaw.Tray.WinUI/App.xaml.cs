@@ -1880,7 +1880,9 @@ public partial class App : Application
     {
         if (_settingsWindow == null || _settingsWindow.IsClosed)
         {
-            _settingsWindow = new SettingsWindow(_settings!, _nodeService);
+            // Pass a delegate so the settings window sees the current NodeService
+            // even after OnSettingsSaved disposes/recreates it (M31).
+            _settingsWindow = new SettingsWindow(_settings!, () => _nodeService);
             _settingsWindow.Closed += (s, e) => 
             {
                 _settingsWindow.SettingsSaved -= OnSettingsSaved;
@@ -1925,6 +1927,15 @@ public partial class App : Application
         else
         {
             InitializeGatewayClient();
+        }
+
+        // Refresh the open settings window's MCP status — the new node service
+        // is now wired and the window should show "Listening" / startup error
+        // for the new instance, not stale text from the disposed one (M31).
+        if (_settingsWindow != null && !_settingsWindow.IsClosed)
+        {
+            try { _settingsWindow.RefreshMcpStatus(); }
+            catch (Exception ex) { Logger.Warn($"Settings refresh error: {ex.Message}"); }
         }
 
         // Update global hotkey

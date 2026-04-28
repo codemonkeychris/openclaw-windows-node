@@ -84,9 +84,12 @@ public class McpHttpServerIntegrationTests : IClassFixture<TrayAppFixture>
     {
         // Set up an explicit allow rule so this test does not depend on the
         // default policy (which other tests in the class may have replaced —
-        // xUnit does not guarantee execution order).
+        // xUnit does not guarantee execution order). execApprovals.set
+        // requires the current policy hash as baseHash to prevent stale writes.
+        var baseHash = await GetExecApprovalsHashAsync();
         await _fixture.Client.CallToolExpectSuccessAsync("system.execApprovals.set", new
         {
+            baseHash,
             defaultAction = "deny",
             rules = new object[]
             {
@@ -102,6 +105,13 @@ public class McpHttpServerIntegrationTests : IClassFixture<TrayAppFixture>
         var stdout = payload.RootElement.GetProperty("stdout").GetString() ?? "";
         Assert.Contains("hello-from-mcp", stdout);
         Assert.Equal(0, payload.RootElement.GetProperty("exitCode").GetInt32());
+    }
+
+    private async Task<string> GetExecApprovalsHashAsync()
+    {
+        using var doc = await _fixture.Client.CallToolExpectSuccessAsync("system.execApprovals.get");
+        return doc.RootElement.GetProperty("hash").GetString()
+            ?? throw new InvalidOperationException("system.execApprovals.get did not return a hash");
     }
 
     [IntegrationFact]
@@ -137,11 +147,15 @@ public class McpHttpServerIntegrationTests : IClassFixture<TrayAppFixture>
     {
         using var beforeDoc = await _fixture.Client.CallToolExpectSuccessAsync("system.execApprovals.get");
         Assert.True(beforeDoc.RootElement.GetProperty("enabled").GetBoolean());
+        var baseHash = beforeDoc.RootElement.GetProperty("hash").GetString()!;
 
-        // Set a single deterministic rule and verify it round-trips.
+        // Set a single deterministic rule and verify it round-trips. The
+        // server requires baseHash to match the current policy hash so it
+        // can refuse stale writes.
         var marker = "integration-marker-" + System.Guid.NewGuid().ToString("N").Substring(0, 8);
         using var setDoc = await _fixture.Client.CallToolExpectSuccessAsync("system.execApprovals.set", new
         {
+            baseHash,
             defaultAction = "deny",
             rules = new object[]
             {
@@ -235,9 +249,12 @@ public class McpHttpServerIntegrationTests : IClassFixture<TrayAppFixture>
     [IntegrationFact]
     public async Task CanvasNavigate_ReturnsNavigated()
     {
+        // HttpUrlValidator only accepts http/https. We don't need the page to
+        // resolve — the tool returns success as soon as the navigate event is
+        // raised on the canvas window.
         using var payload = await _fixture.Client.CallToolExpectSuccessAsync("canvas.navigate", new
         {
-            url = "about:blank",
+            url = "https://example.com/",
         });
         Assert.True(payload.RootElement.GetProperty("navigated").GetBoolean());
     }

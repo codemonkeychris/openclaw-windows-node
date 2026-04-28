@@ -584,6 +584,12 @@ public sealed class NodeService : IDisposable
     /// CSP, etc.) that mangles arbitrary external URLs. Agents that want to
     /// load a page inside an embedded surface should use <c>canvas.present</c>.
     ///
+    /// Open canvas windows are NOT closed after navigate. A2UI surfaces are
+    /// control panels / dashboards / launchers, not browser frames; clicking a
+    /// link inside one shouldn't dismiss it any more than clicking a link in
+    /// the Start Menu would. Agents that want explicit teardown should call
+    /// <c>canvas.hide</c> or emit <c>deleteSurface</c>.
+    ///
     /// CanvasCapability has already validated the URL with HttpUrlValidator;
     /// we re-validate here as defense-in-depth so the OS-level shell-execute
     /// can never see an unvetted string.
@@ -642,7 +648,7 @@ public sealed class NodeService : IDisposable
                     return;
                 }
 
-                LaunchAndCleanup(canonical!);
+                LaunchInDefaultBrowser(canonical!);
             }
             catch (Exception ex)
             {
@@ -700,13 +706,20 @@ public sealed class NodeService : IDisposable
     /// open in-app canvas surfaces (web or A2UI) on the dispatcher. Failures
     /// are logged but never thrown — callers expect a fire-and-forget shape.
     /// </summary>
-    private void LaunchAndCleanup(string canonical)
+    private void LaunchInDefaultBrowser(string canonical)
     {
         // Process.Start with UseShellExecute=true wraps ShellExecuteEx, which
         // routes the URL to the user's registered http/https handler — never
         // to a script host or file association — given the validator already
-        // restricted the scheme. Browser launch doesn't need the UI dispatcher;
-        // the canvas-window cleanup does.
+        // restricted the scheme.
+        //
+        // Note: this used to close any open canvas windows after launch. That
+        // made sense when canvas == WebView2 and navigate implied "you don't
+        // need this frame anymore." With native A2UI the canvas is a control
+        // surface (dashboard / launcher), not a browser frame — clicking a
+        // link in a dashboard shouldn't nuke the dashboard. Lifecycle is now
+        // explicit: agents that want the canvas dismissed after a navigate
+        // should follow up with canvas.hide or deleteSurface.
         try
         {
             var psi = new System.Diagnostics.ProcessStartInfo
@@ -715,18 +728,12 @@ public sealed class NodeService : IDisposable
                 UseShellExecute = true,
             };
             using var proc = System.Diagnostics.Process.Start(psi);
-            _logger.Info($"Canvas navigate → default browser: {canonical}");
+            _logger.Info($"Canvas navigate → default browser: {OpenClaw.Shared.UrlLogSanitizer.Sanitize(canonical)}");
         }
         catch (Exception ex)
         {
             _logger.Error("Canvas navigate failed", ex);
         }
-
-        _dispatcherQueue.TryEnqueue(() =>
-        {
-            try { CloseWebCanvasWindow(); } catch (Exception ex) { _logger.Warn($"Close web canvas after navigate failed: {ex.Message}"); }
-            try { CloseA2UICanvasWindow(); } catch (Exception ex) { _logger.Warn($"Close A2UI canvas after navigate failed: {ex.Message}"); }
-        });
     }
 
     private string BuildNavigationAgentIdentity()

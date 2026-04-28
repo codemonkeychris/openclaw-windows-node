@@ -80,6 +80,8 @@ public sealed partial class A2UICanvasWindow : WindowEx
             try { _router.SurfaceCreated -= OnSurfaceCreated; } catch { }
             try { _router.SurfaceDeleted -= OnSurfaceDeleted; } catch { }
             try { _router.ResetAll(); } catch { }
+            _surfaceScrollers.Clear();
+            _surfaceTabs.Clear();
         };
     }
 
@@ -105,6 +107,40 @@ public sealed partial class A2UICanvasWindow : WindowEx
     // SurfaceId → existing TabViewItem, so add/remove diffs can preserve the
     // user's selected tab and avoid re-templating unchanged surfaces (M15).
     private readonly Dictionary<string, TabViewItem> _surfaceTabs = new(StringComparer.Ordinal);
+    // SurfaceId → ScrollViewer wrapping that surface's RootElement. A2UI is
+    // designed against web semantics: surfaces don't carry their own outer
+    // scroller because the document body scrolls. WinUI containers don't, so
+    // a tall surface clips at the viewport. Cached so reconciling tab content
+    // doesn't churn ScrollViewer instances (and lose scroll position) on
+    // every UpdateLayout pass.
+    private readonly Dictionary<string, ScrollViewer> _surfaceScrollers = new(StringComparer.Ordinal);
+
+    private ScrollViewer GetOrCreateScroller(SurfaceHost s)
+    {
+        if (_surfaceScrollers.TryGetValue(s.SurfaceId, out var existing))
+        {
+            if (!ReferenceEquals(existing.Content, s.RootElement))
+                existing.Content = s.RootElement;
+            return existing;
+        }
+        // HorizontalScrollBarVisibility=Disabled forces children to lay out
+        // within the viewport width — same as the HTML body's default of
+        // wrapping rather than overflowing horizontally. Vertical=Auto keeps
+        // the bar out of sight when the content fits.
+        var sv = new ScrollViewer
+        {
+            Content = s.RootElement,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollMode = ScrollMode.Auto,
+            HorizontalScrollMode = ScrollMode.Disabled,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Top,
+            ZoomMode = ZoomMode.Disabled,
+        };
+        _surfaceScrollers[s.SurfaceId] = sv;
+        return sv;
+    }
 
     private void UpdateLayout()
     {
@@ -117,18 +153,28 @@ public sealed partial class A2UICanvasWindow : WindowEx
             SingleSurfaceHost.Content = null;
             MultiSurfaceTabs.TabItems.Clear();
             _surfaceTabs.Clear();
+            _surfaceScrollers.Clear();
             Title = OpenClawTray.Helpers.LocalizationHelper.GetString("A2UI_CanvasTitle");
             return;
         }
 
         EmptyPanel.Visibility = Visibility.Collapsed;
 
+        // Drop cached scrollers for surfaces that no longer exist so we don't
+        // pin their content trees in memory.
+        var live = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var s in surfaces) live.Add(s.SurfaceId);
+        var staleScrollers = new List<string>();
+        foreach (var kv in _surfaceScrollers)
+            if (!live.Contains(kv.Key)) staleScrollers.Add(kv.Key);
+        foreach (var id in staleScrollers) _surfaceScrollers.Remove(id);
+
         if (surfaces.Count == 1)
         {
             var s = surfaces[0];
             SingleSurfaceHost.Visibility = Visibility.Visible;
             MultiSurfaceTabs.Visibility = Visibility.Collapsed;
-            SingleSurfaceHost.Content = s.RootElement;
+            SingleSurfaceHost.Content = GetOrCreateScroller(s);
             MultiSurfaceTabs.TabItems.Clear();
             _surfaceTabs.Clear();
             Title = string.IsNullOrWhiteSpace(s.Title)
@@ -166,12 +212,13 @@ public sealed partial class A2UICanvasWindow : WindowEx
         {
             var s = surfaces[i];
             var header = string.IsNullOrWhiteSpace(s.Title) ? s.SurfaceId : s.Title!;
+            var scroller = GetOrCreateScroller(s);
             if (!_surfaceTabs.TryGetValue(s.SurfaceId, out var tab))
             {
                 tab = new TabViewItem
                 {
                     Header = header,
-                    Content = s.RootElement,
+                    Content = scroller,
                     IsClosable = false,
                     Tag = s.SurfaceId,
                 };
@@ -181,7 +228,7 @@ public sealed partial class A2UICanvasWindow : WindowEx
             else
             {
                 if (!Equals(tab.Header, header)) tab.Header = header;
-                if (!ReferenceEquals(tab.Content, s.RootElement)) tab.Content = s.RootElement;
+                if (!ReferenceEquals(tab.Content, scroller)) tab.Content = scroller;
                 int currentIndex = MultiSurfaceTabs.TabItems.IndexOf(tab);
                 if (currentIndex != i)
                 {

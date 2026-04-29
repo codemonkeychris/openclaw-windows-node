@@ -105,9 +105,20 @@ jobs:
         --results-directory TestResults\TrayIntegration
         --logger trx;LogFileName=OpenClaw.Tray.IntegrationTests.trx"
 
-    # UI tests need a real visual tree; on the GitHub windows-latest runner this
-    # is a Window Station with WindowsAppSDK available, which is enough for
-    # WinUI 3 UI tests. Failures here block PRs.
+    # UI tests need a real visual tree AND a system-registered WindowsAppRuntime
+    # framework MSIX — the test fixture calls Bootstrap.Initialize(1.8, stable),
+    # which looks up the framework package by identity. The hosted windows-2025
+    # runner image doesn't preinstall it, so we install it explicitly here.
+    # Version pinned to match Microsoft.WindowsAppSDK 1.8.260101001 in the csprojs.
+    - name: Install WindowsAppRuntime 1.8
+      shell: pwsh
+      run: |
+        $url = "https://aka.ms/windowsappsdk/1.8/1.8.260101001/windowsappruntimeinstall-x64.exe"
+        $exe = "$env:RUNNER_TEMP\WindowsAppRuntimeInstall.exe"
+        Invoke-WebRequest -Uri $url -OutFile $exe
+        & $exe --quiet
+        if ($LASTEXITCODE -ne 0) { throw "WindowsAppRuntimeInstall failed with exit code $LASTEXITCODE" }
+
     - name: Run Tray UI Tests
       run: >
         dotnet-coverage collect

@@ -31,12 +31,14 @@ namespace OpenClaw.Tray.UITests;
 /// </summary>
 public sealed class UIThreadFixture : IDisposable
 {
-    // Match OpenClaw.Tray.WinUI.csproj's Microsoft.WindowsAppSDK package version (1.8).
-    // The test project ships a self-contained WinAppSDK runtime (see
-    // OpenClaw.Tray.UITests.csproj — WindowsAppSDKSelfContained=true), so this call
-    // resolves to the locally-deployed Microsoft.WindowsAppRuntime.dll rather than a
-    // system-registered framework MSIX. That keeps CI and dev machines free of an
-    // out-of-band runtime install.
+    // Match OpenClaw.Tray.WinUI.csproj's Microsoft.WindowsAppSDK package version
+    // (1.8). The bootstrapper resolves a system-installed
+    // Microsoft.WindowsAppRuntime.1.8 framework MSIX (stable channel = empty version
+    // tag). On dev machines and on CI the runtime is installed out-of-band — see
+    // .github/workflows/ci.yml ("Install WindowsAppRuntime") and the README setup
+    // notes. Self-contained deployment was tried but doesn't survive the xunit
+    // testhost: the testhost.exe lives in the .NET SDK directory, so the SDK's
+    // P/Invoke-based auto-initializer can't probe the test bin folder.
     private const uint WinAppSdkMajorMinor = 0x00010008;
     private const string WinAppSdkVersionTag = "";
 
@@ -135,9 +137,7 @@ public sealed class UIThreadFixture : IDisposable
     {
         try
         {
-            // Initialize WinAppSDK runtime. With self-contained deployment the local
-            // Microsoft.WindowsAppRuntime.Bootstrap.dll resolves to the locally-shipped
-            // runtime files instead of looking up a system framework MSIX.
+            // Initialize WinAppSDK runtime (unpackaged process).
             if (Interlocked.Exchange(ref s_bootstrapInitialized, 1) == 0)
             {
                 Bootstrap.Initialize(WinAppSdkMajorMinor, WinAppSdkVersionTag);

@@ -27,6 +27,23 @@
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <RootNamespace>OpenClaw.Tray.UITests</RootNamespace>
 
+    <!-- Self-contained WinAppSDK deployment so the test host doesn't depend on a
+         system-registered Microsoft.WindowsAppRuntime.1.8 framework MSIX. The
+         GitHub windows-latest runner doesn't preinstall it, and we don't want
+         developers cloning the repo to need a separate runtime install either.
+         Pairs with the matching settings on OpenClaw.Tray.WinUI.csproj.
+
+         Bootstrap auto-init is suppressed here because the WindowsAppSDK NuGet
+         injects the same auto-initializer source into every Exe/WinExe project,
+         and the referenced OpenClaw.Tray.WinUI assembly already carries one
+         compiled in — re-injecting it produces CS0436 type conflicts. The
+         parent assembly's [ModuleInitializer] still fires when its types are
+         first touched, which is enough to load the locally-deployed runtime. -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <WindowsAppSDKBootstrapInitialize>false</WindowsAppSDKBootstrapInitialize>
+    <WindowsAppSDKUndockedRegFreeWinRTInitialize>false</WindowsAppSDKUndockedRegFreeWinRTInitialize>
+
     <!-- System.Drawing.Common 4.7.0 advisory comes in transitively via the
          Tray.WinUI ProjectReference. The main project warns; we don't want it
          to escalate to an error here just because tests/Directory.Build.props

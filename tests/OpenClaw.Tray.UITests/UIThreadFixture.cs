@@ -31,9 +31,12 @@ namespace OpenClaw.Tray.UITests;
 /// </summary>
 public sealed class UIThreadFixture : IDisposable
 {
-    // Match OpenClaw.Tray.WinUI.csproj's Microsoft.WindowsAppSDK package version
-    // (1.8). The bootstrapper resolves a system-installed Microsoft.WindowsAppRuntime.1.8
-    // package; on this machine those are stable-channel, so the version tag is empty.
+    // Match OpenClaw.Tray.WinUI.csproj's Microsoft.WindowsAppSDK package version (1.8).
+    // The test project ships a self-contained WinAppSDK runtime (see
+    // OpenClaw.Tray.UITests.csproj — WindowsAppSDKSelfContained=true), so this call
+    // resolves to the locally-deployed Microsoft.WindowsAppRuntime.dll rather than a
+    // system-registered framework MSIX. That keeps CI and dev machines free of an
+    // out-of-band runtime install.
     private const uint WinAppSdkMajorMinor = 0x00010008;
     private const string WinAppSdkVersionTag = "";
 
@@ -132,7 +135,9 @@ public sealed class UIThreadFixture : IDisposable
     {
         try
         {
-            // Initialize WinAppSDK runtime (unpackaged process).
+            // Initialize WinAppSDK runtime. With self-contained deployment the local
+            // Microsoft.WindowsAppRuntime.Bootstrap.dll resolves to the locally-shipped
+            // runtime files instead of looking up a system framework MSIX.
             if (Interlocked.Exchange(ref s_bootstrapInitialized, 1) == 0)
             {
                 Bootstrap.Initialize(WinAppSdkMajorMinor, WinAppSdkVersionTag);

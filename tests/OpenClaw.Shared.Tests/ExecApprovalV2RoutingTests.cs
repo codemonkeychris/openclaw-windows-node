@@ -374,7 +374,7 @@ public class ExecApprovalV2RoutingTests
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir != null)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "moltbot-windows-hub.slnx")))
+            if (File.Exists(Path.Combine(dir.FullName, "openclaw-windows-node.slnx")))
                 return dir.FullName;
             dir = dir.Parent;
         }

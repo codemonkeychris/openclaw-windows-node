@@ -169,13 +169,13 @@ public sealed class TrayAppFixture : IAsyncLifetime
         var dir = AppContext.BaseDirectory;
         while (!string.IsNullOrEmpty(dir))
         {
-            if (File.Exists(Path.Combine(dir, "moltbot-windows-hub.slnx")))
+            if (File.Exists(Path.Combine(dir, "openclaw-windows-node.slnx")))
                 return dir;
             var parent = Directory.GetParent(dir)?.FullName;
             if (parent == dir || parent == null) break;
             dir = parent;
         }
-        throw new DirectoryNotFoundException("Could not locate repo root (moltbot-windows-hub.slnx) from " + AppContext.BaseDirectory);
+        throw new DirectoryNotFoundException("Could not locate repo root (openclaw-windows-node.slnx) from " + AppContext.BaseDirectory);
     }
 
     private static int FindFreePort()

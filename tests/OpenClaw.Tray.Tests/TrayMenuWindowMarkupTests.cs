@@ -757,7 +757,7 @@ public class TrayMenuWindowMarkupTests
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory != null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "moltbot-windows-hub.slnx")) &&
+            if (File.Exists(Path.Combine(directory.FullName, "openclaw-windows-node.slnx")) &&
                 Directory.Exists(Path.Combine(directory.FullName, "src")))
             {
                 return directory.FullName;

@@ -386,7 +386,7 @@ openclaw-windows-node/
 │   └── OpenClaw.Tray.Tests/       # Tray app helper tests
 ├── docs/
 │   └── molty1.png                 # Screenshot
-├── moltbot-windows-hub.slnx       # Solution file (historical name)
+├── openclaw-windows-node.slnx     # Solution file
 ├── README.md
 ├── LICENSE
 └── .gitignore

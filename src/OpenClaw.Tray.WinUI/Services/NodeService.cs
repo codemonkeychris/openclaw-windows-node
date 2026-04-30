@@ -94,6 +94,11 @@ public sealed class NodeService : IDisposable
         int.TryParse(Environment.GetEnvironmentVariable("OPENCLAW_MCP_PORT"), out var p) && p > 0
             ? p
             : McpDefaultPort;
+    private static readonly bool SuppressExternalBrowserLaunches =
+        string.Equals(
+            Environment.GetEnvironmentVariable("OPENCLAW_SUPPRESS_EXTERNAL_BROWSER"),
+            "1",
+            StringComparison.Ordinal);
     public static string McpServerUrl => $"http://127.0.0.1:{McpPort}/";
     /// <summary>
     /// Path of the MCP bearer-token file. The file is created on first MCP server
@@ -793,6 +798,12 @@ public sealed class NodeService : IDisposable
     /// </summary>
     private void LaunchInDefaultBrowser(string canonical)
     {
+        if (SuppressExternalBrowserLaunches)
+        {
+            _logger.Info($"Canvas navigate suppressed external browser launch: {OpenClaw.Shared.UrlLogSanitizer.Sanitize(canonical)}");
+            return;
+        }
+
         // Process.Start with UseShellExecute=true wraps ShellExecuteEx, which
         // routes the URL to the user's registered http/https handler — never
         // to a script host or file association — given the validator already

@@ -206,6 +206,7 @@ public sealed class TrayAppFixture : IAsyncLifetime
         };
         psi.Environment["OPENCLAW_TRAY_DATA_DIR"] = DataDir;
         psi.Environment["OPENCLAW_MCP_PORT"] = McpPort.ToString();
+        psi.Environment["OPENCLAW_SUPPRESS_EXTERNAL_BROWSER"] = "1";
 
         var p = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start tray app process");

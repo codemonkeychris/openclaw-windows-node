@@ -250,8 +250,8 @@ public class McpHttpServerIntegrationTests : IClassFixture<TrayAppFixture>
     public async Task CanvasNavigate_ReturnsNavigated()
     {
         // HttpUrlValidator only accepts http/https. We don't need the page to
-        // resolve — the tool returns success as soon as the navigate event is
-        // raised on the canvas window.
+        // resolve or launch — the fixture suppresses external browser launches,
+        // and the tool returns success as soon as the navigate event is raised.
         using var payload = await _fixture.Client.CallToolExpectSuccessAsync("canvas.navigate", new
         {
             url = "https://example.com/",

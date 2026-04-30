@@ -416,6 +416,36 @@ public class McpHttpServerTests
     }
 
     [Fact]
+    public async Task Auth_RequiresBearerToken_BeforeMethodDispatch_When_TokenConfigured()
+    {
+        const string token = "supersecret";
+        var port = FreePort();
+        var bridge = new McpToolBridge(() => new INodeCapability[] { new FakeCapability() });
+        using var server = new McpHttpServer(bridge, port, NullLogger.Instance, token);
+        server.Start();
+
+        using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
+
+        var unauthenticatedGet = await http.GetAsync("");
+        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, unauthenticatedGet.StatusCode);
+
+        var unauthenticatedPut = await http.PutAsync(
+            "",
+            new StringContent("{}", System.Text.Encoding.UTF8, "application/json"));
+        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, unauthenticatedPut.StatusCode);
+
+        http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var authorizedGet = await http.GetAsync("");
+        Assert.Equal(System.Net.HttpStatusCode.OK, authorizedGet.StatusCode);
+
+        var authorizedPut = await http.PutAsync(
+            "",
+            new StringContent("{}", System.Text.Encoding.UTF8, "application/json"));
+        Assert.Equal(System.Net.HttpStatusCode.MethodNotAllowed, authorizedPut.StatusCode);
+    }
+
+    [Fact]
     public async Task Auth_NoToken_AllowsAllRequests_LegacyDevMode()
     {
         // Constructing without an authToken keeps the prior unauthenticated

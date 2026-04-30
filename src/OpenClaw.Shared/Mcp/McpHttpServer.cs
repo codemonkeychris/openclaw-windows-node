@@ -26,8 +26,8 @@ namespace OpenClaw.Shared.Mcp;
 ///      satisfy (no Access-Control-Allow-Origin), so the cross-origin call
 ///      fails before reaching capability code.
 ///
-/// Bearer-token auth in front of the JSON-RPC body. Required on every POST when
-/// constructed with a non-null token (the tray always passes one — see
+/// Bearer-token auth in front of request dispatch. Required on every request
+/// when constructed with a non-null token (the tray always passes one — see
 /// <c>NodeService.McpTokenPath</c> / <c>McpAuthToken.LoadOrCreate</c>; legacy
 /// callers that pass null disable the check, kept for in-process tests). The
 /// token defends against untrusted local processes that could otherwise reach
@@ -66,9 +66,9 @@ public sealed class McpHttpServer : IDisposable
     private readonly IOpenClawLogger _logger;
     private readonly HttpListener _listener;
     /// <summary>
-    /// Required bearer token for POST requests. Empty/null disables auth (the
+    /// Required bearer token for HTTP requests. Empty/null disables auth (the
     /// pre-auth contract — kept so existing dev configs keep working). When set,
-    /// every POST must carry <c>Authorization: Bearer &lt;token&gt;</c>.
+    /// every request must carry <c>Authorization: Bearer &lt;token&gt;</c>.
     /// </summary>
     private string? _authToken;
     private readonly CancellationTokenSource _cts = new();
@@ -227,6 +227,18 @@ public sealed class McpHttpServer : IDisposable
                 return;
             }
 
+            // Bearer-token check. Defends against untrusted local processes
+            // (browser helpers, editor extensions) that share the loopback
+            // surface with the legitimate MCP client. Token lives in a
+            // user-only-readable file under %LOCALAPPDATA%; CLI/agent
+            // registration reads from there. Keep this before method dispatch
+            // so alternate verbs cannot bypass the configured token gate.
+            if (authToken != null && !IsAuthorized(authToken, ctx.Request.Headers["Authorization"]))
+            {
+                Reject(ctx, HttpStatusCode.Unauthorized, "missing or invalid bearer token");
+                return;
+            }
+
             if (ctx.Request.HttpMethod == "GET")
             {
                 // Friendly probe response — useful for confirming the server is up
@@ -239,17 +251,6 @@ public sealed class McpHttpServer : IDisposable
             if (ctx.Request.HttpMethod != "POST")
             {
                 Reject(ctx, HttpStatusCode.MethodNotAllowed, "POST only");
-                return;
-            }
-
-            // Bearer-token check. Defends against untrusted local processes
-            // (browser helpers, editor extensions) that share the loopback
-            // surface with the legitimate MCP client. Token lives in a
-            // user-only-readable file under %LOCALAPPDATA%; CLI/agent
-            // registration reads from there.
-            if (authToken != null && !IsAuthorized(authToken, ctx.Request.Headers["Authorization"]))
-            {
-                Reject(ctx, HttpStatusCode.Unauthorized, "missing or invalid bearer token");
                 return;
             }
 

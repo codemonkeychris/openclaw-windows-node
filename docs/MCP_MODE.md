@@ -73,11 +73,11 @@ The bridge takes a `Func<IReadOnlyList<INodeCapability>>` rather than a snapshot
 
 `OpenClaw.Shared/Mcp/McpHttpServer.cs` is `System.Net.HttpListener` bound to `http://127.0.0.1:8765/`. Loopback-only by construction; not reachable from any other machine even with firewall holes. A defensive `IPAddress.IsLoopback` check on each request acts as belt-and-suspenders.
 
-`GET /` returns a friendly text probe. `POST /` is JSON-RPC. Anything else → `405`.
+`GET /` returns a friendly text probe. `POST /` is JSON-RPC. Anything else → `405`. When a bearer token is configured, every verb must pass the token gate before method dispatch.
 
 ## Authentication
 
-The HTTP transport requires a bearer token on every `POST`. Defense-in-depth on top of loopback bind + Origin/Host checks: if an attacker can run code in *any* local user context they can reach `127.0.0.1:8765`, so we don't want the listener to be open-by-construction.
+The HTTP transport requires a bearer token on every request. Defense-in-depth on top of loopback bind + Origin/Host checks: if an attacker can run code in *any* local user context they can reach `127.0.0.1:8765`, so we don't want the listener to be open-by-construction.
 
 **Where the token lives.** `%APPDATA%\OpenClawTray\mcp-token.txt`. The exact path is composed by `NodeService.McpTokenPath` from `SettingsManager.SettingsDirectoryPath`, so the test-suite override `OPENCLAW_TRAY_DATA_DIR` isolates the token file too. The file inherits the parent directory's ACL — by default only the current user (and SYSTEM/Administrators) can read it.
 
@@ -87,7 +87,7 @@ The HTTP transport requires a bearer token on every `POST`. Defense-in-depth on 
 
 **Lifetime.** The token is **persistent across tray restarts**. It's only regenerated if the file is deleted or its contents are emptied. There is no automatic rotation.
 
-**On the wire.** Every `POST /` must carry `Authorization: Bearer <token>`. Missing or wrong token → `401 Unauthorized` with no body. `GET /` is unauthenticated (it's just a "yes I'm here" probe).
+**On the wire.** Every request must carry `Authorization: Bearer <token>` when the server has a configured token. Missing or wrong token → `401 Unauthorized` with no body. `GET /` remains a "yes I'm here" probe after auth passes.
 
 **How users find it.** Settings → Developer Mode → MCP section shows the live token (masked, with Reveal/Copy buttons) and the storage path. For agents that read from disk (Claude Code, custom scripts), pointing them at `McpTokenPath` is preferable to embedding the token in their prompt or config — the path is stable, the token is a secret. For agents that only accept literal bearer values in config (Claude Desktop, Cursor), use Copy.
 
@@ -218,8 +218,8 @@ curl -X POST http://127.0.0.1:8765/ -H "Content-Type: text/plain" --data '{"json
 These should **succeed**:
 
 ```powershell
-curl http://127.0.0.1:8765/   # GET probe
-curl -X POST http://127.0.0.1:8765/ -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"ping"}'
+curl http://127.0.0.1:8765/ -H "Authorization: Bearer <token>"   # GET probe
+curl -X POST http://127.0.0.1:8765/ -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"ping"}'
 ```
 
 ## What's deliberately deferred

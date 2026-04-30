@@ -18,6 +18,7 @@ public class PrintUsageTests
         Assert.Contains("--idempotency-key", text);
         Assert.Contains("--mcp-url", text);
         Assert.Contains("--mcp-port", text);
+        Assert.Contains("--mcp-token", text);
         Assert.Contains("--verbose", text);
         Assert.Contains("--help", text);
         Assert.Contains("skill.md", text);

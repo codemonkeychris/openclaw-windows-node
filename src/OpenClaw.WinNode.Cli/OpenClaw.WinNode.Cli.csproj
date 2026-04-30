@@ -16,6 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\OpenClaw.Shared\OpenClaw.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="OpenClaw.WinNode.Cli.Tests" />
   </ItemGroup>
 </Project>

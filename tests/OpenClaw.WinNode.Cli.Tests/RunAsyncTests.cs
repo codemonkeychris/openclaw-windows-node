@@ -7,7 +7,18 @@ namespace OpenClaw.WinNode.Cli.Tests;
 
 public class RunAsyncTests
 {
-    private static Func<string, string?> EmptyEnv => _ => null;
+    // Tests run on developer machines where %APPDATA%\OpenClawTray\mcp-token.txt
+    // may exist with the live tray's token. Without an override, the CLI's
+    // automatic loader would happily pick that up and set an Authorization
+    // header for every test request, which is hermeticity-poison even if the
+    // FakeMcpServer ignores it. Redirect via OPENCLAW_TRAY_DATA_DIR (same
+    // sandbox env var the tray and integration tests honor) at a guaranteed-
+    // empty temp directory so the loader finds no file and runs without auth.
+    private static readonly string SandboxDataDir =
+        Path.Combine(Path.GetTempPath(), $"winnode-test-sandbox-{Guid.NewGuid():N}");
+
+    private static Func<string, string?> EmptyEnv => key =>
+        key == "OPENCLAW_TRAY_DATA_DIR" ? SandboxDataDir : null;
 
     private static (StringWriter Out, StringWriter Err) Buffers()
         => (new StringWriter(), new StringWriter());

@@ -22,6 +22,7 @@ internal sealed class FakeMcpServer : IDisposable
     public string? LastRequestBody { get; private set; }
     public string? LastRequestMethod { get; private set; }
     public string? LastRequestContentType { get; private set; }
+    public string? LastRequestAuthorization { get; private set; }
 
     /// <summary>Set by the test before issuing the call.</summary>
     public Func<string, (HttpStatusCode Status, string Body, string ContentType)>? Responder { get; set; }
@@ -55,6 +56,7 @@ internal sealed class FakeMcpServer : IDisposable
         {
             LastRequestMethod = ctx.Request.HttpMethod;
             LastRequestContentType = ctx.Request.ContentType;
+            LastRequestAuthorization = ctx.Request.Headers["Authorization"];
 
             using (var reader = new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding ?? Encoding.UTF8))
             {

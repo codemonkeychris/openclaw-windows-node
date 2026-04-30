@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using OpenClaw.Shared.Mcp;
 
 namespace OpenClaw.WinNode.Cli;
 
@@ -14,6 +16,7 @@ internal sealed class WinNodeOptions
     public string? IdempotencyKey { get; set; }
     public string? McpUrlOverride { get; set; }
     public int? McpPortOverride { get; set; }
+    public string? McpTokenOverride { get; set; }
     public bool Verbose { get; set; }
 }
 
@@ -85,10 +88,12 @@ internal static class CliRunner
         }
 
         var endpoint = ResolveEndpoint(options, envLookup);
+        var token = ResolveAuthToken(options, envLookup, stderr);
         if (options.Verbose)
         {
             stderr.WriteLine($"[winnode] endpoint: {endpoint}");
             stderr.WriteLine($"[winnode] command: {options.Command}");
+            stderr.WriteLine($"[winnode] auth: {(token.Token is null ? "none" : $"bearer ({token.Source})")}");
             if (!string.IsNullOrEmpty(options.Node))
             {
                 stderr.WriteLine($"[winnode] --node \"{options.Node}\" ignored (always local tray)");
@@ -108,6 +113,11 @@ internal static class CliRunner
         using var http = httpHandler is null
             ? new HttpClient { Timeout = httpTimeout }
             : new HttpClient(httpHandler, disposeHandler: false) { Timeout = httpTimeout };
+        if (token.Token is not null)
+        {
+            http.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", token.Token);
+        }
         using var content = new StringContent(requestBody, Encoding.UTF8, "application/json");
 
         HttpResponseMessage response;
@@ -250,6 +260,83 @@ internal static class CliRunner
         return $"http://127.0.0.1:{port}/";
     }
 
+    internal readonly record struct AuthTokenResult(string? Token, string Source);
+
+    /// <summary>
+    /// Resolve the bearer token sent on every MCP request, in priority order:
+    /// <list type="number">
+    ///   <item><c>--mcp-token &lt;literal&gt;</c> flag (matches <c>gh --token</c>,
+    ///   <c>az login --service-principal --password</c>, etc.).</item>
+    ///   <item><c>OPENCLAW_MCP_TOKEN</c> env var (literal). Standard
+    ///   per-tool secret env-var convention — same shape as <c>GITHUB_TOKEN</c>,
+    ///   <c>ANTHROPIC_API_KEY</c>, <c>NUGET_API_KEY</c>.</item>
+    ///   <item>The on-disk token file the tray writes when MCP is enabled —
+    ///   <c>%APPDATA%\OpenClawTray\mcp-token.txt</c> by default, or
+    ///   <c>$OPENCLAW_TRAY_DATA_DIR\mcp-token.txt</c> when the tray was launched
+    ///   with that sandbox override (the integration test fixture uses it).</item>
+    /// </list>
+    /// When the token is loaded from disk, mirror the tray's own startup hygiene
+    /// check by running <see cref="McpAuthToken.VerifyAcl"/> and surfacing any
+    /// warning to stderr — owner mismatch or DACL grants outside {current user,
+    /// SYSTEM, Administrators} mean the file should be treated as compromised
+    /// and the user told to rotate it via the Settings UI.
+    /// </summary>
+    internal static AuthTokenResult ResolveAuthToken(
+        WinNodeOptions options,
+        Func<string, string?> envLookup,
+        TextWriter stderr)
+    {
+        if (!string.IsNullOrWhiteSpace(options.McpTokenOverride))
+        {
+            return new AuthTokenResult(options.McpTokenOverride, "--mcp-token");
+        }
+
+        var envToken = envLookup("OPENCLAW_MCP_TOKEN");
+        if (!string.IsNullOrWhiteSpace(envToken))
+        {
+            return new AuthTokenResult(envToken, "OPENCLAW_MCP_TOKEN");
+        }
+
+        var path = ResolveTokenPath(envLookup);
+        var token = McpAuthToken.TryLoad(path);
+        if (token is null)
+        {
+            // Either the file doesn't exist (the user hasn't enabled MCP yet)
+            // or it's unreadable. Hand back null and let the call go without
+            // an Authorization header — the server will reply 401 with the
+            // hint message that points the user at Settings.
+            return new AuthTokenResult(null, "none");
+        }
+
+        // Same hygiene check the tray runs at startup. Warning-only — broken
+        // ACLs don't prevent the call (a malicious local user can already
+        // read whatever they like under the user profile), but the operator
+        // should see it.
+        var aclWarning = McpAuthToken.VerifyAcl(path);
+        if (aclWarning != null)
+        {
+            stderr.WriteLine($"[winnode] WARN: {aclWarning}");
+        }
+        return new AuthTokenResult(token, $"file:{path}");
+    }
+
+    internal static string ResolveTokenPath(Func<string, string?> envLookup)
+    {
+        // Mirror SettingsManager.SettingsDirectoryPath: when the tray was
+        // launched with OPENCLAW_TRAY_DATA_DIR, settings (including the token
+        // file) live under that directory. The same env var is honored here
+        // so a CLI invoked in the same shell as a sandboxed tray Just Works,
+        // and the integration test fixture can redirect both the producer
+        // (tray) and the consumer (CLI) with one env var.
+        var dataDirOverride = envLookup("OPENCLAW_TRAY_DATA_DIR");
+        var dir = !string.IsNullOrWhiteSpace(dataDirOverride)
+            ? dataDirOverride!
+            : Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "OpenClawTray");
+        return Path.Combine(dir, "mcp-token.txt");
+    }
+
     internal static WinNodeOptions ParseArgs(string[] args)
     {
         var options = new WinNodeOptions();
@@ -279,6 +366,9 @@ internal static class CliRunner
                     break;
                 case "--mcp-port":
                     options.McpPortOverride = ParseInt(RequireValue(args, ref i, arg), min: 1, name: arg);
+                    break;
+                case "--mcp-token":
+                    options.McpTokenOverride = RequireValue(args, ref i, arg);
                     break;
                 case "--verbose":
                     options.Verbose = true;
@@ -329,6 +419,8 @@ internal static class CliRunner
         stdout.WriteLine("  --idempotency-key <key>      Accepted for parity; ignored over local MCP");
         stdout.WriteLine("  --mcp-url <url>              Override MCP endpoint (default: http://127.0.0.1:<port>/)");
         stdout.WriteLine("  --mcp-port <port>            Override MCP port (default: $OPENCLAW_MCP_PORT or 8765)");
+        stdout.WriteLine("  --mcp-token <token>          Bearer token (default: $OPENCLAW_MCP_TOKEN,");
+        stdout.WriteLine("                               then %APPDATA%\\OpenClawTray\\mcp-token.txt)");
         stdout.WriteLine("  --verbose                    Print endpoint + ignored flags to stderr");
         stdout.WriteLine("  --help, -h                   Show this help");
         stdout.WriteLine();
